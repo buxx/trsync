@@ -5,6 +5,8 @@ authors = ["Bastien Sevajol <sevajol.bastien@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+# Core
+walkdir = "2.3.2"
 # File changes notifications
 notify = "4.0.17"
 # Cli args

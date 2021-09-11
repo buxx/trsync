@@ -4,7 +4,7 @@ extern crate notify;
 use std::sync::mpsc::channel;
 use std::thread;
 
-use crate::database::Database;
+use crate::database::{create_tables, Database};
 use crate::local::{LocalSync, LocalWatcher};
 use crate::operation::OperationalHandler;
 use crate::remote::{RemoteSync, RemoteWatcher};
@@ -27,13 +27,19 @@ fn main() {
 
     let database_file_path = ".trsync.db"; // TODO : file relative to folder to sync
     let opt = Opt::from_args();
-    println!("Watch {:?}", opt.path);
+    let path = opt.path.clone();
+    println!("Watch {:?}", &opt.path);
     let (operational_sender, operational_receiver) = channel();
+
+    // Initialize database if needed
+    Database::new(database_file_path.to_string()).with_new_connection(|connection| {
+        create_tables(connection);
+    });
 
     // First, start local sync to know changes since last start
     let local_sync_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-            LocalSync::new(connection).sync();
+            LocalSync::new(connection, opt.path).sync();
         });
     });
 
@@ -46,7 +52,7 @@ fn main() {
 
     // Start local watcher
     let mut local_watcher = LocalWatcher::new(operational_sender.clone());
-    let local_handle = thread::spawn(move || local_watcher.listen(&opt.path));
+    let local_handle = thread::spawn(move || local_watcher.listen(&path));
 
     // Start remote watcher
     let mut remote_watcher = RemoteWatcher::new(operational_sender.clone());

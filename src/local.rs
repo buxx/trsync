@@ -1,10 +1,11 @@
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::operation::OperationalMessage;
 
@@ -17,7 +18,7 @@ impl LocalWatcher {
         Self { operational_sender }
     }
 
-    pub fn listen(&mut self, path: &Path) {
+    pub fn listen(&mut self, path: &PathBuf) {
         let (inotify_sender, inotify_receiver) = channel();
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
         inotify_watcher
@@ -53,14 +54,22 @@ impl LocalWatcher {
 // with real local files state and produce change messages.
 pub struct LocalSync {
     connection: Connection,
+    path: PathBuf,
 }
 
 impl LocalSync {
-    pub fn new(connection: Connection) -> Self {
-        Self { connection }
+    pub fn new(connection: Connection, path: PathBuf) -> Self {
+        Self { connection, path }
     }
 
-    pub fn sync(&mut self) {}
-}
+    pub fn sync(&mut self) {
+        WalkDir::new(".")
+            .into_iter()
+            .filter_entry(|e| self.ignore_entry(e))
+            .for_each(|x| println!("sync {:?}", x));
+    }
 
-pub struct LocalIndex {}
+    fn ignore_entry(&self, file: &DirEntry) -> bool {
+        false // TODO : according to pattern
+    }
+}
