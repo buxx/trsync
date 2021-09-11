@@ -1,5 +1,6 @@
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
+use rusqlite::Connection;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
@@ -50,12 +51,16 @@ impl LocalWatcher {
 
 // Represent known local files. When trsync start, it use this index to compare
 // with real local files state and produce change messages.
-pub struct LocalSync {}
+pub struct LocalSync {
+    connection: Connection,
+}
 
 impl LocalSync {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(connection: Connection) -> Self {
+        Self { connection }
     }
 
     pub fn sync(&mut self) {}
 }
+
+pub struct LocalIndex {}

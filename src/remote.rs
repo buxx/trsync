@@ -1,5 +1,7 @@
 use std::{collections::HashMap, ops::Rem, sync::mpsc::Sender, thread::sleep, time::Duration};
 
+use rusqlite::Connection;
+
 use crate::operation::OperationalMessage;
 
 pub struct RemoteWatcher {
@@ -36,11 +38,13 @@ impl RemoteWatcher {
     }
 }
 
-pub struct RemoteSync {}
+pub struct RemoteSync {
+    connection: Connection,
+}
 
 impl RemoteSync {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(connection: Connection) -> Self {
+        Self { connection }
     }
 
     pub fn sync(&mut self) {}

@@ -4,9 +4,12 @@ extern crate notify;
 use std::sync::mpsc::channel;
 use std::thread;
 
+use crate::database::Database;
 use crate::local::{LocalSync, LocalWatcher};
+use crate::operation::OperationalHandler;
 use crate::remote::{RemoteSync, RemoteWatcher};
 
+pub mod database;
 pub mod error;
 pub mod local;
 pub mod operation;
@@ -22,39 +25,42 @@ pub struct Opt {
 fn main() {
     // TODO : Must have a local index with inode,modified and same for remote to compare when sync
 
+    let database_file_path = ".trsync.db"; // TODO : file relative to folder to sync
     let opt = Opt::from_args();
     println!("Watch {:?}", opt.path);
     let (operational_sender, operational_receiver) = channel();
 
     // First, start local sync to know changes since last start
-    let mut local_sync = LocalSync::new();
-    let local_sync_handle = thread::spawn(move || local_sync.sync());
+    let local_sync_handle = thread::spawn(move || {
+        Database::new(database_file_path.to_string()).with_new_connection(|connection| {
+            LocalSync::new(connection).sync();
+        });
+    });
 
     // Second, start remote sync to know remote changes since last run
-    let mut remote_sync = RemoteSync::new();
-    let remote_sync_handle = thread::spawn(move || remote_sync.sync());
+    let remote_sync_handle = thread::spawn(move || {
+        Database::new(database_file_path.to_string()).with_new_connection(|connection| {
+            RemoteSync::new(connection).sync();
+        });
+    });
 
-    // Local watcher
+    // Start local watcher
     let mut local_watcher = LocalWatcher::new(operational_sender.clone());
-    let local_handle = thread::spawn(move || loop {
-        local_watcher.listen(&opt.path)
-    });
+    let local_handle = thread::spawn(move || local_watcher.listen(&opt.path));
 
-    // Remote watcher
+    // Start remote watcher
     let mut remote_watcher = RemoteWatcher::new(operational_sender.clone());
-    let remote_handle = thread::spawn(move || loop {
-        remote_watcher.listen()
-    });
+    let remote_handle = thread::spawn(move || remote_watcher.listen());
 
     // Wait end of local and remote  sync
     local_sync_handle.join().unwrap();
     remote_sync_handle.join().unwrap();
 
     // Operational
-    let operational_handle = thread::spawn(move || loop {
-        for message in operational_receiver.recv() {
-            println!("Message : {:?}", message)
-        }
+    let operational_handle = thread::spawn(move || {
+        Database::new(database_file_path.to_string()).with_new_connection(|connection| {
+            OperationalHandler::new(connection).listen(operational_receiver);
+        })
     });
 
     local_handle.join().unwrap();

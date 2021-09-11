@@ -9,4 +9,5 @@ edition = "2018"
 notify = "4.0.17"
 # Cli args
 structopt = "0.3.23"
-
+# Database
+rusqlite = "0.25.3"
