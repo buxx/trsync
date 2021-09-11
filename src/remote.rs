@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc::Sender, thread::sleep, time::Duration};
+use std::{collections::HashMap, ops::Rem, sync::mpsc::Sender, thread::sleep, time::Duration};
 
 use crate::operation::OperationalMessage;
 
@@ -8,6 +8,8 @@ pub struct RemoteWatcher {
 
 // TODO : Must have a local db with tuple (content_id,modified_timestamp)
 
+// Jon of this watcher is to react on remote changes : for now it is a simple
+// pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
     pub fn new(operational_sender: Sender<OperationalMessage>) -> Self {
         Self { operational_sender }
@@ -32,4 +34,14 @@ impl RemoteWatcher {
             };
         }
     }
+}
+
+pub struct RemoteSync {}
+
+impl RemoteSync {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn sync(&mut self) {}
 }

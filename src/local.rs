@@ -47,3 +47,15 @@ impl LocalWatcher {
         };
     }
 }
+
+// Represent known local files. When trsync start, it use this index to compare
+// with real local files state and produce change messages.
+pub struct LocalSync {}
+
+impl LocalSync {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn sync(&mut self) {}
+}
