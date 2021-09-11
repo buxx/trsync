@@ -1,10 +1,13 @@
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
+use std::ffi::OsStr;
+use std::fs;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::operation::OperationalMessage;
@@ -37,7 +40,7 @@ impl LocalWatcher {
         println!("Received local event: {:?}", event);
         match self
             .operational_sender
-            .send(OperationalMessage::NewLocalRevision)
+            .send(OperationalMessage::FakeMessage)
         {
             Ok(_) => (),
             Err(err) => {
@@ -55,21 +58,95 @@ impl LocalWatcher {
 pub struct LocalSync {
     connection: Connection,
     path: PathBuf,
+    operational_sender: Sender<OperationalMessage>,
 }
 
 impl LocalSync {
-    pub fn new(connection: Connection, path: PathBuf) -> Self {
-        Self { connection, path }
+    pub fn new(
+        connection: Connection,
+        path: PathBuf,
+        operational_sender: Sender<OperationalMessage>,
+    ) -> Self {
+        Self {
+            connection,
+            path: fs::canonicalize(&path).unwrap(),
+            operational_sender,
+        }
     }
 
     pub fn sync(&mut self) {
-        WalkDir::new(".")
+        // Look at disk files and compare to db
+        WalkDir::new(&self.path)
             .into_iter()
-            .filter_entry(|e| self.ignore_entry(e))
-            .for_each(|x| println!("sync {:?}", x));
+            .filter_entry(|e| !self.ignore_entry(e))
+            .for_each(|x| self.sync_disk_file(&x.unwrap()))
     }
 
-    fn ignore_entry(&self, file: &DirEntry) -> bool {
-        false // TODO : according to pattern
+    fn ignore_entry(&self, entry: &DirEntry) -> bool {
+        // TODO : patterns from config object
+        // TODO : this is ugly code !!!
+        let entry_path = entry.path();
+        match entry_path.file_name() {
+            Some(x) => format!("{}", x.to_str().unwrap()).starts_with("."),
+            None => false,
+        }
+    }
+
+    fn sync_disk_file(&self, entry: &DirEntry) {
+        let relative_path = entry.path().strip_prefix(&self.path).unwrap();
+        // TODO : prevent sync root with more clean way
+        if relative_path == Path::new("") {
+            return;
+        }
+
+        println!("sync {:?}", relative_path);
+
+        let metadata = fs::metadata(self.path.join(relative_path)).unwrap();
+        let disk_last_modified_timestamp = metadata
+            .modified()
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64; // TODO : type can contains this timestamp ?
+
+        match self.connection.query_row::<u64, _, _>(
+            "SELECT last_modified_timestamp FROM local WHERE relative_path = ?",
+            params![relative_path.to_str()],
+            |row| row.get(0),
+        ) {
+            Ok(last_modified_timestamp) => {
+                // Known file (check if have been modified)
+                println!("{}", last_modified_timestamp);
+                if disk_last_modified_timestamp != last_modified_timestamp {
+                    println!("Modified !");
+                    self.connection
+                .execute(
+                    "UPDATE local SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
+                    params![disk_last_modified_timestamp, relative_path.to_str()],
+                )
+                .unwrap();
+                    self.operational_sender
+                        .send(OperationalMessage::IndexedLocalFileModified(String::from(
+                            relative_path.to_str().unwrap(),
+                        )))
+                        .unwrap();
+                }
+            }
+            Err(_) => {
+                // Unknown file
+                self.connection
+                .execute(
+                    "INSERT INTO local (relative_path, last_modified_timestamp) VALUES (?1, ?2)",
+                    params![relative_path.to_str(), disk_last_modified_timestamp],
+                )
+                .unwrap();
+
+                self.operational_sender
+                    .send(OperationalMessage::UnIndexedLocalFileAppear(String::from(
+                        relative_path.to_str().unwrap(),
+                    )))
+                    .unwrap();
+            }
+        }
     }
 }

@@ -2,10 +2,16 @@ use std::sync::mpsc::Receiver;
 
 use rusqlite::Connection;
 
+type FilePath = String;
+
 #[derive(Debug)]
 pub enum OperationalMessage {
-    NewRemoteRevision,
-    NewLocalRevision,
+    // Local files messages
+    UnIndexedLocalFileAppear(FilePath),
+    IndexedLocalFileModified(FilePath),
+    IndexedLocalFileDeleted(FilePath),
+    // Remote files messages
+    FakeMessage,
 }
 
 pub struct OperationalHandler {

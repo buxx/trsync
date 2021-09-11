@@ -24,7 +24,7 @@ impl RemoteWatcher {
             println!("Simulate remote event");
             match self
                 .operational_sender
-                .send(OperationalMessage::NewRemoteRevision)
+                .send(OperationalMessage::FakeMessage)
             {
                 Ok(_) => (),
                 Err(err) => {

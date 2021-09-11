@@ -37,9 +37,10 @@ fn main() {
     });
 
     // First, start local sync to know changes since last start
+    let local_sync_operational_sender = operational_sender.clone();
     let local_sync_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-            LocalSync::new(connection, opt.path).sync();
+            LocalSync::new(connection, opt.path, local_sync_operational_sender).sync();
         });
     });
 
@@ -51,11 +52,13 @@ fn main() {
     });
 
     // Start local watcher
-    let mut local_watcher = LocalWatcher::new(operational_sender.clone());
+    let local_watcher_operational_sender = operational_sender.clone();
+    let mut local_watcher = LocalWatcher::new(local_watcher_operational_sender);
     let local_handle = thread::spawn(move || local_watcher.listen(&path));
 
     // Start remote watcher
-    let mut remote_watcher = RemoteWatcher::new(operational_sender.clone());
+    let remote_watcher_operational_sender = operational_sender.clone();
+    let mut remote_watcher = RemoteWatcher::new(remote_watcher_operational_sender);
     let remote_handle = thread::spawn(move || remote_watcher.listen());
 
     // Wait end of local and remote  sync
