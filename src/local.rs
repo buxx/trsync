@@ -74,8 +74,14 @@ impl LocalSync {
         }
     }
 
-    pub fn sync(&mut self) {
+    pub fn sync(&self) {
         // Look at disk files and compare to db
+        self.sync_from_disk();
+        // TODO : look ate db to search deleted files
+        self.sync_from_db();
+    }
+
+    fn sync_from_disk(&self) {
         WalkDir::new(&self.path)
             .into_iter()
             .filter_entry(|e| !self.ignore_entry(e))
@@ -145,6 +151,29 @@ impl LocalSync {
                     .send(OperationalMessage::UnIndexedLocalFileAppear(String::from(
                         relative_path.to_str().unwrap(),
                     )))
+                    .unwrap();
+            }
+        }
+    }
+
+    fn sync_from_db(&self) {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT relative_path FROM local")
+            .unwrap();
+        let local_iter = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+        for result in local_iter {
+            let relative_path: String = result.unwrap();
+            if !self.path.join(&relative_path).exists() {
+                println!("deleted {:?}", relative_path);
+                self.connection
+                    .execute(
+                        "DELETE FROM local WHERE relative_path = ?1",
+                        params![relative_path],
+                    )
+                    .unwrap();
+                self.operational_sender
+                    .send(OperationalMessage::IndexedLocalFileDeleted(relative_path))
                     .unwrap();
             }
         }
