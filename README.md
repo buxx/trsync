@@ -8,3 +8,10 @@ last modified date of folder
 ou (linux + wind + mac ?)
 
     https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
+
+SSE(TLM) : https://lib.rs/crates/reqwest-eventsource
+
+With cargo-edit installed run:
+
+    cargo add async-std
+

@@ -38,18 +38,52 @@ impl LocalWatcher {
 
     pub fn digest_event(&self, event: DebouncedEvent) {
         println!("Received local event: {:?}", event);
-        match self
-            .operational_sender
-            .send(OperationalMessage::FakeMessage)
-        {
-            Ok(_) => (),
-            Err(err) => {
-                eprintln!(
-                    "Error when send operational message from local watcher : {}",
-                    err
-                )
+
+        let messages: Vec<OperationalMessage> = match event {
+            DebouncedEvent::Create(path) => {
+                vec![OperationalMessage::UnIndexedLocalFileAppear(String::from(
+                    path.to_str().unwrap(),
+                ))]
+            }
+            DebouncedEvent::Write(path) => {
+                vec![OperationalMessage::IndexedLocalFileModified(String::from(
+                    path.to_str().unwrap(),
+                ))]
+            }
+            DebouncedEvent::Remove(path) => {
+                vec![OperationalMessage::IndexedLocalFileDeleted(String::from(
+                    path.to_str().unwrap(),
+                ))]
+            }
+            DebouncedEvent::Rename(_source_path, _dest_path) => {
+                // TODO : manage this case
+                vec![]
+            }
+            // Ignore these
+            DebouncedEvent::NoticeWrite(_)
+            | DebouncedEvent::NoticeRemove(_)
+            | DebouncedEvent::Chmod(_)
+            | DebouncedEvent::Rescan => {
+                vec![]
+            }
+            // Consider Error as to log it
+            DebouncedEvent::Error(err, path) => {
+                eprintln!("Error {} on {:?}", err, path);
+                vec![]
             }
         };
+
+        for message in messages {
+            match self.operational_sender.send(message) {
+                Ok(_) => (),
+                Err(err) => {
+                    eprintln!(
+                        "Error when send operational message from local watcher : {}",
+                        err
+                    )
+                }
+            };
+        }
     }
 }
 

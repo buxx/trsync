@@ -1,7 +1,6 @@
+use async_std::task;
 use std::{
-    collections::HashMap,
     fs,
-    ops::Rem,
     path::{Path, PathBuf},
     sync::mpsc::Sender,
     thread::sleep,
@@ -9,15 +8,19 @@ use std::{
 };
 
 use chrono::DateTime;
+use eventsource_stream::Eventsource;
+use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
 
-use reqwest::{blocking::Response, Method};
+use reqwest::Method;
 use rusqlite::{params, Connection};
 
 use crate::operation::OperationalMessage;
 
 pub struct RemoteWatcher {
     operational_sender: Sender<OperationalMessage>,
+    tracim_api_key: String,
+    tracim_user_name: String,
 }
 
 // TODO : Must have a local db with tuple (content_id,modified_timestamp)
@@ -25,11 +28,38 @@ pub struct RemoteWatcher {
 // Jon of this watcher is to react on remote changes : for now it is a simple
 // pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
-    pub fn new(operational_sender: Sender<OperationalMessage>) -> Self {
-        Self { operational_sender }
+    pub fn new(
+        operational_sender: Sender<OperationalMessage>,
+        tracim_api_key: String,
+        tracim_user_name: String,
+    ) -> Self {
+        Self {
+            operational_sender,
+            tracim_api_key,
+            tracim_user_name,
+        }
     }
 
     pub fn listen(&mut self) {
+        task::block_on(async {
+            let response = reqwest::Client::new()
+                .request(
+                    Method::GET,
+                    // TODO : Attention, quand erreur d'url, pas d'erreur ! attente infinis de event
+                    "https://tracim.bux.fr/api/users/2/live_messages",
+                )
+                .header("Tracim-Api-Key", &self.tracim_api_key)
+                .header("Tracim-Api-Login", &self.tracim_user_name)
+                .send()
+                .await
+                .unwrap();
+            println!("COUCOUCOUCOUCOUC {:?}", response);
+            let mut stream = response.bytes_stream();
+            while let Some(thing) = stream.next().await {
+                println!("SSE : {:?}", thing);
+            }
+            println!("COUCOUCOUCOUCOUC END");
+        });
         loop {
             // Consume all content from api and look about changes
             sleep(Duration::from_secs(2));

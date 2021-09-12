@@ -53,8 +53,8 @@ fn main() {
     // Second, start remote sync to know remote changes since last run
     let remote_sync_operational_sender = operational_sender.clone();
     let remote_sync_path = opt.path.clone();
-    let tracim_api_key = opt.tracim_api_key;
-    let tracim_user_name = opt.tracim_user_name;
+    let tracim_api_key = opt.tracim_api_key.clone();
+    let tracim_user_name = opt.tracim_user_name.clone();
     let remote_sync_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
             RemoteSync::new(
@@ -76,7 +76,13 @@ fn main() {
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
-    let mut remote_watcher = RemoteWatcher::new(remote_watcher_operational_sender);
+    let tracim_api_key = opt.tracim_api_key.clone();
+    let tracim_user_name = opt.tracim_user_name.clone();
+    let mut remote_watcher = RemoteWatcher::new(
+        remote_watcher_operational_sender,
+        tracim_api_key,
+        tracim_user_name,
+    );
     let remote_handle = thread::spawn(move || remote_watcher.listen());
 
     // Wait end of local and remote  sync
