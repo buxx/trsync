@@ -3,6 +3,7 @@ use std::sync::mpsc::Receiver;
 use rusqlite::Connection;
 
 type FilePath = String;
+type ContentId = i32;
 
 #[derive(Debug)]
 pub enum OperationalMessage {
@@ -11,6 +12,9 @@ pub enum OperationalMessage {
     IndexedLocalFileModified(FilePath),
     IndexedLocalFileDeleted(FilePath),
     // Remote files messages
+    UnIndexedRemoteFileAppear(ContentId),
+    IndexedRemoteFileModified(ContentId),
+    IndexedRemoteFileDeleted(ContentId),
     FakeMessage,
 }
 

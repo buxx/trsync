@@ -21,18 +21,13 @@ impl Database {
 pub fn create_tables(connection: Connection) {
     connection
         .execute(
-            "CREATE TABLE IF NOT EXISTS local (
+            "CREATE TABLE IF NOT EXISTS file (
             relative_path TEXT PRIMARY KEY,
             last_modified_timestamp INTEGER NOT NULL,
-            remote_content_id INTEGER
+            content_id INTEGER
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_local_relative_path ON local (relative_path);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_local_remote_content_id ON local (remote_content_id);
-        CREATE TABLE IF NOT EXISTS remote (
-            content_id TEXT PRIMARY KEY,
-            last_modified_timestamp INTEGER NOT NULL
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_local ON local (content_id);",
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_local_remote_content_id ON local (remote_content_id);",
             [],
         )
         .unwrap();

@@ -8,10 +8,11 @@ use std::{
     time::Duration,
 };
 
+use chrono::DateTime;
 use serde_derive::{Deserialize, Serialize};
 
 use reqwest::{blocking::Response, Method};
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 use crate::operation::OperationalMessage;
 
@@ -51,7 +52,7 @@ impl RemoteWatcher {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RemoteContent {
-    content_id: u32,
+    content_id: i32,
     parent_id: Option<u32>,
     modified: String,
     filename: String,
@@ -97,10 +98,76 @@ impl RemoteSync {
             .unwrap()
             .json::<Vec<RemoteContent>>()
             .unwrap();
+        let content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
 
         for content in &contents {
-            let relative_path = self.build_relative_path(content);
-            println!("REMOTE {:?}", relative_path)
+            match self.connection.query_row::<i64, _, _>(
+                "SELECT last_modified_timestamp FROM file WHERE content_id = ?",
+                params![content.content_id],
+                |row| row.get(0),
+            ) {
+                Ok(last_modified_timestamp) => {
+                    let modified_timestamp = DateTime::parse_from_rfc3339(&content.modified)
+                        .unwrap()
+                        .timestamp_millis();
+                    // File is known but have been modified ?
+                    if last_modified_timestamp != modified_timestamp {
+                        // TODO : This update must be done in Operation !
+                        self.connection
+                            .execute(
+                                "UPDATE file SET last_modified_timestamp = ?1 WHERE content_id = ?2",
+                                params![modified_timestamp, content.content_id],
+                            )
+                            .unwrap();
+                        self.operational_sender
+                            .send(OperationalMessage::IndexedRemoteFileModified(
+                                content.content_id,
+                            ))
+                            .unwrap();
+                    }
+                }
+                Err(_) => {
+                    let relative_path = self.build_relative_path(content);
+                    let modified_timestamp = DateTime::parse_from_rfc3339(&content.modified)
+                        .unwrap()
+                        .timestamp_millis();
+                    // TODO : This update must be done in Operation !
+                    self.connection
+                    .execute(
+                        "INSERT INTO file (relative_path, last_modified_timestamp, content_id) VALUES (?1, ?2, ?3)",
+                        params![relative_path, modified_timestamp, content.content_id],
+                    )
+                    .unwrap();
+                    self.operational_sender
+                        .send(OperationalMessage::UnIndexedRemoteFileAppear(
+                            content.content_id,
+                        ))
+                        .unwrap();
+                }
+            }
+        }
+
+        // Search for remote deleted files
+        let mut stmt = self
+            .connection
+            .prepare("SELECT content_id FROM file WHERE content_id IS NOT NULL")
+            .unwrap();
+        let local_iter = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+        for result in local_iter {
+            let content_id: i32 = result.unwrap();
+            if !content_ids.contains(&content_id) {
+                println!("remotely deleted {:?}", content_id);
+                // TODO : This update must be done in Operation !
+                self.connection
+                    .execute(
+                        "DELETE FROM file WHERE content_id = ?1",
+                        params![content_id],
+                    )
+                    .unwrap();
+                self.operational_sender
+                    .send(OperationalMessage::IndexedRemoteFileDeleted(content_id))
+                    .unwrap();
+            }
         }
     }
 

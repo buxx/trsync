@@ -116,7 +116,7 @@ impl LocalSync {
             .as_millis() as u64; // TODO : type can contains this timestamp ?
 
         match self.connection.query_row::<u64, _, _>(
-            "SELECT last_modified_timestamp FROM local WHERE relative_path = ?",
+            "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![relative_path.to_str()],
             |row| row.get(0),
         ) {
@@ -125,12 +125,13 @@ impl LocalSync {
                 println!("{}", last_modified_timestamp);
                 if disk_last_modified_timestamp != last_modified_timestamp {
                     println!("Modified !");
+                    // TODO : This update must be done in Operation !
                     self.connection
-                .execute(
-                    "UPDATE local SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
-                    params![disk_last_modified_timestamp, relative_path.to_str()],
-                )
-                .unwrap();
+                        .execute(
+                            "UPDATE file SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
+                            params![disk_last_modified_timestamp, relative_path.to_str()],
+                        )
+                        .unwrap();
                     self.operational_sender
                         .send(OperationalMessage::IndexedLocalFileModified(String::from(
                             relative_path.to_str().unwrap(),
@@ -140,12 +141,13 @@ impl LocalSync {
             }
             Err(_) => {
                 // Unknown file
+                // TODO : This update must be done in Operation !
                 self.connection
-                .execute(
-                    "INSERT INTO local (relative_path, last_modified_timestamp) VALUES (?1, ?2)",
-                    params![relative_path.to_str(), disk_last_modified_timestamp],
-                )
-                .unwrap();
+                    .execute(
+                        "INSERT INTO file (relative_path, last_modified_timestamp) VALUES (?1, ?2)",
+                        params![relative_path.to_str(), disk_last_modified_timestamp],
+                    )
+                    .unwrap();
 
                 self.operational_sender
                     .send(OperationalMessage::UnIndexedLocalFileAppear(String::from(
@@ -159,16 +161,17 @@ impl LocalSync {
     fn sync_from_db(&self) {
         let mut stmt = self
             .connection
-            .prepare("SELECT relative_path FROM local")
+            .prepare("SELECT relative_path FROM file")
             .unwrap();
         let local_iter = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
         for result in local_iter {
             let relative_path: String = result.unwrap();
             if !self.path.join(&relative_path).exists() {
                 println!("deleted {:?}", relative_path);
+                // TODO : This update must be done in Operation !
                 self.connection
                     .execute(
-                        "DELETE FROM local WHERE relative_path = ?1",
+                        "DELETE FROM file WHERE relative_path = ?1",
                         params![relative_path],
                     )
                     .unwrap();
