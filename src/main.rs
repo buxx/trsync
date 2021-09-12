@@ -20,6 +20,12 @@ pub mod remote;
 pub struct Opt {
     #[structopt(parse(from_os_str))]
     path: std::path::PathBuf,
+
+    #[structopt(name = "tracim_api_key")]
+    tracim_api_key: String,
+
+    #[structopt(name = "tracim_user_name")]
+    tracim_user_name: String,
 }
 
 fn main() {
@@ -27,7 +33,6 @@ fn main() {
 
     let database_file_path = ".trsync.db"; // TODO : file relative to folder to sync
     let opt = Opt::from_args();
-    let path = opt.path.clone();
     println!("Watch {:?}", &opt.path);
     let (operational_sender, operational_receiver) = channel();
 
@@ -38,23 +43,36 @@ fn main() {
 
     // First, start local sync to know changes since last start
     let local_sync_operational_sender = operational_sender.clone();
+    let local_sync_path = opt.path.clone();
     let local_sync_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-            LocalSync::new(connection, opt.path, local_sync_operational_sender).sync();
+            LocalSync::new(connection, local_sync_path, local_sync_operational_sender).sync();
         });
     });
 
     // Second, start remote sync to know remote changes since last run
+    let remote_sync_operational_sender = operational_sender.clone();
+    let remote_sync_path = opt.path.clone();
+    let tracim_api_key = opt.tracim_api_key;
+    let tracim_user_name = opt.tracim_user_name;
     let remote_sync_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-            RemoteSync::new(connection).sync();
+            RemoteSync::new(
+                connection,
+                remote_sync_path,
+                remote_sync_operational_sender,
+                tracim_api_key,
+                tracim_user_name,
+            )
+            .sync();
         });
     });
 
     // Start local watcher
     let local_watcher_operational_sender = operational_sender.clone();
+    let local_watcher_path = opt.path.clone();
     let mut local_watcher = LocalWatcher::new(local_watcher_operational_sender);
-    let local_handle = thread::spawn(move || local_watcher.listen(&path));
+    let local_handle = thread::spawn(move || local_watcher.listen(&local_watcher_path));
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
