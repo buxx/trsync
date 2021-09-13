@@ -1,9 +1,7 @@
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
-use std::ffi::OsStr;
 use std::fs;
-use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
@@ -41,17 +39,17 @@ impl LocalWatcher {
 
         let messages: Vec<OperationalMessage> = match event {
             DebouncedEvent::Create(path) => {
-                vec![OperationalMessage::UnIndexedLocalFileAppear(String::from(
+                vec![OperationalMessage::NewLocalFile(String::from(
                     path.to_str().unwrap(),
                 ))]
             }
             DebouncedEvent::Write(path) => {
-                vec![OperationalMessage::IndexedLocalFileModified(String::from(
+                vec![OperationalMessage::ModifiedLocalFile(String::from(
                     path.to_str().unwrap(),
                 ))]
             }
             DebouncedEvent::Remove(path) => {
-                vec![OperationalMessage::IndexedLocalFileDeleted(String::from(
+                vec![OperationalMessage::DeletedLocalFile(String::from(
                     path.to_str().unwrap(),
                 ))]
             }
@@ -167,7 +165,7 @@ impl LocalSync {
                         )
                         .unwrap();
                     self.operational_sender
-                        .send(OperationalMessage::IndexedLocalFileModified(String::from(
+                        .send(OperationalMessage::ModifiedLocalFile(String::from(
                             relative_path.to_str().unwrap(),
                         )))
                         .unwrap();
@@ -184,7 +182,7 @@ impl LocalSync {
                     .unwrap();
 
                 self.operational_sender
-                    .send(OperationalMessage::UnIndexedLocalFileAppear(String::from(
+                    .send(OperationalMessage::NewLocalFile(String::from(
                         relative_path.to_str().unwrap(),
                     )))
                     .unwrap();
@@ -210,7 +208,7 @@ impl LocalSync {
                     )
                     .unwrap();
                 self.operational_sender
-                    .send(OperationalMessage::IndexedLocalFileDeleted(relative_path))
+                    .send(OperationalMessage::DeletedLocalFile(relative_path))
                     .unwrap();
             }
         }

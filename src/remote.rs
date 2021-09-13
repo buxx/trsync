@@ -3,8 +3,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::mpsc::Sender,
-    thread::sleep,
-    time::Duration,
 };
 
 use chrono::DateTime;
@@ -20,6 +18,7 @@ use crate::operation::OperationalMessage;
 
 const ACCEPTED_CONTENT_TYPES: &'static [&'static str] = &["html-document", "file", "folder"];
 const ACCEPTED_EVENT_TYPES: &'static [&'static str] = &[
+    // TODO : renamed things (take care in sync too)
     "content.modified.html-document",
     "content.modified.file",
     "content.modified.folder",
@@ -102,30 +101,26 @@ impl RemoteWatcher {
                                             "content.modified.html-document"
                                             | "content.modified.file"
                                             | "content.modified.folder" => {
-                                                OperationalMessage::IndexedRemoteFileModified(
+                                                OperationalMessage::ModifiedRemoteFile(
                                                     content_id as i32,
                                                 )
                                             }
                                             "content.created.html-document"
                                             | "content.created.file"
                                             | "content.created.folder" => {
-                                                OperationalMessage::UnIndexedRemoteFileAppear(
-                                                    content_id as i32,
-                                                )
+                                                OperationalMessage::NewRemoteFile(content_id as i32)
                                             }
                                             "content.deleted.html-document"
                                             | "content.deleted.file"
                                             | "content.deleted.folder" => {
-                                                OperationalMessage::IndexedRemoteFileDeleted(
+                                                OperationalMessage::DeletedRemoteFile(
                                                     content_id as i32,
                                                 )
                                             }
                                             "content.undeleted.html-document"
                                             | "content.undeleted.file"
                                             | "content.undeleted.folder" => {
-                                                OperationalMessage::UnIndexedRemoteFileAppear(
-                                                    content_id as i32,
-                                                )
+                                                OperationalMessage::NewRemoteFile(content_id as i32)
                                             }
                                             _ => {
                                                 panic!(
@@ -230,9 +225,7 @@ impl RemoteSync {
                             )
                             .unwrap();
                         self.operational_sender
-                            .send(OperationalMessage::IndexedRemoteFileModified(
-                                content.content_id,
-                            ))
+                            .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
                             .unwrap();
                     }
                 }
@@ -249,9 +242,7 @@ impl RemoteSync {
                     )
                     .unwrap();
                     self.operational_sender
-                        .send(OperationalMessage::UnIndexedRemoteFileAppear(
-                            content.content_id,
-                        ))
+                        .send(OperationalMessage::NewRemoteFile(content.content_id))
                         .unwrap();
                 }
             }
@@ -275,7 +266,7 @@ impl RemoteSync {
                     )
                     .unwrap();
                 self.operational_sender
-                    .send(OperationalMessage::IndexedRemoteFileDeleted(content_id))
+                    .send(OperationalMessage::DeletedRemoteFile(content_id))
                     .unwrap();
             }
         }
