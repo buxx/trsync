@@ -15,7 +15,6 @@ pub enum OperationalMessage {
     UnIndexedRemoteFileAppear(ContentId),
     IndexedRemoteFileModified(ContentId),
     IndexedRemoteFileDeleted(ContentId),
-    FakeMessage,
 }
 
 // TODO : Manage a flag set to true when program start to indicate to manage conflicts.
@@ -36,6 +35,7 @@ impl OperationalHandler {
         // TODO : Why loop is required ?!
         loop {
             for message in receiver.recv() {
+                // TODO : For local files, ignore some patterns : eg. ".*", "*~"
                 println!("Message : {:?}", message)
             }
         }

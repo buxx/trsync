@@ -10,6 +10,7 @@ use std::{
 use chrono::DateTime;
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
+use serde_json::Value;
 use std::str;
 
 use reqwest::Method;
@@ -17,10 +18,27 @@ use rusqlite::{params, Connection};
 
 use crate::operation::OperationalMessage;
 
+const ACCEPTED_CONTENT_TYPES: &'static [&'static str] = &["html-document", "file", "folder"];
+const ACCEPTED_EVENT_TYPES: &'static [&'static str] = &[
+    "content.modified.html-document",
+    "content.modified.file",
+    "content.modified.folder",
+    "content.created.html-document",
+    "content.created.file",
+    "content.created.folder",
+    "content.deleted.html-document",
+    "content.deleted.file",
+    "content.deleted.folder",
+    "content.undeleted.html-document",
+    "content.undeleted.file",
+    "content.undeleted.folder",
+];
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RemoteMessage {
+pub struct RemoteEvent {
     event_id: i32,
     event_type: String,
+    fields: Value,
 }
 
 pub struct RemoteWatcher {
@@ -59,7 +77,6 @@ impl RemoteWatcher {
                 .send()
                 .await
                 .unwrap();
-            println!("COUCOUCOUCOUCOUC {:?}", response);
             let mut stream = response.bytes_stream();
             while let Some(thing) = stream.next().await {
                 match &thing {
@@ -68,10 +85,64 @@ impl RemoteWatcher {
                             for line in str::from_utf8(lines).unwrap().lines() {
                                 if line.starts_with("data: ") {
                                     let json_as_str = &line[6..];
-                                    let remote_mesage: RemoteMessage =
+                                    let remote_event: RemoteEvent =
                                         serde_json::from_str(json_as_str).unwrap();
-
-                                    println!("EVENT: {:?}", remote_mesage)
+                                    println!("TYPE : {}", &remote_event.event_type.as_str());
+                                    if ACCEPTED_EVENT_TYPES
+                                        .contains(&remote_event.event_type.as_str())
+                                    {
+                                        let content_id = remote_event.fields["content"]
+                                            .as_object()
+                                            .unwrap()["content_id"]
+                                            .as_i64()
+                                            .unwrap();
+                                        println!("EVENT: {:?}", &remote_event);
+                                        println!("EVENT content_id: {:?}", content_id);
+                                        let message = match remote_event.event_type.as_str() {
+                                            "content.modified.html-document"
+                                            | "content.modified.file"
+                                            | "content.modified.folder" => {
+                                                OperationalMessage::IndexedRemoteFileModified(
+                                                    content_id as i32,
+                                                )
+                                            }
+                                            "content.created.html-document"
+                                            | "content.created.file"
+                                            | "content.created.folder" => {
+                                                OperationalMessage::UnIndexedRemoteFileAppear(
+                                                    content_id as i32,
+                                                )
+                                            }
+                                            "content.deleted.html-document"
+                                            | "content.deleted.file"
+                                            | "content.deleted.folder" => {
+                                                OperationalMessage::IndexedRemoteFileDeleted(
+                                                    content_id as i32,
+                                                )
+                                            }
+                                            "content.undeleted.html-document"
+                                            | "content.undeleted.file"
+                                            | "content.undeleted.folder" => {
+                                                OperationalMessage::UnIndexedRemoteFileAppear(
+                                                    content_id as i32,
+                                                )
+                                            }
+                                            _ => {
+                                                panic!(
+                                                "Source code must cover all ACCEPTED_EVENT_TYPES"
+                                            )
+                                            }
+                                        };
+                                        match self.operational_sender.send(message) {
+                                            Ok(_) => (),
+                                            Err(err) => {
+                                                eprintln!(
+                                                    "Error when send operational message from remote watcher : {}",
+                                                    err
+                                                )
+                                            }
+                                        };
+                                    }
                                 }
                             }
                         }
@@ -81,25 +152,7 @@ impl RemoteWatcher {
                     }
                 }
             }
-            println!("COUCOUCOUCOUCOUC END");
         });
-        loop {
-            // Consume all content from api and look about changes
-            sleep(Duration::from_secs(2));
-            println!("Simulate remote event");
-            match self
-                .operational_sender
-                .send(OperationalMessage::FakeMessage)
-            {
-                Ok(_) => (),
-                Err(err) => {
-                    eprintln!(
-                        "Error when send operational message from remote watcher : {}",
-                        err
-                    )
-                }
-            };
-        }
     }
 }
 
@@ -107,6 +160,7 @@ impl RemoteWatcher {
 pub struct RemoteContent {
     content_id: i32,
     parent_id: Option<u32>,
+    content_type: String,
     modified: String,
     filename: String,
 }
@@ -150,7 +204,10 @@ impl RemoteSync {
             .send()
             .unwrap()
             .json::<Vec<RemoteContent>>()
-            .unwrap();
+            .unwrap()
+            .into_iter()
+            .filter(|c| ACCEPTED_CONTENT_TYPES.contains(&c.content_type.as_str()))
+            .collect::<Vec<RemoteContent>>();
         let content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
 
         for content in &contents {
@@ -229,7 +286,7 @@ impl RemoteSync {
             let mut path_parts: Vec<String> = vec![content.filename.clone()];
             let mut last_seen_parent_id = parent_id;
             loop {
-                let folder = self
+                let response = self
                     .client
                     .request(
                         Method::GET,
@@ -241,10 +298,8 @@ impl RemoteSync {
                     .header("Tracim-Api-Key", &self.tracim_api_key)
                     .header("Tracim-Api-Login", &self.tracim_user_name)
                     .send()
-                    .unwrap()
-                    .json::<RemoteContent>()
                     .unwrap();
-
+                let folder = response.json::<RemoteContent>().unwrap();
                 path_parts.push(folder.filename);
                 if let Some(folder_parent_id) = folder.parent_id {
                     last_seen_parent_id = folder_parent_id;
