@@ -8,14 +8,20 @@ use std::{
 };
 
 use chrono::DateTime;
-use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
+use std::str;
 
 use reqwest::Method;
 use rusqlite::{params, Connection};
 
 use crate::operation::OperationalMessage;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoteMessage {
+    event_id: i32,
+    event_type: String,
+}
 
 pub struct RemoteWatcher {
     operational_sender: Sender<OperationalMessage>,
@@ -56,7 +62,24 @@ impl RemoteWatcher {
             println!("COUCOUCOUCOUCOUC {:?}", response);
             let mut stream = response.bytes_stream();
             while let Some(thing) = stream.next().await {
-                println!("SSE : {:?}", thing);
+                match &thing {
+                    Ok(lines) => {
+                        if lines.starts_with(b"event: message") {
+                            for line in str::from_utf8(lines).unwrap().lines() {
+                                if line.starts_with("data: ") {
+                                    let json_as_str = &line[6..];
+                                    let remote_mesage: RemoteMessage =
+                                        serde_json::from_str(json_as_str).unwrap();
+
+                                    println!("EVENT: {:?}", remote_mesage)
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Err when reading remote TLM : {:?}", err)
+                    }
+                }
             }
             println!("COUCOUCOUCOUCOUC END");
         });
