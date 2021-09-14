@@ -1,9 +1,15 @@
-use std::sync::mpsc::Receiver;
+use std::{
+    fs,
+    path::{Component, Path, PathBuf},
+    sync::mpsc::Receiver,
+};
 
 use rusqlite::Connection;
 
-type FilePath = String;
-type ContentId = i32;
+use crate::{client::Client, database::get_parent_content_id_with_path};
+
+pub type FilePath = String;
+pub type ContentId = i32;
 
 #[derive(Debug)]
 pub enum OperationalMessage {
@@ -21,13 +27,17 @@ pub enum OperationalMessage {
 // When resolution done, set flag to false and proceed local and remote messages without
 // taking care of conflicts
 pub struct OperationalHandler {
-    _connection: Connection,
+    connection: Connection,
+    client: Client,
+    path: PathBuf,
 }
 
 impl OperationalHandler {
-    pub fn new(connection: Connection) -> Self {
+    pub fn new(connection: Connection, client: Client, path: PathBuf) -> Self {
         Self {
-            _connection: connection,
+            connection,
+            client,
+            path: fs::canonicalize(&path).unwrap(),
         }
     }
 
@@ -60,6 +70,31 @@ impl OperationalHandler {
     fn new_local_file(&self, path: String) {
         // TODO : POST new file on api (take car on fallback event !)
         // TODO : Add it in database (move code here)
+        let path_path = Path::new(&path);
+        let path_components: Vec<Component> = path_path.components().collect();
+        let parent_id = if path_components.len() > 1 {
+            let parent_path = path_path.parent().unwrap();
+            Some(get_parent_content_id_with_path(
+                &self.connection,
+                parent_path.to_str().unwrap().to_string(),
+            ))
+        } else {
+            None
+        };
+        let content_type = if path_path.is_dir() {
+            "folder"
+        } else if path_path.ends_with(".html") {
+            "html-document"
+        } else {
+            "file"
+        };
+        let content_id = self.client.post_content(
+            self.path.join(&path).to_str().unwrap().to_string(),
+            path_path.file_name().unwrap().to_str().unwrap().to_string(),
+            content_type.to_string(),
+            parent_id,
+        );
+        // TODO : insert it in database
     }
 
     fn modified_local_file(&self, path: String) {

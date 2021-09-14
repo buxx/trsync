@@ -4,11 +4,13 @@ extern crate notify;
 use std::sync::mpsc::channel;
 use std::thread;
 
+use crate::client::Client;
 use crate::database::{create_tables, Database};
 use crate::local::{LocalSync, LocalWatcher};
 use crate::operation::OperationalHandler;
 use crate::remote::{RemoteSync, RemoteWatcher};
 
+pub mod client;
 pub mod database;
 pub mod error;
 pub mod local;
@@ -90,9 +92,17 @@ fn main() {
     remote_sync_handle.join().unwrap();
 
     // Operational
+    let tracim_api_key = opt.tracim_api_key.clone();
+    let tracim_user_name = opt.tracim_user_name.clone();
+    let operational_path = opt.path.clone();
     let operational_handle = thread::spawn(move || {
         Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-            OperationalHandler::new(connection).listen(operational_receiver);
+            OperationalHandler::new(
+                connection,
+                Client::new(tracim_api_key, tracim_user_name),
+                operational_path,
+            )
+            .listen(operational_receiver);
         })
     });
 

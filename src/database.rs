@@ -1,4 +1,8 @@
-use rusqlite::Connection;
+use std::path::PathBuf;
+
+use rusqlite::{params, Connection};
+
+use crate::operation::ContentId;
 
 pub struct Database {
     database_file_path: String,
@@ -31,4 +35,17 @@ pub fn create_tables(connection: Connection) {
             [],
         )
         .unwrap();
+}
+
+pub fn get_parent_content_id_with_path(
+    connection: &Connection,
+    relative_path: String,
+) -> ContentId {
+    connection
+        .query_row::<u64, _, _>(
+            "SELECT content_id FROM file WHERE relative_path = ?",
+            params![relative_path],
+            |row| row.get(0),
+        )
+        .unwrap() as ContentId
 }
