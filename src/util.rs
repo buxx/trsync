@@ -72,10 +72,10 @@ impl FileInfos {
     }
 
     pub fn parent_id(&self, connection: &Connection) -> Option<ContentId> {
-        if let Some(parent_relative_path) = self.parent_relative_path {
+        if let Some(parent_relative_path) = &self.parent_relative_path {
             Some(get_parent_content_id_with_path(
                 connection,
-                parent_relative_path,
+                parent_relative_path.to_string(),
             ))
         } else {
             None
