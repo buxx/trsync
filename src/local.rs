@@ -173,13 +173,6 @@ impl LocalSync {
                 println!("{}", last_modified_timestamp);
                 if disk_last_modified_timestamp != last_modified_timestamp {
                     println!("Modified !");
-                    // TODO : This update must be done in Operation !
-                    self.connection
-                        .execute(
-                            "UPDATE file SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
-                            params![disk_last_modified_timestamp, relative_path.to_str()],
-                        )
-                        .unwrap();
                     self.operational_sender
                         .send(OperationalMessage::ModifiedLocalFile(String::from(
                             relative_path.to_str().unwrap(),

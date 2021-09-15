@@ -9,7 +9,7 @@ use rusqlite::Connection;
 
 use crate::{
     client::Client,
-    database::{get_parent_content_id_with_path, insert_new_file},
+    database::{delete_file, get_content_id_from_path, insert_new_file, update_file},
     types::{ContentId, LastModifiedTimestamp, RelativeFilePath},
     util::FileInfos,
 };
@@ -118,7 +118,7 @@ impl OperationalHandler {
         let parent_id = file_infos.parent_id(&self.connection);
 
         // Create it on remote
-        let content_id = self.client.post_content(
+        let content_id = self.client.create_content(
             file_infos.absolute_path,
             file_infos.file_name,
             file_infos.content_type,
@@ -138,14 +138,45 @@ impl OperationalHandler {
         );
     }
 
-    fn modified_local_file(&self, path: String) {
-        // TODO : POST new content on api (take car on fallback event !)
-        // TODO : Update it in database (move code here)
+    fn modified_local_file(&mut self, relative_path: RelativeFilePath) {
+        // Grab file infos
+        let file_infos = FileInfos::from(&self.path, relative_path);
+        let content_id =
+            get_content_id_from_path(&self.connection, file_infos.relative_path.clone());
+
+        // Update file on remote
+        self.client.update_content(
+            file_infos.absolute_path,
+            file_infos.file_name,
+            file_infos.content_type,
+            content_id,
+        );
+
+        // Prepare to ignore remote create event
+        self.ignore_messages
+            .push(OperationalMessage::ModifiedRemoteFile(content_id));
+
+        // Update database
+        update_file(
+            &self.connection,
+            file_infos.relative_path,
+            file_infos.last_modified_timestamp,
+        );
     }
 
-    fn deleted_local_file(&self, path: String) {
-        // TODO : DELETE content on api (take car on fallback event !)
-        // TODO : remove it from database (move code here)
+    fn deleted_local_file(&mut self, relative_path: String) {
+        // Grab file infos
+        let content_id = get_content_id_from_path(&self.connection, relative_path);
+
+        // Delete on remote
+        self.client.trash_content(content_id);
+
+        // Prepare to ignore remote trashed event
+        self.ignore_messages
+            .push(OperationalMessage::DeletedRemoteFile(content_id));
+
+        // Update database
+        delete_file(&self.connection, content_id);
     }
 
     fn new_remote_file(&self, content_id: i32) {

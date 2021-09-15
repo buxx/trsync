@@ -249,13 +249,6 @@ impl RemoteSync {
             let content_id: i32 = result.unwrap();
             if !content_ids.contains(&content_id) {
                 println!("remotely deleted {:?}", content_id);
-                // TODO : This update must be done in Operation !
-                self.connection
-                    .execute(
-                        "DELETE FROM file WHERE content_id = ?1",
-                        params![content_id],
-                    )
-                    .unwrap();
                 self.operational_sender
                     .send(OperationalMessage::DeletedRemoteFile(content_id))
                     .unwrap();

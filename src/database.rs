@@ -37,10 +37,7 @@ pub fn create_tables(connection: Connection) {
         .unwrap();
 }
 
-pub fn get_parent_content_id_with_path(
-    connection: &Connection,
-    relative_path: String,
-) -> ContentId {
+pub fn get_content_id_from_path(connection: &Connection, relative_path: String) -> ContentId {
     connection
         .query_row::<u64, _, _>(
             "SELECT content_id FROM file WHERE relative_path = ?",
@@ -60,6 +57,28 @@ pub fn insert_new_file(
         .execute(
             "INSERT INTO file (relative_path, last_modified_timestamp, content_id) VALUES (?1, ?2, ?3)",
             params![relative_path, last_modified_timestamp, content_id],
+        )
+        .unwrap();
+}
+
+pub fn update_file(
+    connection: &Connection,
+    relative_path: String,
+    last_modified_timestamp: LastModifiedTimestamp,
+) {
+    connection
+        .execute(
+            "UPDATE file SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
+            params![last_modified_timestamp, relative_path],
+        )
+        .unwrap();
+}
+
+pub fn delete_file(connection: &Connection, content_id: ContentId) {
+    connection
+        .execute(
+            "DELETE FROM file WHERE content_id = ?1",
+            params![content_id],
         )
         .unwrap();
 }

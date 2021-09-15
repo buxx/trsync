@@ -6,7 +6,7 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    database::get_parent_content_id_with_path,
+    database::get_content_id_from_path,
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
 };
 
@@ -73,7 +73,7 @@ impl FileInfos {
 
     pub fn parent_id(&self, connection: &Connection) -> Option<ContentId> {
         if let Some(parent_relative_path) = &self.parent_relative_path {
-            Some(get_parent_content_id_with_path(
+            Some(get_content_id_from_path(
                 connection,
                 parent_relative_path.to_string(),
             ))
