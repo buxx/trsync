@@ -28,7 +28,7 @@ pub fn create_tables(connection: Connection) {
             "CREATE TABLE IF NOT EXISTS file (
             relative_path TEXT PRIMARY KEY,
             last_modified_timestamp INTEGER NOT NULL,
-            content_id INTEGER
+            content_id INTEGER NOT NULL
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_local_relative_path ON local (relative_path);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_local_remote_content_id ON local (remote_content_id);",

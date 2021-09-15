@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs::{self, File},
+    io,
     path::{Component, Path, PathBuf},
     sync::mpsc::Receiver,
     time::UNIX_EPOCH,
@@ -10,6 +11,7 @@ use rusqlite::Connection;
 use crate::{
     client::Client,
     database::{delete_file, get_content_id_from_path, insert_new_file, update_file},
+    remote,
     types::{ContentId, LastModifiedTimestamp, RelativeFilePath},
     util::FileInfos,
 };
@@ -180,8 +182,24 @@ impl OperationalHandler {
     }
 
     fn new_remote_file(&self, content_id: i32) {
-        // TODO : Get content path, filename, then content and create local file on disk
-        // TODO : Insert it in database (move code here?)
+        // Grap file infos
+        let remote_content = self.client.get_remote_content(content_id);
+        let relative_path = self.client.build_relative_path(&remote_content);
+        let absolute_path = self.path.join(relative_path);
+
+        // Write file on disk
+        let mut response = self.client.get_file_content_response(content_id);
+        let mut out = File::create(absolute_path).unwrap();
+        io::copy(&mut response, &mut out).unwrap();
+
+        // Update database
+        let file_infos = FileInfos::from(&self.path, relative_path);
+        insert_new_file(
+            &self.connection,
+            file_infos.relative_path,
+            file_infos.last_modified_timestamp,
+            Some(content_id),
+        );
     }
 
     fn modified_remote_file(&self, content_id: i32) {

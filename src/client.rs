@@ -5,7 +5,10 @@ use reqwest::Method;
 
 use serde_json::{Map, Value};
 
-use crate::types::{ContentId, ContentType};
+use crate::{
+    remote::RemoteContent,
+    types::{ContentId, ContentType},
+};
 
 pub struct Client {
     tracim_api_key: String,
@@ -95,5 +98,60 @@ impl Client {
             .header("Tracim-Api-Login", &self.tracim_user_name)
             .send()
             .unwrap();
+    }
+
+    pub fn get_remote_content(&self, content_id: ContentId) -> RemoteContent {
+        // TODO : Manage other than files
+        self.client
+            .request(
+                Method::GET,
+                format!(
+                    "https://tracim.bux.fr/api/workspaces/3/files/{}",
+                    content_id
+                ),
+            )
+            .header("Tracim-Api-Key", &self.tracim_api_key)
+            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .send()
+            .unwrap()
+            .json::<RemoteContent>()
+            .unwrap()
+    }
+
+    pub fn build_relative_path(&self, content: &RemoteContent) -> String {
+        if let Some(parent_id) = content.parent_id {
+            let mut path_parts: Vec<String> = vec![content.filename.clone()];
+            let mut last_seen_parent_id = parent_id;
+            loop {
+                let response = self
+                    .client
+                    .request(
+                        Method::GET,
+                        format!(
+                            "https://tracim.bux.fr/api/workspaces/3/folders/{}",
+                            last_seen_parent_id
+                        ),
+                    )
+                    .header("Tracim-Api-Key", &self.tracim_api_key)
+                    .header("Tracim-Api-Login", &self.tracim_user_name)
+                    .send()
+                    .unwrap();
+                let folder = response.json::<RemoteContent>().unwrap();
+                path_parts.push(folder.filename);
+                if let Some(folder_parent_id) = folder.parent_id {
+                    last_seen_parent_id = folder_parent_id;
+                } else {
+                    // TODO : this is very ugly code !
+                    let mut relative_path_string = "".to_string();
+                    for path_part in path_parts.iter().rev() {
+                        let relative_path = Path::new(&relative_path_string).join(path_part);
+                        relative_path_string = relative_path.to_str().unwrap().to_string();
+                    }
+                    return relative_path_string;
+                }
+            }
+        } else {
+            content.filename.clone()
+        }
     }
 }
