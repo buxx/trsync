@@ -86,7 +86,10 @@ impl RemoteWatcher {
                                     let json_as_str = &line[6..];
                                     let remote_event: RemoteEvent =
                                         serde_json::from_str(json_as_str).unwrap();
-                                    println!("TYPE : {}", &remote_event.event_type.as_str());
+                                    println!(
+                                        "REMOTE EVENT : {}",
+                                        &remote_event.event_type.as_str()
+                                    );
                                     if ACCEPTED_EVENT_TYPES
                                         .contains(&remote_event.event_type.as_str())
                                     {
@@ -95,8 +98,7 @@ impl RemoteWatcher {
                                             .unwrap()["content_id"]
                                             .as_i64()
                                             .unwrap();
-                                        println!("EVENT: {:?}", &remote_event);
-                                        println!("EVENT content_id: {:?}", content_id);
+                                        println!("REMOTE EVENT content_id: {:?}", content_id);
                                         let message = match remote_event.event_type.as_str() {
                                             "content.modified.html-document"
                                             | "content.modified.file"
@@ -230,17 +232,6 @@ impl RemoteSync {
                     }
                 }
                 Err(_) => {
-                    let relative_path = self.build_relative_path(content);
-                    let modified_timestamp = DateTime::parse_from_rfc3339(&content.modified)
-                        .unwrap()
-                        .timestamp_millis();
-                    // TODO : This update must be done in Operation !
-                    self.connection
-                    .execute(
-                        "INSERT INTO file (relative_path, last_modified_timestamp, content_id) VALUES (?1, ?2, ?3)",
-                        params![relative_path, modified_timestamp, content.content_id],
-                    )
-                    .unwrap();
                     self.operational_sender
                         .send(OperationalMessage::NewRemoteFile(content.content_id))
                         .unwrap();

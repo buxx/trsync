@@ -16,6 +16,8 @@ pub mod error;
 pub mod local;
 pub mod operation;
 pub mod remote;
+pub mod types;
+pub mod util;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -73,7 +75,8 @@ fn main() {
     // Start local watcher
     let local_watcher_operational_sender = operational_sender.clone();
     let local_watcher_path = opt.path.clone();
-    let mut local_watcher = LocalWatcher::new(local_watcher_operational_sender);
+    let mut local_watcher =
+        LocalWatcher::new(local_watcher_operational_sender, local_watcher_path.clone());
     let local_handle = thread::spawn(move || local_watcher.listen(&local_watcher_path));
 
     // Start remote watcher

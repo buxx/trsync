@@ -12,11 +12,18 @@ use crate::operation::OperationalMessage;
 
 pub struct LocalWatcher {
     operational_sender: Sender<OperationalMessage>,
+    workspace_folder_path: PathBuf,
 }
 
 impl LocalWatcher {
-    pub fn new(operational_sender: Sender<OperationalMessage>) -> Self {
-        Self { operational_sender }
+    pub fn new(
+        operational_sender: Sender<OperationalMessage>,
+        workspace_folder_path: PathBuf,
+    ) -> Self {
+        Self {
+            operational_sender,
+            workspace_folder_path: fs::canonicalize(&workspace_folder_path).unwrap(),
+        }
     }
 
     pub fn listen(&mut self, path: &PathBuf) {
@@ -38,22 +45,31 @@ impl LocalWatcher {
         println!("Received local event: {:?}", event);
 
         let messages: Vec<OperationalMessage> = match event {
-            DebouncedEvent::Create(path) => {
-                vec![OperationalMessage::NewLocalFile(String::from(
-                    path.to_str().unwrap(),
-                ))]
+            DebouncedEvent::Create(absolute_path) => {
+                let relative_path = absolute_path
+                    .strip_prefix(&self.workspace_folder_path)
+                    .unwrap();
+                vec![OperationalMessage::NewLocalFile(
+                    relative_path.to_str().unwrap().to_string(),
+                )]
             }
-            DebouncedEvent::Write(path) => {
-                vec![OperationalMessage::ModifiedLocalFile(String::from(
-                    path.to_str().unwrap(),
-                ))]
+            DebouncedEvent::Write(absolute_path) => {
+                let relative_path = absolute_path
+                    .strip_prefix(&self.workspace_folder_path)
+                    .unwrap();
+                vec![OperationalMessage::ModifiedLocalFile(
+                    relative_path.to_str().unwrap().to_string(),
+                )]
             }
-            DebouncedEvent::Remove(path) => {
-                vec![OperationalMessage::DeletedLocalFile(String::from(
-                    path.to_str().unwrap(),
-                ))]
+            DebouncedEvent::Remove(absolute_path) => {
+                let relative_path = absolute_path
+                    .strip_prefix(&self.workspace_folder_path)
+                    .unwrap();
+                vec![OperationalMessage::DeletedLocalFile(
+                    relative_path.to_str().unwrap().to_string(),
+                )]
             }
-            DebouncedEvent::Rename(_source_path, _dest_path) => {
+            DebouncedEvent::Rename(_absolute_source_path, _absolute_dest_path) => {
                 // TODO : manage this case
                 vec![]
             }
@@ -173,14 +189,6 @@ impl LocalSync {
             }
             Err(_) => {
                 // Unknown file
-                // TODO : This update must be done in Operation !
-                self.connection
-                    .execute(
-                        "INSERT INTO file (relative_path, last_modified_timestamp) VALUES (?1, ?2)",
-                        params![relative_path.to_str(), disk_last_modified_timestamp],
-                    )
-                    .unwrap();
-
                 self.operational_sender
                     .send(OperationalMessage::NewLocalFile(String::from(
                         relative_path.to_str().unwrap(),

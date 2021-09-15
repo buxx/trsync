@@ -2,21 +2,24 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
     sync::mpsc::Receiver,
+    time::UNIX_EPOCH,
 };
 
 use rusqlite::Connection;
 
-use crate::{client::Client, database::get_parent_content_id_with_path};
+use crate::{
+    client::Client,
+    database::{get_parent_content_id_with_path, insert_new_file},
+    types::{ContentId, LastModifiedTimestamp, RelativeFilePath},
+    util::FileInfos,
+};
 
-pub type FilePath = String;
-pub type ContentId = i32;
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum OperationalMessage {
     // Local files messages
-    NewLocalFile(FilePath),
-    ModifiedLocalFile(FilePath),
-    DeletedLocalFile(FilePath),
+    NewLocalFile(RelativeFilePath),
+    ModifiedLocalFile(RelativeFilePath),
+    DeletedLocalFile(RelativeFilePath),
     // Remote files messages
     NewRemoteFile(ContentId),
     ModifiedRemoteFile(ContentId),
@@ -30,6 +33,7 @@ pub struct OperationalHandler {
     connection: Connection,
     client: Client,
     path: PathBuf,
+    ignore_messages: Vec<OperationalMessage>,
 }
 
 impl OperationalHandler {
@@ -38,6 +42,30 @@ impl OperationalHandler {
             connection,
             client,
             path: fs::canonicalize(&path).unwrap(),
+            ignore_messages: vec![],
+        }
+    }
+
+    fn ignore_message(&self, message: &OperationalMessage) -> bool {
+        // TODO : For local files, ignore some patterns given by config : eg. ".*", "*~"
+        match message {
+            OperationalMessage::NewLocalFile(relative_path)
+            | OperationalMessage::ModifiedLocalFile(relative_path)
+            | OperationalMessage::DeletedLocalFile(relative_path) => {
+                Path::new(relative_path)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .starts_with(".")
+                    | Path::new(relative_path)
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .ends_with("~")
+            }
+            _ => false,
         }
     }
 
@@ -45,13 +73,30 @@ impl OperationalHandler {
         // TODO : Why loop is required ?!
         loop {
             for message in receiver.recv() {
+                if self.ignore_messages.contains(&message) {
+                    self.ignore_messages.retain(|x| *x != message);
+                    println!("IGNORE MESSAGE : {:?}", &message);
+                    continue;
+                };
+
+                if self.ignore_message(&message) {
+                    println!("IGNORE MESSAGE : {:?}", &message);
+                    continue;
+                }
+
                 println!("MESSAGE : {:?}", &message);
-                // TODO : For local files, ignore some patterns : eg. ".*", "*~"
+
                 match message {
                     // Local changes
-                    OperationalMessage::NewLocalFile(path) => self.new_local_file(path),
-                    OperationalMessage::ModifiedLocalFile(path) => self.modified_local_file(path),
-                    OperationalMessage::DeletedLocalFile(path) => self.deleted_local_file(path),
+                    OperationalMessage::NewLocalFile(relative_path) => {
+                        self.new_local_file(relative_path)
+                    }
+                    OperationalMessage::ModifiedLocalFile(relative_path) => {
+                        self.modified_local_file(relative_path)
+                    }
+                    OperationalMessage::DeletedLocalFile(relative_path) => {
+                        self.deleted_local_file(relative_path)
+                    }
                     // Remote changes
                     OperationalMessage::NewRemoteFile(content_id) => {
                         self.new_remote_file(content_id)
@@ -67,34 +112,30 @@ impl OperationalHandler {
         }
     }
 
-    fn new_local_file(&self, path: String) {
-        // TODO : POST new file on api (take car on fallback event !)
-        // TODO : Add it in database (move code here)
-        let path_path = Path::new(&path);
-        let path_components: Vec<Component> = path_path.components().collect();
-        let parent_id = if path_components.len() > 1 {
-            let parent_path = path_path.parent().unwrap();
-            Some(get_parent_content_id_with_path(
-                &self.connection,
-                parent_path.to_str().unwrap().to_string(),
-            ))
-        } else {
-            None
-        };
-        let content_type = if path_path.is_dir() {
-            "folder"
-        } else if path_path.ends_with(".html") {
-            "html-document"
-        } else {
-            "file"
-        };
+    fn new_local_file(&mut self, relative_path: String) {
+        // Grab file infos
+        let file_infos = FileInfos::from(&self.path, relative_path);
+        let parent_id = file_infos.parent_id(&self.connection);
+
+        // Create it on remote
         let content_id = self.client.post_content(
-            self.path.join(&path).to_str().unwrap().to_string(),
-            path_path.file_name().unwrap().to_str().unwrap().to_string(),
-            content_type.to_string(),
+            file_infos.absolute_path,
+            file_infos.file_name,
+            file_infos.content_type,
             parent_id,
         );
-        // TODO : insert it in database
+
+        // Prepare to ignore remote create event
+        self.ignore_messages
+            .push(OperationalMessage::NewRemoteFile(content_id));
+
+        // Update database
+        insert_new_file(
+            &self.connection,
+            file_infos.relative_path,
+            file_infos.last_modified_timestamp,
+            Some(content_id),
+        );
     }
 
     fn modified_local_file(&self, path: String) {

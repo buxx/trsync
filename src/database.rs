@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use rusqlite::{params, Connection};
 
-use crate::operation::ContentId;
+use crate::types::{ContentId, LastModifiedTimestamp};
 
 pub struct Database {
     database_file_path: String,
@@ -48,4 +48,18 @@ pub fn get_parent_content_id_with_path(
             |row| row.get(0),
         )
         .unwrap() as ContentId
+}
+
+pub fn insert_new_file(
+    connection: &Connection,
+    relative_path: String,
+    last_modified_timestamp: LastModifiedTimestamp,
+    content_id: Option<ContentId>,
+) {
+    connection
+        .execute(
+            "INSERT INTO file (relative_path, last_modified_timestamp, content_id) VALUES (?1, ?2, ?3)",
+            params![relative_path, last_modified_timestamp, content_id],
+        )
+        .unwrap();
 }
