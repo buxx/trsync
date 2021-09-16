@@ -6,12 +6,13 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    database::get_content_id_from_path,
+    database::DatabaseOperation,
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
 };
 
 pub struct FileInfos {
     pub file_name: String,
+    pub is_directory: bool,
     pub last_modified_timestamp: LastModifiedTimestamp,
     pub relative_path: RelativeFilePath,
     pub absolute_path: AbsoluteFilePath,
@@ -60,9 +61,11 @@ impl FileInfos {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as LastModifiedTimestamp;
+        let is_directory = absolute_path.is_dir();
 
         Self {
             file_name,
+            is_directory,
             last_modified_timestamp,
             relative_path: relative_file_path,
             absolute_path: absolute_path.to_str().unwrap().to_string(),
@@ -73,10 +76,9 @@ impl FileInfos {
 
     pub fn parent_id(&self, connection: &Connection) -> Option<ContentId> {
         if let Some(parent_relative_path) = &self.parent_relative_path {
-            Some(get_content_id_from_path(
-                connection,
-                parent_relative_path.to_string(),
-            ))
+            let content_id = DatabaseOperation::new(connection)
+                .get_content_id_from_path(parent_relative_path.to_string());
+            Some(content_id)
         } else {
             None
         }

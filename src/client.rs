@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use reqwest::blocking::multipart;
+use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::{
     remote::RemoteContent,
@@ -43,7 +43,7 @@ impl Client {
         // TODO : need to check if response is 200 !!
         let r = self
             .client
-            .request(Method::POST, "https://tracim.bux.fr/api/workspaces/3/files")
+            .request(Method::POST, "https://tracim.bux.fr/api/workspaces/4/files")
             .header("Tracim-Api-Key", &self.tracim_api_key)
             .header("Tracim-Api-Login", &self.tracim_user_name)
             .multipart(form)
@@ -73,7 +73,7 @@ impl Client {
             .request(
                 Method::PUT,
                 format!(
-                    "https://tracim.bux.fr/api/workspaces/3/files/{}/raw/{}",
+                    "https://tracim.bux.fr/api/workspaces/4/files/{}/raw/{}",
                     content_id, file_name,
                 ),
             )
@@ -90,7 +90,7 @@ impl Client {
             .request(
                 Method::PUT,
                 format!(
-                    "https://tracim.bux.fr/api/workspaces/3/contents/{}/trashed",
+                    "https://tracim.bux.fr/api/workspaces/4/contents/{}/trashed",
                     content_id,
                 ),
             )
@@ -106,7 +106,7 @@ impl Client {
             .request(
                 Method::GET,
                 format!(
-                    "https://tracim.bux.fr/api/workspaces/3/files/{}",
+                    "https://tracim.bux.fr/api/workspaces/4/contents/{}",
                     content_id
                 ),
             )
@@ -123,12 +123,13 @@ impl Client {
             let mut path_parts: Vec<String> = vec![content.filename.clone()];
             let mut last_seen_parent_id = parent_id;
             loop {
+                // TODO : need to check if response is 200 !!
                 let response = self
                     .client
                     .request(
                         Method::GET,
                         format!(
-                            "https://tracim.bux.fr/api/workspaces/3/folders/{}",
+                            "https://tracim.bux.fr/api/workspaces/4/folders/{}",
                             last_seen_parent_id
                         ),
                     )
@@ -153,5 +154,21 @@ impl Client {
         } else {
             content.filename.clone()
         }
+    }
+
+    pub fn get_file_content_response(&self, content_id: ContentId, file_name: String) -> Response {
+        // TODO : need to check if response is 200 !!
+        self.client
+            .request(
+                Method::GET,
+                format!(
+                    "https://tracim.bux.fr/api/workspaces/4/files/{}/raw/{}",
+                    content_id, file_name,
+                ),
+            )
+            .header("Tracim-Api-Key", &self.tracim_api_key)
+            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .send()
+            .unwrap()
     }
 }

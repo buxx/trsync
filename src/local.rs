@@ -163,6 +163,7 @@ impl LocalSync {
             .unwrap()
             .as_millis() as u64; // TODO : type can contains this timestamp ?
 
+        // TODO : use database module
         match self.connection.query_row::<u64, _, _>(
             "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![relative_path.to_str()],
@@ -192,6 +193,7 @@ impl LocalSync {
     }
 
     fn sync_from_db(&self) {
+        // TODO : use database module
         let mut stmt = self
             .connection
             .prepare("SELECT relative_path FROM file")
@@ -201,13 +203,6 @@ impl LocalSync {
             let relative_path: String = result.unwrap();
             if !self.path.join(&relative_path).exists() {
                 println!("deleted {:?}", relative_path);
-                // TODO : This update must be done in Operation !
-                self.connection
-                    .execute(
-                        "DELETE FROM file WHERE relative_path = ?1",
-                        params![relative_path],
-                    )
-                    .unwrap();
                 self.operational_sender
                     .send(OperationalMessage::DeletedLocalFile(relative_path))
                     .unwrap();

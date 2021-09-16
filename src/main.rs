@@ -5,7 +5,7 @@ use std::sync::mpsc::channel;
 use std::thread;
 
 use crate::client::Client;
-use crate::database::{create_tables, Database};
+use crate::database::{Database, DatabaseOperation};
 use crate::local::{LocalSync, LocalWatcher};
 use crate::operation::OperationalHandler;
 use crate::remote::{RemoteSync, RemoteWatcher};
@@ -42,7 +42,7 @@ fn main() {
 
     // Initialize database if needed
     Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-        create_tables(connection);
+        DatabaseOperation::new(&connection).create_tables();
     });
 
     // First, start local sync to know changes since last start

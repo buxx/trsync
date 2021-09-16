@@ -1,9 +1,5 @@
 use async_std::task;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::mpsc::Sender,
-};
+use std::{fs, path::PathBuf, sync::mpsc::Sender};
 
 use chrono::DateTime;
 use futures_util::StreamExt;
@@ -14,24 +10,10 @@ use std::str;
 use reqwest::Method;
 use rusqlite::{params, Connection};
 
-use crate::operation::OperationalMessage;
-
-const ACCEPTED_CONTENT_TYPES: &'static [&'static str] = &["html-document", "file", "folder"];
-const ACCEPTED_EVENT_TYPES: &'static [&'static str] = &[
-    // TODO : renamed things (take care in sync too)
-    "content.modified.html-document",
-    "content.modified.file",
-    "content.modified.folder",
-    "content.created.html-document",
-    "content.created.file",
-    "content.created.folder",
-    "content.deleted.html-document",
-    "content.deleted.file",
-    "content.deleted.folder",
-    "content.undeleted.html-document",
-    "content.undeleted.file",
-    "content.undeleted.folder",
-];
+use crate::{
+    operation::OperationalMessage,
+    types::{ContentType, RemoteEventType},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RemoteEvent {
@@ -91,8 +73,8 @@ impl RemoteWatcher {
                                         "REMOTE EVENT : {}",
                                         &remote_event.event_type.as_str()
                                     );
-                                    if ACCEPTED_EVENT_TYPES
-                                        .contains(&remote_event.event_type.as_str())
+                                    if RemoteEventType::from_str(&remote_event.event_type.as_str())
+                                        .is_some()
                                     {
                                         let content_id = remote_event.fields["content"]
                                             .as_object()
@@ -154,10 +136,10 @@ impl RemoteWatcher {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoteContent {
     pub content_id: i32,
-    pub parent_id: Option<u32>,
+    pub parent_id: Option<i32>,
     pub content_type: String,
     pub modified: String,
     pub filename: String,
@@ -196,7 +178,7 @@ impl RemoteSync {
             .client
             .request(
                 Method::GET,
-                "https://tracim.bux.fr/api/workspaces/3/contents",
+                "https://tracim.bux.fr/api/workspaces/4/contents",
             )
             .header("Tracim-Api-Key", &self.tracim_api_key)
             .header("Tracim-Api-Login", &self.tracim_user_name)
@@ -205,11 +187,12 @@ impl RemoteSync {
             .json::<Vec<RemoteContent>>()
             .unwrap()
             .into_iter()
-            .filter(|c| ACCEPTED_CONTENT_TYPES.contains(&c.content_type.as_str()))
+            .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
             .collect::<Vec<RemoteContent>>();
         let content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
 
         for content in &contents {
+            // TODO : use database module
             match self.connection.query_row::<i64, _, _>(
                 "SELECT last_modified_timestamp FROM file WHERE content_id = ?",
                 params![content.content_id],
@@ -221,13 +204,6 @@ impl RemoteSync {
                         .timestamp_millis();
                     // File is known but have been modified ?
                     if last_modified_timestamp != modified_timestamp {
-                        // TODO : This update must be done in Operation !
-                        self.connection
-                            .execute(
-                                "UPDATE file SET last_modified_timestamp = ?1 WHERE content_id = ?2",
-                                params![modified_timestamp, content.content_id],
-                            )
-                            .unwrap();
                         self.operational_sender
                             .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
                             .unwrap();
