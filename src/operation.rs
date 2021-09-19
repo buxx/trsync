@@ -120,12 +120,15 @@ impl OperationalHandler {
         // FIXME : for each parent folders, create it on remote if required
 
         // Create it on remote
-        let content_id = self.client.create_content(
-            file_infos.absolute_path,
-            file_infos.file_name,
-            file_infos.content_type,
-            parent_id,
-        );
+        let content_id = self
+            .client
+            .create_content(
+                file_infos.absolute_path,
+                file_infos.file_name,
+                file_infos.content_type,
+                parent_id,
+            )
+            .unwrap();
 
         // Prepare to ignore remote create event
         self.ignore_messages

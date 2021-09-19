@@ -11,6 +11,7 @@ use reqwest::Method;
 use rusqlite::{params, Connection};
 
 use crate::{
+    client::Client,
     operation::OperationalMessage,
     types::{ContentType, RemoteEventType},
 };
@@ -147,11 +148,9 @@ pub struct RemoteContent {
 
 pub struct RemoteSync {
     connection: Connection,
-    client: reqwest::blocking::Client,
+    client: Client,
     path: PathBuf,
     operational_sender: Sender<OperationalMessage>,
-    tracim_api_key: String,
-    tracim_user_name: String,
 }
 
 impl RemoteSync {
@@ -164,31 +163,15 @@ impl RemoteSync {
     ) -> Self {
         Self {
             connection,
-            client: reqwest::blocking::Client::new(),
+            client: Client::new(tracim_api_key, tracim_user_name),
             path: fs::canonicalize(&path).unwrap(),
             operational_sender,
-            tracim_api_key,
-            tracim_user_name,
         }
     }
 
     pub fn sync(&mut self) {
         // TODO : move into client
-        let contents = self
-            .client
-            .request(
-                Method::GET,
-                "https://tracim.bux.fr/api/workspaces/4/contents",
-            )
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
-            .send()
-            .unwrap()
-            .json::<Vec<RemoteContent>>()
-            .unwrap()
-            .into_iter()
-            .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
-            .collect::<Vec<RemoteContent>>();
+        let contents = self.client.get_remote_contents(None).unwrap();
         let content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
 
         for content in &contents {
