@@ -9,7 +9,8 @@ use rusqlite::Connection;
 
 use crate::{
     client::Client,
-    database::DatabaseOperation,
+    database::{Database, DatabaseOperation},
+    error::{ClientError, OperationError},
     types::{ContentId, RelativeFilePath},
     util::FileInfos,
 };
@@ -89,30 +90,60 @@ impl OperationalHandler {
                 match message {
                     // Local changes
                     OperationalMessage::NewLocalFile(relative_path) => {
-                        self.new_local_file(relative_path)
+                        match self.new_local_file(relative_path) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                     OperationalMessage::ModifiedLocalFile(relative_path) => {
-                        self.modified_local_file(relative_path)
+                        match self.modified_local_file(relative_path) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                     OperationalMessage::DeletedLocalFile(relative_path) => {
-                        self.deleted_local_file(relative_path)
+                        match self.deleted_local_file(relative_path) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                     // Remote changes
                     OperationalMessage::NewRemoteFile(content_id) => {
-                        self.new_remote_file(content_id)
+                        match self.new_remote_file(content_id) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                     OperationalMessage::ModifiedRemoteFile(content_id) => {
-                        self.modified_remote_file(content_id)
+                        match self.modified_remote_file(content_id) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                     OperationalMessage::DeletedRemoteFile(content_id) => {
-                        self.deleted_remote_file(content_id)
+                        match self.deleted_remote_file(content_id) {
+                            Err(err) => {
+                                eprintln!("{:?}", err)
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
         }
     }
 
-    fn new_local_file(&mut self, relative_path: String) {
+    fn new_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
         // Grab file infos
         let file_infos = FileInfos::from(&self.path, relative_path);
         let parent_id = file_infos.parent_id(&self.connection);
@@ -120,19 +151,25 @@ impl OperationalHandler {
         // FIXME : for each parent folders, create it on remote if required
 
         // Create it on remote
-        let content_id = self
-            .client
-            .create_content(
-                file_infos.absolute_path,
-                file_infos.file_name,
-                file_infos.content_type,
-                parent_id,
-            )
-            .unwrap();
-
-        // Prepare to ignore remote create event
-        self.ignore_messages
-            .push(OperationalMessage::NewRemoteFile(content_id));
+        let content_id = match self.client.create_content(
+            file_infos.absolute_path,
+            file_infos.content_type,
+            parent_id,
+        ) {
+            Ok(content_id) => {
+                // Prepare to ignore remote create event
+                self.ignore_messages
+                    .push(OperationalMessage::NewRemoteFile(content_id));
+                content_id
+            }
+            Err(ClientError::AlreadyExistResponse(existing_content_id)) => existing_content_id,
+            Err(err) => {
+                return Err(OperationError::FailToCreateContentOnRemote(format!(
+                    "Fail to create new local file on remote : {:?}",
+                    err
+                )))
+            }
+        };
 
         // Update database
         DatabaseOperation::new(&self.connection).insert_new_file(
@@ -140,9 +177,14 @@ impl OperationalHandler {
             file_infos.last_modified_timestamp,
             Some(content_id),
         );
+
+        Ok(())
     }
 
-    fn modified_local_file(&mut self, relative_path: RelativeFilePath) {
+    fn modified_local_file(
+        &mut self,
+        relative_path: RelativeFilePath,
+    ) -> Result<(), OperationError> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
@@ -160,21 +202,23 @@ impl OperationalHandler {
             file_infos.file_name,
             file_infos.content_type,
             content_id,
-        );
+        )?;
 
         // Update database
         database_operation
             .update_file(file_infos.relative_path, file_infos.last_modified_timestamp);
+
+        Ok(())
     }
 
-    fn deleted_local_file(&mut self, relative_path: String) {
+    fn deleted_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
         let content_id = database_operation.get_content_id_from_path(relative_path);
 
         // Delete on remote
-        self.client.trash_content(content_id);
+        self.client.trash_content(content_id)?;
 
         // Prepare to ignore remote trashed event
         self.ignore_messages
@@ -182,12 +226,14 @@ impl OperationalHandler {
 
         // Update database
         database_operation.delete_file(content_id);
+
+        Ok(())
     }
 
-    fn new_remote_file(&mut self, content_id: i32) {
+    fn new_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
         // Grab file infos
-        let remote_content = self.client.get_remote_content(content_id);
-        let relative_path = self.client.build_relative_path(&remote_content);
+        let remote_content = self.client.get_remote_content(content_id)?;
+        let relative_path = self.client.build_relative_path(&remote_content)?;
         let absolute_path = self.path.join(&relative_path);
 
         // Prepare to ignore new local file
@@ -209,7 +255,7 @@ impl OperationalHandler {
         } else {
             let mut response = self
                 .client
-                .get_file_content_response(remote_content.content_id, remote_content.filename);
+                .get_file_content_response(remote_content.content_id, remote_content.filename)?;
             let mut out = File::create(absolute_path).unwrap();
             io::copy(&mut response, &mut out).unwrap();
         }
@@ -221,18 +267,30 @@ impl OperationalHandler {
             file_infos.last_modified_timestamp,
             Some(content_id),
         );
+
+        Ok(())
     }
 
-    fn modified_remote_file(&mut self, content_id: i32) {
+    fn modified_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
-        let remote_content = self.client.get_remote_content(content_id);
-        let relative_path = self.client.build_relative_path(&remote_content);
+        let remote_content = self.client.get_remote_content(content_id)?;
+        let relative_path = self.client.build_relative_path(&remote_content)?;
         let absolute_path = self.path.join(&relative_path);
 
+        // TODO : use enum for content_type
         if remote_content.content_type == "folder" {
-            return;
+            // TODO : manage case where file doesn't exist (in db and on disk)
+            let relative_path =
+                DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id);
+            let old_absolute_path = self.path.join(relative_path);
+            let new_absolute_path = old_absolute_path
+                .parent()
+                .unwrap()
+                .join(remote_content.filename);
+            fs::rename(old_absolute_path, new_absolute_path).unwrap();
+            return Ok(());
         }
 
         // Prepare to ignore modified local file
@@ -242,7 +300,8 @@ impl OperationalHandler {
         // Write file on disk
         let mut response = self
             .client
-            .get_file_content_response(content_id, remote_content.filename);
+            .get_file_content_response(content_id, remote_content.filename)?;
+        // TODO : Manage case where file don't exist on disk
         let mut out = File::open(absolute_path).unwrap();
         io::copy(&mut response, &mut out).unwrap();
 
@@ -250,14 +309,16 @@ impl OperationalHandler {
         let file_infos = FileInfos::from(&self.path, relative_path);
         database_operation
             .update_file(file_infos.relative_path, file_infos.last_modified_timestamp);
+
+        Ok(())
     }
 
-    fn deleted_remote_file(&mut self, content_id: i32) {
+    fn deleted_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos (by chance, Tracim don't remove really file and we can access to these infos)
-        let remote_content = self.client.get_remote_content(content_id);
-        let relative_path = self.client.build_relative_path(&remote_content);
+        let remote_content = self.client.get_remote_content(content_id)?;
+        let relative_path = self.client.build_relative_path(&remote_content)?;
         let absolute_path = self.path.join(&relative_path);
 
         // Prepare to ignore deleted local file
@@ -267,5 +328,7 @@ impl OperationalHandler {
         // Delete disk file
         fs::remove_file(absolute_path).unwrap();
         database_operation.delete_file(content_id);
+
+        Ok(())
     }
 }

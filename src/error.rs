@@ -1,6 +1,9 @@
 use std::{fmt, io};
 
-use crate::types::{AbsoluteFilePath, ContentId};
+use crate::{
+    client::Client,
+    types::{AbsoluteFilePath, ContentId},
+};
 
 #[derive(Debug, Clone)]
 pub struct Error {
@@ -67,5 +70,18 @@ impl fmt::Display for ClientError {
             ClientError::DecodingResponseError(message) => format!("Decoding error : {}", message),
         };
         write!(f, "{}", message)
+    }
+}
+
+#[derive(Debug)]
+pub enum OperationError {
+    FailToCreateContentOnRemote(String),
+    FailToCreateContentOnLocal(String),
+    UnexpectedError(String),
+}
+
+impl From<ClientError> for OperationError {
+    fn from(err: ClientError) -> Self {
+        OperationError::UnexpectedError(format!("{:?}", err))
     }
 }

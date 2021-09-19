@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection};
+use serde::__private::de::Content;
 
 use crate::types::{ContentId, LastModifiedTimestamp};
 
@@ -62,6 +63,16 @@ impl<'d> DatabaseOperation<'d> {
                 |row| row.get(0),
             )
             .unwrap() as ContentId
+    }
+
+    pub fn get_path_from_content_id(&self, content_id: ContentId) -> String {
+        self.connection
+            .query_row::<String, _, _>(
+                "SELECT relative_path FROM file WHERE content_id = ?",
+                params![content_id],
+                |row| row.get(0),
+            )
+            .unwrap()
     }
 
     pub fn insert_new_file(

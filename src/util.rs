@@ -53,14 +53,10 @@ impl FileInfos {
         } else {
             ContentType::File
         };
-        let last_modified_timestamp = absolute_path
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as LastModifiedTimestamp;
+        let metadata = absolute_path.metadata().unwrap();
+        let modified = metadata.modified().unwrap();
+        let since_epoch = modified.duration_since(UNIX_EPOCH).unwrap();
+        let last_modified_timestamp = since_epoch.as_millis() as LastModifiedTimestamp;
         let is_directory = absolute_path.is_dir();
 
         Self {

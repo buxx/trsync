@@ -1,7 +1,7 @@
 pub type RelativeFilePath = String;
 pub type AbsoluteFilePath = String;
 pub type ContentId = i32;
-pub type LastModifiedTimestamp = i32;
+pub type LastModifiedTimestamp = i64;
 pub type EventType = String;
 
 #[derive(PartialEq)]

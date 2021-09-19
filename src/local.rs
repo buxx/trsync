@@ -181,13 +181,16 @@ impl LocalSync {
                         .unwrap();
                 }
             }
-            Err(_) => {
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Unknown file
                 self.operational_sender
                     .send(OperationalMessage::NewLocalFile(String::from(
                         relative_path.to_str().unwrap(),
                     )))
                     .unwrap();
+            }
+            Err(err) => {
+                eprintln!("Error when reading database : {:?}", err)
             }
         }
     }
