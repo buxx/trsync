@@ -87,14 +87,10 @@ impl Client {
 
         match &response.status().as_u16() {
             200 => {
-                let content_id = response.json::<Value>().unwrap().as_object().unwrap()
-                    ["content_id"]
-                    .as_i64()
-                    .unwrap() as ContentId;
-                let revision_id = response.json::<Value>().unwrap().as_object().unwrap()
-                    ["revision_id"]
-                    .as_i64()
-                    .unwrap() as RevisionId;
+                let value = response.json::<Value>().unwrap();
+                let data = value.as_object().unwrap();
+                let content_id = data["content_id"].as_i64().unwrap() as ContentId;
+                let revision_id = data["revision_id"].as_i64().unwrap() as RevisionId;
                 Ok((content_id, revision_id))
             }
             400 => {
