@@ -3,10 +3,10 @@ use std::path::Path;
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
-use serde::__private::de::ContentRefDeserializer;
 use serde_json::Value;
 
 use crate::error::ClientError;
+use crate::types::RevisionId;
 use crate::{
     remote::RemoteContent,
     types::{ContentId, ContentType},
@@ -54,7 +54,7 @@ impl Client {
         absolute_file_path: String,
         content_type: ContentType,
         parent_content_id: Option<ContentId>,
-    ) -> Result<ContentId, ClientError> {
+    ) -> Result<(ContentId, RevisionId), ClientError> {
         let mut form = multipart::Form::new();
         if let Some(parent_content_id) = parent_content_id {
             form = form.text("parent_id", parent_content_id.to_string());
@@ -86,11 +86,17 @@ impl Client {
             .send()?;
 
         match &response.status().as_u16() {
-            200 => Ok(
-                response.json::<Value>().unwrap().as_object().unwrap()["content_id"]
+            200 => {
+                let content_id = response.json::<Value>().unwrap().as_object().unwrap()
+                    ["content_id"]
                     .as_i64()
-                    .unwrap() as ContentId,
-            ),
+                    .unwrap() as ContentId;
+                let revision_id = response.json::<Value>().unwrap().as_object().unwrap()
+                    ["revision_id"]
+                    .as_i64()
+                    .unwrap() as RevisionId;
+                Ok((content_id, revision_id))
+            }
             400 => {
                 let error_code = match response.json::<Value>()?["code"].as_u64() {
                     Some(code) => code as u16,
@@ -103,8 +109,11 @@ impl Client {
                 match error_code {
                     CONTENT_ALREADY_EXIST_ERR_CODE => {
                         match self.find_existing(absolute_file_path, parent_content_id) {
-                            Ok(found_content_id) => {
-                                Err(ClientError::AlreadyExistResponse(found_content_id))
+                            Ok((found_content_id, found_revision_id)) => {
+                                Err(ClientError::AlreadyExistResponse(
+                                    found_content_id,
+                                    found_revision_id,
+                                ))
                             }
                             Err(err) => {
                                 Err(ClientError::AlreadyExistResponseAndFailToFoundIt(format!(
@@ -131,7 +140,7 @@ impl Client {
         &self,
         absolute_file_path: String,
         parent_id: Option<ContentId>,
-    ) -> Result<ContentId, ClientError> {
+    ) -> Result<(ContentId, RevisionId), ClientError> {
         let file_name = match Path::new(&absolute_file_path).file_name() {
             Some(file_name) => match file_name.to_str() {
                 Some(file_name) => file_name.to_string(),
@@ -151,7 +160,7 @@ impl Client {
             self.get_remote_contents(Some(ParentIdParameter::from_value(parent_id)))?
         {
             if remote_content.filename == file_name {
-                return Ok(remote_content.content_id);
+                return Ok((remote_content.content_id, remote_content.revision_id));
             }
         }
         Err(ClientError::NotFoundResponse(
@@ -165,14 +174,17 @@ impl Client {
         file_name: String,
         content_type: ContentType,
         content_id: ContentId,
-    ) -> Result<(), ClientError> {
+    ) -> Result<RevisionId, ClientError> {
+        println!(
+            "Update remote content {} with file {}",
+            content_id, absolute_file_path
+        );
+
         let mut url = "".to_string();
         let mut form = multipart::Form::new();
         if content_type == ContentType::Folder {
-            url = format!(
-                "https://tracim.bux.fr/api/workspaces/4/fodlers/{}",
-                content_id,
-            );
+            let content = self.get_remote_content(content_id)?;
+            return Ok(content.revision_id);
         } else {
             form = match form.file("files", &absolute_file_path) {
                 Ok(form) => form,
@@ -197,7 +209,10 @@ impl Client {
             .multipart(form)
             .send()?;
         match response.status().as_u16() {
-            200 => Ok(()),
+            200 => {
+                let content = self.get_remote_content(content_id)?;
+                Ok(content.revision_id)
+            }
             _ => Err(ClientError::UnexpectedResponse(format!(
                 "Response status code was {}",
                 response.status().as_u16(),

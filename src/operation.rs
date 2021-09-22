@@ -9,9 +9,9 @@ use rusqlite::Connection;
 
 use crate::{
     client::Client,
-    database::{Database, DatabaseOperation},
+    database::DatabaseOperation,
     error::{ClientError, OperationError},
-    types::{ContentId, RelativeFilePath},
+    types::{ContentId, ContentType, RelativeFilePath},
     util::FileInfos,
 };
 
@@ -144,6 +144,11 @@ impl OperationalHandler {
     }
 
     fn new_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
+        // Prevent known bug : new local file is sometime an existing file
+        if DatabaseOperation::new(&self.connection).relative_path_is_known(&relative_path) {
+            return self.modified_local_file(relative_path.clone());
+        }
+
         // Grab file infos
         let file_infos = FileInfos::from(&self.path, relative_path);
         let parent_id = file_infos.parent_id(&self.connection);
@@ -151,18 +156,25 @@ impl OperationalHandler {
         // FIXME : for each parent folders, create it on remote if required
 
         // Create it on remote
-        let content_id = match self.client.create_content(
+        let (content_id, revision_id) = match self.client.create_content(
             file_infos.absolute_path,
-            file_infos.content_type,
+            file_infos.content_type.clone(),
             parent_id,
         ) {
-            Ok(content_id) => {
+            Ok((content_id, revision_id)) => {
                 // Prepare to ignore remote create event
                 self.ignore_messages
                     .push(OperationalMessage::NewRemoteFile(content_id));
-                content_id
+                // Tracim generate additional modified event when it is a file
+                if file_infos.content_type == ContentType::File {
+                    self.ignore_messages
+                        .push(OperationalMessage::ModifiedRemoteFile(content_id));
+                }
+                (content_id, revision_id)
             }
-            Err(ClientError::AlreadyExistResponse(existing_content_id)) => existing_content_id,
+            Err(ClientError::AlreadyExistResponse(existing_content_id, existing_revision_id)) => {
+                (existing_content_id, existing_revision_id)
+            }
             Err(err) => {
                 return Err(OperationError::FailToCreateContentOnRemote(format!(
                     "Fail to create new local file on remote : {:?}",
@@ -175,7 +187,8 @@ impl OperationalHandler {
         DatabaseOperation::new(&self.connection).insert_new_file(
             file_infos.relative_path,
             file_infos.last_modified_timestamp,
-            Some(content_id),
+            content_id,
+            revision_id,
         );
 
         Ok(())
@@ -197,7 +210,7 @@ impl OperationalHandler {
             .push(OperationalMessage::ModifiedRemoteFile(content_id));
 
         // Update file on remote
-        self.client.update_content(
+        let revision_id = self.client.update_content(
             file_infos.absolute_path,
             file_infos.file_name,
             file_infos.content_type,
@@ -205,8 +218,11 @@ impl OperationalHandler {
         )?;
 
         // Update database
-        database_operation
-            .update_file(file_infos.relative_path, file_infos.last_modified_timestamp);
+        database_operation.update_last_modified_timestamp(
+            file_infos.relative_path.clone(),
+            file_infos.last_modified_timestamp,
+        );
+        database_operation.update_revision_id(file_infos.relative_path, revision_id);
 
         Ok(())
     }
@@ -245,7 +261,7 @@ impl OperationalHandler {
             // If parent content id is unknown, folder is not on disk
             if !DatabaseOperation::new(&self.connection).content_id_is_known(parent_id) {
                 // Use recursive to create this parent and possible parents parent
-                self.new_remote_file(parent_id);
+                self.new_remote_file(parent_id)?;
             }
         }
 
@@ -262,10 +278,12 @@ impl OperationalHandler {
 
         // Update database
         let file_infos = FileInfos::from(&self.path, relative_path);
+        let content = self.client.get_remote_content(content_id)?;
         DatabaseOperation::new(&self.connection).insert_new_file(
             file_infos.relative_path,
             file_infos.last_modified_timestamp,
-            Some(content_id),
+            content_id,
+            content.revision_id,
         );
 
         Ok(())
@@ -302,13 +320,19 @@ impl OperationalHandler {
             .client
             .get_file_content_response(content_id, remote_content.filename)?;
         // TODO : Manage case where file don't exist on disk
-        let mut out = File::open(absolute_path).unwrap();
-        io::copy(&mut response, &mut out).unwrap();
+        println!(
+            "Update disk file {:?} with content {}",
+            &absolute_path, content_id
+        );
+        let mut out = File::create(absolute_path)?;
+        io::copy(&mut response, &mut out)?;
 
         // Update database
         let file_infos = FileInfos::from(&self.path, relative_path);
-        database_operation
-            .update_file(file_infos.relative_path, file_infos.last_modified_timestamp);
+        database_operation.update_last_modified_timestamp(
+            file_infos.relative_path,
+            file_infos.last_modified_timestamp,
+        );
 
         Ok(())
     }

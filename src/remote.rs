@@ -12,8 +12,9 @@ use rusqlite::{params, Connection};
 
 use crate::{
     client::Client,
+    database::DatabaseOperation,
     operation::OperationalMessage,
-    types::{ContentType, RemoteEventType},
+    types::{ContentId, RemoteEventType, RevisionId},
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -139,7 +140,8 @@ impl RemoteWatcher {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoteContent {
-    pub content_id: i32,
+    pub content_id: ContentId,
+    pub revision_id: RevisionId,
     pub parent_id: Option<i32>,
     pub content_type: String,
     pub modified: String,
@@ -176,26 +178,24 @@ impl RemoteSync {
 
         for content in &contents {
             // TODO : use database module
-            match self.connection.query_row::<i64, _, _>(
-                "SELECT last_modified_timestamp FROM file WHERE content_id = ?",
-                params![content.content_id],
-                |row| row.get(0),
-            ) {
-                Ok(last_modified_timestamp) => {
-                    let modified_timestamp = DateTime::parse_from_rfc3339(&content.modified)
-                        .unwrap()
-                        .timestamp_millis();
+            match DatabaseOperation::new(&self.connection)
+                .get_revision_id_from_content_id(content.content_id)
+            {
+                Ok(known_revision_id) => {
                     // File is known but have been modified ?
-                    if last_modified_timestamp != modified_timestamp {
+                    if known_revision_id != content.revision_id {
                         self.operational_sender
                             .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
                             .unwrap();
                     }
                 }
-                Err(_) => {
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
                     self.operational_sender
                         .send(OperationalMessage::NewRemoteFile(content.content_id))
                         .unwrap();
+                }
+                Err(error) => {
+                    eprintln!("Error when comparing revision : {}", error)
                 }
             }
         }

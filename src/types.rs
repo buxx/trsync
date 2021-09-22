@@ -1,10 +1,11 @@
 pub type RelativeFilePath = String;
 pub type AbsoluteFilePath = String;
 pub type ContentId = i32;
+pub type RevisionId = i32;
 pub type LastModifiedTimestamp = i64;
 pub type EventType = String;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum ContentType {
     File,
     HtmlDocument,

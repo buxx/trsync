@@ -1,9 +1,6 @@
 use std::{fmt, io};
 
-use crate::{
-    client::Client,
-    types::{AbsoluteFilePath, ContentId},
-};
+use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
 
 #[derive(Debug, Clone)]
 pub struct Error {
@@ -35,7 +32,7 @@ pub enum ClientError {
     InputFileError(AbsoluteFilePath),
     RequestError(String),
     UnexpectedResponse(String),
-    AlreadyExistResponse(ContentId),
+    AlreadyExistResponse(ContentId, RevisionId),
     AlreadyExistResponseAndFailToFoundIt(String),
     NotFoundResponse(String),
     DecodingResponseError(String),
@@ -59,8 +56,8 @@ impl fmt::Display for ClientError {
             ClientError::UnexpectedResponse(message) => {
                 format!("UnExpected response : {}", message)
             }
-            ClientError::AlreadyExistResponse(content_id) => {
-                format!("Content already exist : {}", content_id)
+            ClientError::AlreadyExistResponse(content_id, revision_id) => {
+                format!("Content already exist : {}({})", content_id, revision_id)
             }
             ClientError::AlreadyExistResponseAndFailToFoundIt(message) => format!(
                 "Already exist but fail to found remote content : {}",
@@ -83,5 +80,11 @@ pub enum OperationError {
 impl From<ClientError> for OperationError {
     fn from(err: ClientError) -> Self {
         OperationError::UnexpectedError(format!("{:?}", err))
+    }
+}
+
+impl From<io::Error> for OperationError {
+    fn from(error: io::Error) -> Self {
+        OperationError::UnexpectedError(format!("{:?}", error))
     }
 }

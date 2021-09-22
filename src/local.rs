@@ -173,7 +173,10 @@ impl LocalSync {
                 // Known file (check if have been modified)
                 println!("{}", last_modified_timestamp);
                 if disk_last_modified_timestamp != last_modified_timestamp {
-                    println!("Modified !");
+                    println!(
+                        "Modified ! {} vs {}",
+                        disk_last_modified_timestamp, last_modified_timestamp
+                    );
                     self.operational_sender
                         .send(OperationalMessage::ModifiedLocalFile(String::from(
                             relative_path.to_str().unwrap(),
