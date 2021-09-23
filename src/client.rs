@@ -398,4 +398,53 @@ impl Client {
             }
         }
     }
+
+    pub fn move_content(
+        &self,
+        content_id: ContentId,
+        new_parent_id: ParentIdParameter,
+    ) -> Result<(), ClientError> {
+        let url = format!(
+            "https://tracim.bux.fr/api/workspaces/4/contents/{}/move",
+            content_id
+        );
+        let mut data = Map::new();
+        data.insert(
+            "new_parent_id".to_string(),
+            json!(new_parent_id.to_parameter_value()),
+        );
+        // FIXME : take care of "4"
+        data.insert("new_workspace_id".to_string(), json!("4"));
+        let response = self
+            .client
+            .request(Method::PUT, url)
+            .header("Tracim-Api-Key", &self.tracim_api_key)
+            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .json(&data)
+            .send()?;
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => Ok(()),
+            _ => {
+                let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status {} : {}",
+                    response_status_code, text,
+                )))
+            }
+        }
+    }
+
+    pub fn update_content_file_name(
+        &self,
+        content_id: ContentId,
+        new_file_name: String,
+        content_type: ContentType,
+    ) -> Result<(), ClientError> {
+        if content_type == ContentType::Folder {
+        } else {
+        }
+
+        Ok(())
+    }
 }

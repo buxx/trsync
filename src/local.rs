@@ -69,9 +69,17 @@ impl LocalWatcher {
                     relative_path.to_str().unwrap().to_string(),
                 )]
             }
-            DebouncedEvent::Rename(_absolute_source_path, _absolute_dest_path) => {
-                // TODO : manage this case
-                vec![]
+            DebouncedEvent::Rename(absolute_source_path, absolute_dest_path) => {
+                let before_relative_path = absolute_source_path
+                    .strip_prefix(&self.workspace_folder_path)
+                    .unwrap();
+                let after_relative_path = absolute_dest_path
+                    .strip_prefix(&self.workspace_folder_path)
+                    .unwrap();
+                vec![OperationalMessage::RenamedLocalFile(
+                    before_relative_path.to_str().unwrap().to_string(),
+                    after_relative_path.to_str().unwrap().to_string(),
+                )]
             }
             // Ignore these
             DebouncedEvent::NoticeWrite(_)

@@ -8,7 +8,7 @@ use std::{
 use rusqlite::Connection;
 
 use crate::{
-    client::Client,
+    client::{Client, ParentIdParameter},
     database::DatabaseOperation,
     error::{ClientError, OperationError},
     types::{ContentId, ContentType, RelativeFilePath},
@@ -21,6 +21,7 @@ pub enum OperationalMessage {
     NewLocalFile(RelativeFilePath),
     ModifiedLocalFile(RelativeFilePath),
     DeletedLocalFile(RelativeFilePath),
+    RenamedLocalFile(RelativeFilePath, RelativeFilePath), // before, after
     // Remote files messages
     NewRemoteFile(ContentId),
     ModifiedRemoteFile(ContentId),
@@ -113,6 +114,15 @@ impl OperationalHandler {
                             _ => {}
                         }
                     }
+                    OperationalMessage::RenamedLocalFile(
+                        before_relative_path,
+                        after_relative_path,
+                    ) => match self.renamed_local_file(before_relative_path, after_relative_path) {
+                        Err(err) => {
+                            eprintln!("{:?}", err)
+                        }
+                        _ => {}
+                    },
                     // Remote changes
                     OperationalMessage::NewRemoteFile(content_id) => {
                         match self.new_remote_file(content_id) {
@@ -253,6 +263,67 @@ impl OperationalHandler {
 
         // Update database
         database_operation.delete_file(content_id)?;
+
+        Ok(())
+    }
+
+    fn renamed_local_file(
+        &mut self,
+        before_relative_path: String,
+        after_relative_path: String,
+    ) -> Result<(), OperationError> {
+        let before_parent_relative_path = Path::new(&before_relative_path).parent();
+        let after_parent_relative_path = Path::new(&after_relative_path).parent();
+        let content_id = DatabaseOperation::new(&self.connection)
+            .get_content_id_from_path(before_relative_path)?;
+        let file_infos = FileInfos::from(&self.path, after_relative_path.clone());
+
+        // If path changes
+        if before_parent_relative_path != after_parent_relative_path {
+            // If path changes for a folder
+            if let Some(after_parent_relative_path_) = after_parent_relative_path {
+                let after_parent_relative_path_str =
+                    after_parent_relative_path_.to_str().unwrap().to_string();
+                match DatabaseOperation::new(&self.connection)
+                    .get_content_id_from_path(after_parent_relative_path_str)
+                {
+                    // New parent folder is indexed, update remote with it
+                    Ok(after_parent_content_id) => self.client.move_content(
+                        content_id,
+                        ParentIdParameter::Some(after_parent_content_id),
+                    )?,
+                    // New parent folder is not indexed, create it on remote
+                    Err(rusqlite::Error::QueryReturnedNoRows) => {
+                        self.new_local_file(after_parent_relative_path_str)?;
+                        let after_parent_content_id = DatabaseOperation::new(&self.connection)
+                            .get_content_id_from_path(after_parent_relative_path_str)?;
+                        self.client.move_content(
+                            content_id,
+                            ParentIdParameter::Some(after_parent_content_id),
+                        )?
+                    }
+                    Err(error) => {
+                        return Err(OperationError::UnexpectedError(format!("{:?}", error)))
+                    }
+                }
+            // Or change for root
+            } else {
+                self.client
+                    .move_content(content_id, ParentIdParameter::Root)?
+            }
+        }
+
+        let before_file_name = Path::new(&before_relative_path).file_name().unwrap();
+        let after_file_name = Path::new(&after_relative_path).file_name().unwrap();
+
+        // Rename file name if changes
+        if before_file_name != after_file_name {
+            self.client.update_content_file_name(
+                content_id,
+                after_file_name.to_str().unwrap().to_string(),
+                file_infos.content_type,
+            )?;
+        }
 
         Ok(())
     }
