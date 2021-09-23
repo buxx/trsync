@@ -42,7 +42,10 @@ fn main() {
 
     // Initialize database if needed
     Database::new(database_file_path.to_string()).with_new_connection(|connection| {
-        DatabaseOperation::new(&connection).create_tables();
+        match DatabaseOperation::new(&connection).create_tables() {
+            Ok(_) => {}
+            Err(error) => panic!("{:?}", error),
+        }
     });
 
     // First, start local sync to know changes since last start

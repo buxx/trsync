@@ -145,15 +145,26 @@ impl OperationalHandler {
 
     fn new_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
         // Prevent known bug : new local file is sometime an existing file
-        if DatabaseOperation::new(&self.connection).relative_path_is_known(&relative_path) {
+        if DatabaseOperation::new(&self.connection).relative_path_is_known(&relative_path)? {
             return self.modified_local_file(relative_path.clone());
         }
 
         // Grab file infos
         let file_infos = FileInfos::from(&self.path, relative_path);
-        let parent_id = file_infos.parent_id(&self.connection);
-
-        // FIXME : for each parent folders, create it on remote if required
+        let parent_id = match file_infos.parent_id(&self.connection) {
+            Ok(parent_id) => parent_id,
+            Err(error) => match error {
+                // Parent is currently not indexed
+                OperationError::UnIndexedRelativePath(parent_relative_path) => {
+                    self.new_local_file(parent_relative_path.clone())?;
+                    Some(
+                        DatabaseOperation::new(&self.connection)
+                            .get_content_id_from_path(parent_relative_path)?,
+                    )
+                }
+                _ => return Err(error),
+            },
+        };
 
         // Create it on remote
         let (content_id, revision_id) = match self.client.create_content(
@@ -189,7 +200,7 @@ impl OperationalHandler {
             file_infos.last_modified_timestamp,
             content_id,
             revision_id,
-        );
+        )?;
 
         Ok(())
     }
@@ -203,7 +214,7 @@ impl OperationalHandler {
         // Grab file infos
         let file_infos = FileInfos::from(&self.path, relative_path);
         let content_id =
-            database_operation.get_content_id_from_path(file_infos.relative_path.clone());
+            database_operation.get_content_id_from_path(file_infos.relative_path.clone())?;
 
         // Prepare to ignore remote create event
         self.ignore_messages
@@ -221,8 +232,8 @@ impl OperationalHandler {
         database_operation.update_last_modified_timestamp(
             file_infos.relative_path.clone(),
             file_infos.last_modified_timestamp,
-        );
-        database_operation.update_revision_id(file_infos.relative_path, revision_id);
+        )?;
+        database_operation.update_revision_id(file_infos.relative_path, revision_id)?;
 
         Ok(())
     }
@@ -231,7 +242,7 @@ impl OperationalHandler {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
-        let content_id = database_operation.get_content_id_from_path(relative_path);
+        let content_id = database_operation.get_content_id_from_path(relative_path)?;
 
         // Delete on remote
         self.client.trash_content(content_id)?;
@@ -241,7 +252,7 @@ impl OperationalHandler {
             .push(OperationalMessage::DeletedRemoteFile(content_id));
 
         // Update database
-        database_operation.delete_file(content_id);
+        database_operation.delete_file(content_id)?;
 
         Ok(())
     }
@@ -259,7 +270,7 @@ impl OperationalHandler {
         // Check tree before create new file
         if let Some(parent_id) = remote_content.parent_id {
             // If parent content id is unknown, folder is not on disk
-            if !DatabaseOperation::new(&self.connection).content_id_is_known(parent_id) {
+            if !DatabaseOperation::new(&self.connection).content_id_is_known(parent_id)? {
                 // Use recursive to create this parent and possible parents parent
                 self.new_remote_file(parent_id)?;
             }
@@ -267,7 +278,10 @@ impl OperationalHandler {
 
         // Write file/folder on disk
         if remote_content.content_type == "folder" {
-            fs::create_dir(absolute_path).unwrap();
+            match fs::create_dir(&absolute_path) {
+                Ok(_) => {}
+                Err(error) => eprintln!("Error during creation of {:?} : {}", absolute_path, error),
+            }
         } else {
             let mut response = self
                 .client
@@ -283,8 +297,8 @@ impl OperationalHandler {
             file_infos.relative_path,
             file_infos.last_modified_timestamp,
             content_id,
-            content.revision_id,
-        );
+            content.current_revision_id,
+        )?;
 
         Ok(())
     }
@@ -301,14 +315,42 @@ impl OperationalHandler {
         if remote_content.content_type == "folder" {
             // TODO : manage case where file doesn't exist (in db and on disk)
             let relative_path =
-                DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id);
+                DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
             let old_absolute_path = self.path.join(relative_path);
             let new_absolute_path = old_absolute_path
                 .parent()
                 .unwrap()
                 .join(remote_content.filename);
-            fs::rename(old_absolute_path, new_absolute_path).unwrap();
+            fs::rename(old_absolute_path, &new_absolute_path).unwrap();
+            // Prepare to ignore modified local file
+            let new_relative_path = new_absolute_path
+                .strip_prefix(&self.path)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            self.ignore_messages
+                .push(OperationalMessage::ModifiedLocalFile(new_relative_path));
             return Ok(());
+        }
+
+        // Manage renamed case
+        let current_relative_path =
+            DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
+        let file_infos = FileInfos::from(&self.path, current_relative_path);
+        if remote_content.filename != file_infos.file_name {
+            println!(
+                "Rename {} into {:?}",
+                file_infos.absolute_path, &absolute_path
+            );
+            match fs::rename(file_infos.absolute_path, &absolute_path) {
+                Ok(_) => {
+                    DatabaseOperation::new(&self.connection)
+                        .update_relative_path(content_id, relative_path.clone())?
+                    // TODO : manage local event rename by ignoring renamed event
+                }
+                Err(error) => return Err(OperationError::UnexpectedError(format!("{:?}", error))),
+            }
         }
 
         // Prepare to ignore modified local file
@@ -330,9 +372,11 @@ impl OperationalHandler {
         // Update database
         let file_infos = FileInfos::from(&self.path, relative_path);
         database_operation.update_last_modified_timestamp(
-            file_infos.relative_path,
+            file_infos.relative_path.clone(),
             file_infos.last_modified_timestamp,
-        );
+        )?;
+        database_operation
+            .update_revision_id(file_infos.relative_path, remote_content.current_revision_id)?;
 
         Ok(())
     }
@@ -340,9 +384,9 @@ impl OperationalHandler {
     fn deleted_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
-        // Grab file infos (by chance, Tracim don't remove really file and we can access to these infos)
-        let remote_content = self.client.get_remote_content(content_id)?;
-        let relative_path = self.client.build_relative_path(&remote_content)?;
+        // Grab file infos (from local index, remote content has name changes)
+        let relative_path =
+            DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
         let absolute_path = self.path.join(&relative_path);
 
         // Prepare to ignore deleted local file
@@ -350,8 +394,9 @@ impl OperationalHandler {
             .push(OperationalMessage::DeletedLocalFile(relative_path.clone()));
 
         // Delete disk file
-        fs::remove_file(absolute_path).unwrap();
-        database_operation.delete_file(content_id);
+        println!("Remove disk file {:?}", &absolute_path);
+        fs::remove_file(absolute_path)?;
+        database_operation.delete_file(content_id)?;
 
         Ok(())
     }

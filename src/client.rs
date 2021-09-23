@@ -3,7 +3,7 @@ use std::path::Path;
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 use crate::error::ClientError;
 use crate::types::RevisionId;
@@ -13,6 +13,8 @@ use crate::{
 };
 
 const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
+
+#[derive(Debug)]
 pub enum ParentIdParameter {
     Root,
     Some(ContentId),
@@ -55,17 +57,39 @@ impl Client {
         content_type: ContentType,
         parent_content_id: Option<ContentId>,
     ) -> Result<(ContentId, RevisionId), ClientError> {
-        let mut form = multipart::Form::new();
-        if let Some(parent_content_id) = parent_content_id {
-            form = form.text("parent_id", parent_content_id.to_string());
-        };
-
-        let mut url = "".to_string();
-        if content_type == ContentType::Folder {
-            url = format!("https://tracim.bux.fr/api/workspaces/4/contents");
-            form = form.text("content_type", ContentType::Folder.to_string());
+        let response = if content_type == ContentType::Folder {
+            let url = format!("https://tracim.bux.fr/api/workspaces/4/contents");
+            let mut data = Map::new();
+            data.insert(
+                "content_type".to_string(),
+                json!(ContentType::Folder.to_string()),
+            );
+            let file_name = Path::new(&absolute_file_path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            data.insert("label".to_string(), json!(file_name));
+            if let Some(parent_content_id) = parent_content_id {
+                data.insert("parent_id".to_string(), json!(parent_content_id));
+            };
+            println!(
+                "Create folder {} on remote with url {}",
+                &absolute_file_path, &url
+            );
+            self.client
+                .request(Method::POST, url)
+                .header("Tracim-Api-Key", &self.tracim_api_key)
+                .header("Tracim-Api-Login", &self.tracim_user_name)
+                .json(&data)
+                .send()?
         } else {
-            url = "https://tracim.bux.fr/api/workspaces/4/files".to_string();
+            let mut form = multipart::Form::new();
+            if let Some(parent_content_id) = parent_content_id {
+                form = form.text("parent_id", parent_content_id.to_string());
+            };
+            let url = "https://tracim.bux.fr/api/workspaces/4/files".to_string();
             form = match form.file("files", &absolute_file_path) {
                 Ok(form) => form,
                 Err(err) => {
@@ -75,22 +99,25 @@ impl Client {
                     )))
                 }
             };
-        }
+            println!(
+                "Create file {} on remote with url {}",
+                &absolute_file_path, &url
+            );
+            self.client
+                .request(Method::POST, url)
+                .header("Tracim-Api-Key", &self.tracim_api_key)
+                .header("Tracim-Api-Login", &self.tracim_user_name)
+                .multipart(form)
+                .send()?
+        };
 
-        let response = self
-            .client
-            .request(Method::POST, url)
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
-            .multipart(form)
-            .send()?;
-
-        match &response.status().as_u16() {
+        let response_status = &response.status().as_u16();
+        match response_status {
             200 => {
                 let value = response.json::<Value>().unwrap();
                 let data = value.as_object().unwrap();
                 let content_id = data["content_id"].as_i64().unwrap() as ContentId;
-                let revision_id = data["revision_id"].as_i64().unwrap() as RevisionId;
+                let revision_id = self.get_remote_content(content_id)?.current_revision_id;
                 Ok((content_id, revision_id))
             }
             400 => {
@@ -125,10 +152,13 @@ impl Client {
                     ))),
                 }
             }
-            _ => Err(ClientError::UnexpectedResponse(format!(
-                "Response status was {}",
-                &response.status()
-            ))),
+            _ => {
+                let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status was {} and response : {}",
+                    response_status, text
+                )))
+            }
         }
     }
 
@@ -156,7 +186,10 @@ impl Client {
             self.get_remote_contents(Some(ParentIdParameter::from_value(parent_id)))?
         {
             if remote_content.filename == file_name {
-                return Ok((remote_content.content_id, remote_content.revision_id));
+                return Ok((
+                    remote_content.content_id,
+                    remote_content.current_revision_id,
+                ));
             }
         }
         Err(ClientError::NotFoundResponse(
@@ -180,7 +213,7 @@ impl Client {
         let mut form = multipart::Form::new();
         if content_type == ContentType::Folder {
             let content = self.get_remote_content(content_id)?;
-            return Ok(content.revision_id);
+            return Ok(content.current_revision_id);
         } else {
             form = match form.file("files", &absolute_file_path) {
                 Ok(form) => form,
@@ -207,7 +240,7 @@ impl Client {
         match response.status().as_u16() {
             200 => {
                 let content = self.get_remote_content(content_id)?;
-                Ok(content.revision_id)
+                Ok(content.current_revision_id)
             }
             _ => Err(ClientError::UnexpectedResponse(format!(
                 "Response status code was {}",
@@ -334,7 +367,7 @@ impl Client {
         &self,
         parent_id: Option<ParentIdParameter>,
     ) -> Result<Vec<RemoteContent>, ClientError> {
-        let url = match parent_id {
+        let url = match &parent_id {
             Some(parent_id) => format!(
                 "https://tracim.bux.fr/api/workspaces/4/contents?parent_ids={}",
                 parent_id.to_parameter_value()
@@ -342,15 +375,27 @@ impl Client {
             None => "https://tracim.bux.fr/api/workspaces/4/contents".to_string(),
         };
 
-        Ok(self
+        let response = self
             .client
             .request(Method::GET, url)
             .header("Tracim-Api-Key", &self.tracim_api_key)
             .header("Tracim-Api-Login", &self.tracim_user_name)
-            .send()?
-            .json::<Vec<RemoteContent>>()?
-            .into_iter()
-            .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
-            .collect::<Vec<RemoteContent>>())
+            .send()?;
+
+        let status_code = response.status().as_u16();
+        match status_code {
+            200 => Ok(response
+                .json::<Vec<RemoteContent>>()?
+                .into_iter()
+                .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
+                .collect::<Vec<RemoteContent>>()),
+            _ => {
+                let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status {} during fetching contents (parent_ids={:?}) : {}",
+                    status_code, parent_id, text
+                )))
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use crate::{
     database::DatabaseOperation,
+    error::OperationError,
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
 };
 
@@ -48,8 +49,6 @@ impl FileInfos {
         };
         let content_type = if absolute_path.is_dir() {
             ContentType::Folder
-        } else if absolute_path.ends_with(".html") {
-            ContentType::HtmlDocument
         } else {
             ContentType::File
         };
@@ -70,13 +69,14 @@ impl FileInfos {
         }
     }
 
-    pub fn parent_id(&self, connection: &Connection) -> Option<ContentId> {
+    pub fn parent_id(&self, connection: &Connection) -> Result<Option<ContentId>, OperationError> {
         if let Some(parent_relative_path) = &self.parent_relative_path {
-            let content_id = DatabaseOperation::new(connection)
-                .get_content_id_from_path(parent_relative_path.to_string());
-            Some(content_id)
+            Ok(Some(
+                DatabaseOperation::new(connection)
+                    .get_content_id_from_path(parent_relative_path.to_string())?,
+            ))
         } else {
-            None
+            Ok(None)
         }
     }
 }

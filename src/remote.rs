@@ -1,14 +1,13 @@
 use async_std::task;
 use std::{fs, path::PathBuf, sync::mpsc::Sender};
 
-use chrono::DateTime;
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str;
 
 use reqwest::Method;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 
 use crate::{
     client::Client,
@@ -141,7 +140,7 @@ impl RemoteWatcher {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoteContent {
     pub content_id: ContentId,
-    pub revision_id: RevisionId,
+    pub current_revision_id: RevisionId,
     pub parent_id: Option<i32>,
     pub content_type: String,
     pub modified: String,
@@ -183,7 +182,11 @@ impl RemoteSync {
             {
                 Ok(known_revision_id) => {
                     // File is known but have been modified ?
-                    if known_revision_id != content.revision_id {
+                    println!(
+                        "Compare revision for {} : local : {} remote : {}",
+                        content.content_id, known_revision_id, content.current_revision_id
+                    );
+                    if known_revision_id != content.current_revision_id {
                         self.operational_sender
                             .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
                             .unwrap();

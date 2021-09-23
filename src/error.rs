@@ -74,6 +74,7 @@ impl fmt::Display for ClientError {
 pub enum OperationError {
     FailToCreateContentOnRemote(String),
     FailToCreateContentOnLocal(String),
+    UnIndexedRelativePath(String),
     UnexpectedError(String),
 }
 
@@ -85,6 +86,12 @@ impl From<ClientError> for OperationError {
 
 impl From<io::Error> for OperationError {
     fn from(error: io::Error) -> Self {
+        OperationError::UnexpectedError(format!("{:?}", error))
+    }
+}
+
+impl From<rusqlite::Error> for OperationError {
+    fn from(error: rusqlite::Error) -> Self {
         OperationError::UnexpectedError(format!("{:?}", error))
     }
 }
