@@ -275,7 +275,7 @@ impl OperationalHandler {
         let before_parent_relative_path = Path::new(&before_relative_path).parent();
         let after_parent_relative_path = Path::new(&after_relative_path).parent();
         let content_id = DatabaseOperation::new(&self.connection)
-            .get_content_id_from_path(before_relative_path)?;
+            .get_content_id_from_path(before_relative_path.clone())?;
         let file_infos = FileInfos::from(&self.path, after_relative_path.clone());
 
         // If path changes
@@ -285,7 +285,7 @@ impl OperationalHandler {
                 let after_parent_relative_path_str =
                     after_parent_relative_path_.to_str().unwrap().to_string();
                 match DatabaseOperation::new(&self.connection)
-                    .get_content_id_from_path(after_parent_relative_path_str)
+                    .get_content_id_from_path(after_parent_relative_path_str.clone())
                 {
                     // New parent folder is indexed, update remote with it
                     Ok(after_parent_content_id) => self.client.move_content(
@@ -293,10 +293,10 @@ impl OperationalHandler {
                         ParentIdParameter::Some(after_parent_content_id),
                     )?,
                     // New parent folder is not indexed, create it on remote
-                    Err(rusqlite::Error::QueryReturnedNoRows) => {
-                        self.new_local_file(after_parent_relative_path_str)?;
+                    Err(OperationError::UnIndexedRelativePath(_)) => {
+                        self.new_local_file(after_parent_relative_path_str.clone())?;
                         let after_parent_content_id = DatabaseOperation::new(&self.connection)
-                            .get_content_id_from_path(after_parent_relative_path_str)?;
+                            .get_content_id_from_path(after_parent_relative_path_str.clone())?;
                         self.client.move_content(
                             content_id,
                             ParentIdParameter::Some(after_parent_content_id),
@@ -318,11 +318,13 @@ impl OperationalHandler {
 
         // Rename file name if changes
         if before_file_name != after_file_name {
-            self.client.update_content_file_name(
+            let new_revision_id = self.client.update_content_file_name(
                 content_id,
                 after_file_name.to_str().unwrap().to_string(),
                 file_infos.content_type,
             )?;
+            DatabaseOperation::new(&self.connection)
+                .update_revision_id(after_relative_path, new_revision_id)?;
         }
 
         Ok(())
@@ -456,17 +458,25 @@ impl OperationalHandler {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos (from local index, remote content has name changes)
+
         let relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let absolute_path = self.path.join(&relative_path);
+        let file_infos = FileInfos::from(&self.path, relative_path);
 
         // Prepare to ignore deleted local file
         self.ignore_messages
-            .push(OperationalMessage::DeletedLocalFile(relative_path.clone()));
+            .push(OperationalMessage::DeletedLocalFile(
+                file_infos.relative_path,
+            ));
 
         // Delete disk file
-        println!("Remove disk file {:?}", &absolute_path);
-        fs::remove_file(absolute_path)?;
+        println!("Remove disk file {:?}", &file_infos.absolute_path);
+        if file_infos.is_directory {
+            fs::remove_dir_all(&file_infos.absolute_path)?;
+        } else {
+            fs::remove_file(&file_infos.absolute_path)?;
+        };
+
         database_operation.delete_file(content_id)?;
 
         Ok(())

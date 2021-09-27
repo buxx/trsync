@@ -440,11 +440,44 @@ impl Client {
         content_id: ContentId,
         new_file_name: String,
         content_type: ContentType,
-    ) -> Result<(), ClientError> {
-        if content_type == ContentType::Folder {
+    ) -> Result<RevisionId, ClientError> {
+        let url = if content_type == ContentType::Folder {
+            format!(
+                "https://tracim.bux.fr/api/workspaces/4/folders/{}",
+                content_id
+            )
         } else {
-        }
+            format!(
+                "https://tracim.bux.fr/api/workspaces/4/files/{}",
+                content_id
+            )
+        };
+        println!("Update file {} on remote with url {}", content_id, &url);
+        let mut data = Map::new();
+        data.insert("label".to_string(), json!(new_file_name));
+        let response = self
+            .client
+            .request(Method::PUT, url)
+            .header("Tracim-Api-Key", &self.tracim_api_key)
+            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .json(&data)
+            .send()?;
 
-        Ok(())
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => {
+                let value = response.json::<Value>().unwrap();
+                let data = value.as_object().unwrap();
+                let revision_id = data["last_revision_id"].as_i64().unwrap() as RevisionId;
+                Ok(revision_id)
+            }
+            _ => {
+                let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status {} : {}",
+                    response_status_code, text,
+                )))
+            }
+        }
     }
 }
