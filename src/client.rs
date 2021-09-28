@@ -5,6 +5,7 @@ use reqwest::Method;
 
 use serde_json::{json, Map, Value};
 
+use crate::context::Context;
 use crate::error::ClientError;
 use crate::types::RevisionId;
 use crate::{
@@ -37,16 +38,14 @@ impl ParentIdParameter {
 }
 
 pub struct Client {
-    tracim_api_key: String,
-    tracim_user_name: String,
+    context: Context,
     client: reqwest::blocking::Client,
 }
 
 impl Client {
-    pub fn new(tracim_api_key: String, tracim_user_name: String) -> Self {
+    pub fn new(context: Context) -> Self {
         Self {
-            tracim_api_key,
-            tracim_user_name,
+            context,
             client: reqwest::blocking::Client::new(),
         }
     }
@@ -58,7 +57,7 @@ impl Client {
         parent_content_id: Option<ContentId>,
     ) -> Result<(ContentId, RevisionId), ClientError> {
         let response = if content_type == ContentType::Folder {
-            let url = format!("https://tracim.bux.fr/api/workspaces/4/contents");
+            let url = self.context.workspace_url("contents");
             let mut data = Map::new();
             data.insert(
                 "content_type".to_string(),
@@ -80,8 +79,10 @@ impl Client {
             );
             self.client
                 .request(Method::POST, url)
-                .header("Tracim-Api-Key", &self.tracim_api_key)
-                .header("Tracim-Api-Login", &self.tracim_user_name)
+                .basic_auth(
+                    self.context.username.clone(),
+                    Some(self.context.password.clone()),
+                )
                 .json(&data)
                 .send()?
         } else {
@@ -89,7 +90,7 @@ impl Client {
             if let Some(parent_content_id) = parent_content_id {
                 form = form.text("parent_id", parent_content_id.to_string());
             };
-            let url = "https://tracim.bux.fr/api/workspaces/4/files".to_string();
+            let url = self.context.workspace_url("files");
             form = match form.file("files", &absolute_file_path) {
                 Ok(form) => form,
                 Err(err) => {
@@ -105,8 +106,10 @@ impl Client {
             );
             self.client
                 .request(Method::POST, url)
-                .header("Tracim-Api-Key", &self.tracim_api_key)
-                .header("Tracim-Api-Login", &self.tracim_user_name)
+                .basic_auth(
+                    self.context.username.clone(),
+                    Some(self.context.password.clone()),
+                )
                 .multipart(form)
                 .send()?
         };
@@ -224,21 +227,22 @@ impl Client {
                     )))
                 }
             };
-            url = format!(
-                "https://tracim.bux.fr/api/workspaces/4/files/{}/raw/{}",
-                content_id, file_name,
-            );
+            url = self
+                .context
+                .workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
         };
 
         let response = self
             .client
             .request(Method::PUT, url)
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .multipart(form)
             .send()?;
         match response.status().as_u16() {
-            200 => {
+            200 | 204 => {
                 let content = self.get_remote_content(content_id)?;
                 Ok(content.current_revision_id)
             }
@@ -254,13 +258,13 @@ impl Client {
             .client
             .request(
                 Method::PUT,
-                format!(
-                    "https://tracim.bux.fr/api/workspaces/4/contents/{}/trashed",
-                    content_id,
-                ),
+                self.context
+                    .workspace_url(&format!("contents/{}/trashed", content_id)),
             )
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .send()?;
 
         match response.status().as_u16() {
@@ -277,13 +281,13 @@ impl Client {
             .client
             .request(
                 Method::GET,
-                format!(
-                    "https://tracim.bux.fr/api/workspaces/4/contents/{}",
-                    content_id
-                ),
+                self.context
+                    .workspace_url(&format!("contents/{}", content_id)),
             )
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .send()?;
 
         Ok(response.json::<RemoteContent>()?)
@@ -298,13 +302,13 @@ impl Client {
                     .client
                     .request(
                         Method::GET,
-                        format!(
-                            "https://tracim.bux.fr/api/workspaces/4/folders/{}",
-                            last_seen_parent_id
-                        ),
+                        self.context
+                            .workspace_url(&format!("folders/{}", last_seen_parent_id)),
                     )
-                    .header("Tracim-Api-Key", &self.tracim_api_key)
-                    .header("Tracim-Api-Login", &self.tracim_user_name)
+                    .basic_auth(
+                        self.context.username.clone(),
+                        Some(self.context.password.clone()),
+                    )
                     .send()?;
 
                 match response.status().as_u16() {
@@ -353,13 +357,13 @@ impl Client {
             .client
             .request(
                 Method::GET,
-                format!(
-                    "https://tracim.bux.fr/api/workspaces/4/files/{}/raw/{}",
-                    content_id, file_name,
-                ),
+                self.context
+                    .workspace_url(&format!("files/{}/raw/{}", content_id, file_name)),
             )
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .send()?)
     }
 
@@ -368,18 +372,20 @@ impl Client {
         parent_id: Option<ParentIdParameter>,
     ) -> Result<Vec<RemoteContent>, ClientError> {
         let url = match &parent_id {
-            Some(parent_id) => format!(
-                "https://tracim.bux.fr/api/workspaces/4/contents?parent_ids={}",
+            Some(parent_id) => self.context.workspace_url(&format!(
+                "contents?parent_ids={}",
                 parent_id.to_parameter_value()
-            ),
-            None => "https://tracim.bux.fr/api/workspaces/4/contents".to_string(),
+            )),
+            None => self.context.workspace_url("contents"),
         };
 
         let response = self
             .client
             .request(Method::GET, url)
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .send()?;
 
         let status_code = response.status().as_u16();
@@ -404,10 +410,9 @@ impl Client {
         content_id: ContentId,
         new_parent_id: ParentIdParameter,
     ) -> Result<(), ClientError> {
-        let url = format!(
-            "https://tracim.bux.fr/api/workspaces/4/contents/{}/move",
-            content_id
-        );
+        let url = self
+            .context
+            .workspace_url(&format!("contents/{}/move", content_id));
         let mut data = Map::new();
         data.insert(
             "new_parent_id".to_string(),
@@ -418,8 +423,10 @@ impl Client {
         let response = self
             .client
             .request(Method::PUT, url)
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .json(&data)
             .send()?;
         let response_status_code = response.status().as_u16();
@@ -442,15 +449,10 @@ impl Client {
         content_type: ContentType,
     ) -> Result<RevisionId, ClientError> {
         let url = if content_type == ContentType::Folder {
-            format!(
-                "https://tracim.bux.fr/api/workspaces/4/folders/{}",
-                content_id
-            )
+            self.context
+                .workspace_url(&format!("folders/{}", content_id))
         } else {
-            format!(
-                "https://tracim.bux.fr/api/workspaces/4/files/{}",
-                content_id
-            )
+            self.context.workspace_url(&format!("files/{}", content_id))
         };
         println!("Update file {} on remote with url {}", content_id, &url);
         let mut data = Map::new();
@@ -458,8 +460,10 @@ impl Client {
         let response = self
             .client
             .request(Method::PUT, url)
-            .header("Tracim-Api-Key", &self.tracim_api_key)
-            .header("Tracim-Api-Login", &self.tracim_user_name)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
             .json(&data)
             .send()?;
 
@@ -473,6 +477,64 @@ impl Client {
             }
             _ => {
                 let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status {} : {}",
+                    response_status_code, text,
+                )))
+            }
+        }
+    }
+
+    pub fn get_user_id(&self) -> Result<i32, ClientError> {
+        let url = format!("{}auth/whoami", self.context.base_address);
+        let response = self
+            .client
+            .request(Method::GET, url)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
+            .send()?;
+
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => {
+                let value = response.json::<Value>().unwrap();
+                let data = value.as_object().unwrap();
+                let user_id = data["user_id"].as_i64().unwrap();
+                Ok(user_id as i32)
+            }
+            _ => {
+                let text = response.text()?;
+                Err(ClientError::UnexpectedResponse(format!(
+                    "Unexpected response status {} : {}",
+                    response_status_code, text,
+                )))
+            }
+        }
+    }
+
+    pub async fn get_user_live_messages_response(
+        &self,
+        user_id: i32,
+    ) -> Result<reqwest::Response, ClientError> {
+        let url = format!(
+            "{}users/{}/live_messages",
+            self.context.base_address, user_id
+        );
+        let response = reqwest::Client::new()
+            .request(Method::GET, url)
+            .basic_auth(
+                self.context.username.clone(),
+                Some(self.context.password.clone()),
+            )
+            .send()
+            .await?;
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => Ok(response),
+            _ => {
+                let text = response.text().await?;
                 Err(ClientError::UnexpectedResponse(format!(
                     "Unexpected response status {} : {}",
                     response_status_code, text,

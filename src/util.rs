@@ -22,8 +22,8 @@ pub struct FileInfos {
 }
 
 impl FileInfos {
-    pub fn from(workspace_path: &PathBuf, relative_file_path: RelativeFilePath) -> Self {
-        let absolute_path_buf = workspace_path.join(&relative_file_path);
+    pub fn from(workspace_path: String, relative_file_path: RelativeFilePath) -> Self {
+        let absolute_path_buf = Path::new(&workspace_path).join(&relative_file_path);
         let absolute_path = absolute_path_buf.as_path();
         let file_name = absolute_path
             .file_name()

@@ -18,7 +18,7 @@ pub struct LocalWatcher {
 impl LocalWatcher {
     pub fn new(
         operational_sender: Sender<OperationalMessage>,
-        workspace_folder_path: PathBuf,
+        workspace_folder_path: String,
     ) -> Self {
         Self {
             operational_sender,
@@ -26,7 +26,7 @@ impl LocalWatcher {
         }
     }
 
-    pub fn listen(&mut self, path: &PathBuf) {
+    pub fn listen(&mut self, path: String) {
         let (inotify_sender, inotify_receiver) = channel();
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
         inotify_watcher
@@ -120,7 +120,7 @@ pub struct LocalSync {
 impl LocalSync {
     pub fn new(
         connection: Connection,
-        path: PathBuf,
+        path: String,
         operational_sender: Sender<OperationalMessage>,
     ) -> Self {
         Self {

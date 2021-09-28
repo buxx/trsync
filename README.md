@@ -1,17 +1,21 @@
 # trsync
-Tracim remote sync
 
-last modified date of folder
+![rust logo](https://www.rust-lang.org/logos/rust-logo-blk.svg)
+![tracim illustration](https://www.algoo.fr/static/images/home_top.svg)
 
-    find /path/mydir -type f -printf "%T+\t%p\n" | sort | tail -1
+Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared space.
 
-ou (linux + wind + mac ?)
+## State of trsync
 
-    https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
+trsync is in development. You can try it by following next sections.
 
-SSE(TLM) : https://lib.rs/crates/reqwest-eventsource
+## Run
 
-With cargo-edit installed run:
+You must have [rust](https://www.rust-lang.org/) programming language installed on you system.
+From root of this repository, run :
 
-    cargo add async-std
+    cargo run <path of folder to sync> <tracim address> <workspace id> <tracim username>
 
+Example :
+
+    cargo run ~/Tracim/MyProject mon.tracim.fr 42 bux

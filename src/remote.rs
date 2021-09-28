@@ -1,5 +1,5 @@
 use async_std::task;
-use std::{fs, path::PathBuf, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
@@ -10,7 +10,8 @@ use reqwest::Method;
 use rusqlite::Connection;
 
 use crate::{
-    client::Client,
+    client::{self, Client},
+    context::Context,
     database::DatabaseOperation,
     operation::OperationalMessage,
     types::{ContentId, RemoteEventType, RevisionId},
@@ -24,9 +25,8 @@ pub struct RemoteEvent {
 }
 
 pub struct RemoteWatcher {
+    context: Context,
     operational_sender: Sender<OperationalMessage>,
-    tracim_api_key: String,
-    tracim_user_name: String,
 }
 
 // TODO : Must have a local db with tuple (content_id,modified_timestamp)
@@ -34,30 +34,19 @@ pub struct RemoteWatcher {
 // Jon of this watcher is to react on remote changes : for now it is a simple
 // pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
-    pub fn new(
-        operational_sender: Sender<OperationalMessage>,
-        tracim_api_key: String,
-        tracim_user_name: String,
-    ) -> Self {
+    pub fn new(context: Context, operational_sender: Sender<OperationalMessage>) -> Self {
         Self {
+            context,
             operational_sender,
-            tracim_api_key,
-            tracim_user_name,
         }
     }
 
     pub fn listen(&mut self) {
         task::block_on(async {
-            // TODO : Move into client (which provide a channel to listen or something like that)
-            let response = reqwest::Client::new()
-                .request(
-                    Method::GET,
-                    // TODO : Attention, quand erreur d'url, pas d'erreur ! attente infinis de event
-                    "https://tracim.bux.fr/api/users/2/live_messages",
-                )
-                .header("Tracim-Api-Key", &self.tracim_api_key)
-                .header("Tracim-Api-Login", &self.tracim_user_name)
-                .send()
+            let client = client::Client::new(self.context.clone());
+            let user_id = client.get_user_id().unwrap();
+            let response = client
+                .get_user_live_messages_response(user_id)
                 .await
                 .unwrap();
             let mut stream = response.bytes_stream();
@@ -148,24 +137,22 @@ pub struct RemoteContent {
 }
 
 pub struct RemoteSync {
+    context: Context,
     connection: Connection,
     client: Client,
-    path: PathBuf,
     operational_sender: Sender<OperationalMessage>,
 }
 
 impl RemoteSync {
     pub fn new(
+        context: Context,
         connection: Connection,
-        path: PathBuf,
         operational_sender: Sender<OperationalMessage>,
-        tracim_api_key: String,
-        tracim_user_name: String,
     ) -> Self {
         Self {
+            context: context.clone(),
             connection,
-            client: Client::new(tracim_api_key, tracim_user_name),
-            path: fs::canonicalize(&path).unwrap(),
+            client: Client::new(context),
             operational_sender,
         }
     }
