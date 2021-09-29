@@ -1,7 +1,6 @@
 # trsync
 
-![rust logo](https://www.rust-lang.org/logos/rust-logo-blk.svg)
-![tracim illustration](https://www.algoo.fr/static/images/home_top.svg)
+![trsync illustration](illustration.png)
 
 Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared space.
 
