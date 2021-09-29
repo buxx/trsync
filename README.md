@@ -1,6 +1,6 @@
 # trsync
 
-![trsync illustration](illustration.png)
+![trsync illustration](illustration2.png)
 
 Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared space.
 
