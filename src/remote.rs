@@ -24,6 +24,17 @@ pub struct RemoteEvent {
     fields: Value,
 }
 
+impl RemoteEvent {
+    pub fn from_str(json_as_str: &str) -> Result<Self, serde_json::Error> {
+        let event: Self = match serde_json::from_str(json_as_str) {
+            Ok(event) => event,
+            Err(error) => return Err(error),
+        };
+
+        Ok(event)
+    }
+}
+
 pub struct RemoteWatcher {
     context: Context,
     operational_sender: Sender<OperationalMessage>,
@@ -57,62 +68,77 @@ impl RemoteWatcher {
                             for line in str::from_utf8(lines).unwrap().lines() {
                                 if line.starts_with("data: ") {
                                     let json_as_str = &line[6..];
-                                    let remote_event: RemoteEvent =
-                                        serde_json::from_str(json_as_str).unwrap();
-                                    println!(
-                                        "REMOTE EVENT : {}",
-                                        &remote_event.event_type.as_str()
-                                    );
-                                    if RemoteEventType::from_str(&remote_event.event_type.as_str())
-                                        .is_some()
-                                    {
-                                        let content_id = remote_event.fields["content"]
-                                            .as_object()
-                                            .unwrap()["content_id"]
-                                            .as_i64()
-                                            .unwrap();
-                                        println!("REMOTE EVENT content_id: {:?}", content_id);
-                                        let message = match remote_event.event_type.as_str() {
-                                            "content.modified.html-document"
-                                            | "content.modified.file"
-                                            | "content.modified.folder" => {
-                                                OperationalMessage::ModifiedRemoteFile(
-                                                    content_id as i32,
-                                                )
-                                            }
-                                            "content.created.html-document"
-                                            | "content.created.file"
-                                            | "content.created.folder" => {
-                                                OperationalMessage::NewRemoteFile(content_id as i32)
-                                            }
-                                            "content.deleted.html-document"
-                                            | "content.deleted.file"
-                                            | "content.deleted.folder" => {
-                                                OperationalMessage::DeletedRemoteFile(
-                                                    content_id as i32,
-                                                )
-                                            }
-                                            "content.undeleted.html-document"
-                                            | "content.undeleted.file"
-                                            | "content.undeleted.folder" => {
-                                                OperationalMessage::NewRemoteFile(content_id as i32)
-                                            }
-                                            _ => {
-                                                panic!(
-                                                "Source code must cover all ACCEPTED_EVENT_TYPES"
+                                    match RemoteEvent::from_str(json_as_str) {
+                                        Ok(remote_event) => {
+                                            println!(
+                                                "REMOTE EVENT : {}",
+                                                &remote_event.event_type.as_str()
+                                            );
+                                            if RemoteEventType::from_str(
+                                                &remote_event.event_type.as_str(),
                                             )
+                                            .is_some()
+                                            {
+                                                let content_id = remote_event.fields["content"]
+                                                    .as_object()
+                                                    .unwrap()["content_id"]
+                                                    .as_i64()
+                                                    .unwrap();
+                                                println!(
+                                                    "REMOTE EVENT content_id: {:?}",
+                                                    content_id
+                                                );
+                                                let message = match remote_event.event_type.as_str()
+                                                {
+                                                    "content.modified.html-document"
+                                                    | "content.modified.file"
+                                                    | "content.modified.folder" => {
+                                                        OperationalMessage::ModifiedRemoteFile(
+                                                            content_id as i32,
+                                                        )
+                                                    }
+                                                    "content.created.html-document"
+                                                    | "content.created.file"
+                                                    | "content.created.folder" => {
+                                                        OperationalMessage::NewRemoteFile(
+                                                            content_id as i32,
+                                                        )
+                                                    }
+                                                    "content.deleted.html-document"
+                                                    | "content.deleted.file"
+                                                    | "content.deleted.folder" => {
+                                                        OperationalMessage::DeletedRemoteFile(
+                                                            content_id as i32,
+                                                        )
+                                                    }
+                                                    "content.undeleted.html-document"
+                                                    | "content.undeleted.file"
+                                                    | "content.undeleted.folder" => {
+                                                        OperationalMessage::NewRemoteFile(
+                                                            content_id as i32,
+                                                        )
+                                                    }
+                                                    _ => {
+                                                        panic!(
+                                                        "Source code must cover all ACCEPTED_EVENT_TYPES"
+                                                    )
+                                                    }
+                                                };
+                                                match self.operational_sender.send(message) {
+                                                    Ok(_) => (),
+                                                    Err(err) => {
+                                                        eprintln!(
+                                                            "Error when send operational message from remote watcher : {}",
+                                                            err
+                                                        )
+                                                    }
+                                                };
                                             }
-                                        };
-                                        match self.operational_sender.send(message) {
-                                            Ok(_) => (),
-                                            Err(err) => {
-                                                eprintln!(
-                                                    "Error when send operational message from remote watcher : {}",
-                                                    err
-                                                )
-                                            }
-                                        };
-                                    }
+                                        }
+                                        Err(error) => {
+                                            eprintln!("Error when decoding event : {}. Event as str was: {}", error, json_as_str)
+                                        }
+                                    };
                                 }
                             }
                         }
