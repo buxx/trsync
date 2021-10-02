@@ -3,6 +3,7 @@ use std::path::Path;
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
+use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::context::Context;
@@ -14,6 +15,16 @@ use crate::{
 };
 
 const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Paginated<T> {
+    has_next: bool,
+    has_previous: bool,
+    items: T,
+    next_page_token: String,
+    per_page: i32,
+    previous_page_token: String,
+}
 
 #[derive(Debug)]
 pub enum ParentIdParameter {
@@ -391,7 +402,8 @@ impl Client {
         let status_code = response.status().as_u16();
         match status_code {
             200 => Ok(response
-                .json::<Vec<RemoteContent>>()?
+                .json::<Paginated<Vec<RemoteContent>>>()?
+                .items
                 .into_iter()
                 .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
                 .collect::<Vec<RemoteContent>>()),
