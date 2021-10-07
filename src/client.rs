@@ -16,7 +16,7 @@ use crate::{
 };
 
 const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
-const DEFAULT_CLIENT_TIMEOUT: i32 = 3600 * 2;
+const DEFAULT_CLIENT_TIMEOUT: u64 = 3600 * 2;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Paginated<T> {
