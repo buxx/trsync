@@ -19,9 +19,9 @@ jobs:
           - target: x86_64-apple-darwin
             archive: zip
     steps:
-      - uses: actions/checkout@master
+      - uses: buxx/rust-build.action@master
       - name: Compile and release
-        uses: rust-build/rust-build.action@latest
+        uses: buxx/rust-build.action@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUSTTARGET: ${{ matrix.target }}
