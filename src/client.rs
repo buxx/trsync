@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
@@ -15,6 +16,7 @@ use crate::{
 };
 
 const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
+const DEFAULT_CLIENT_TIMEOUT: i32 = 3600 * 2;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Paginated<T> {
@@ -57,7 +59,10 @@ impl Client {
     pub fn new(context: Context) -> Self {
         Self {
             context,
-            client: reqwest::blocking::Client::new(),
+            client: reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
+                .build()
+                .unwrap(),
         }
     }
 
