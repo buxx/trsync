@@ -1,5 +1,5 @@
 use std::{
-    path::{Component, Path, PathBuf},
+    path::{Component, Path},
     time::UNIX_EPOCH,
 };
 
@@ -7,7 +7,7 @@ use rusqlite::Connection;
 
 use crate::{
     database::DatabaseOperation,
-    error::OperationError,
+    error::Error,
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
 };
 
@@ -69,7 +69,7 @@ impl FileInfos {
         }
     }
 
-    pub fn parent_id(&self, connection: &Connection) -> Result<Option<ContentId>, OperationError> {
+    pub fn parent_id(&self, connection: &Connection) -> Result<Option<ContentId>, Error> {
         if let Some(parent_relative_path) = &self.parent_relative_path {
             Ok(Some(
                 DatabaseOperation::new(connection)

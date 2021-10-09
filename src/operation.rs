@@ -11,7 +11,7 @@ use crate::{
     client::{Client, ParentIdParameter},
     context::Context,
     database::DatabaseOperation,
-    error::{ClientError, OperationError},
+    error::{ClientError, Error},
     types::{ContentId, ContentType, RelativeFilePath},
     util::FileInfos,
 };
@@ -49,8 +49,14 @@ impl OperationalHandler {
         }
     }
 
-    fn ignore_message(&self, message: &OperationalMessage) -> bool {
+    fn ignore_message(&mut self, message: &OperationalMessage) -> bool {
         // TODO : For local files, ignore some patterns given by config : eg. ".*", "*~"
+        if self.ignore_messages.contains(&message) {
+            self.ignore_messages.retain(|x| *x != *message);
+            log::debug!("Ignore message (planned ignore) : {:?}", &message);
+            return true;
+        };
+
         match message {
             OperationalMessage::NewLocalFile(relative_path)
             | OperationalMessage::ModifiedLocalFile(relative_path)
@@ -76,25 +82,18 @@ impl OperationalHandler {
         // TODO : Why loop is required ?!
         loop {
             for message in receiver.recv() {
-                if self.ignore_messages.contains(&message) {
-                    self.ignore_messages.retain(|x| *x != message);
-                    println!("IGNORE MESSAGE (1) : {:?}", &message);
-                    continue;
-                };
-
                 if self.ignore_message(&message) {
-                    println!("IGNORE MESSAGE (2) : {:?}", &message);
                     continue;
                 }
 
-                println!("MESSAGE : {:?}", &message);
+                log::info!("Operation : {:?}", &message);
 
                 match message {
                     // Local changes
                     OperationalMessage::NewLocalFile(relative_path) => {
                         match self.new_local_file(relative_path) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -102,7 +101,7 @@ impl OperationalHandler {
                     OperationalMessage::ModifiedLocalFile(relative_path) => {
                         match self.modified_local_file(relative_path) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -110,7 +109,7 @@ impl OperationalHandler {
                     OperationalMessage::DeletedLocalFile(relative_path) => {
                         match self.deleted_local_file(relative_path) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -120,7 +119,7 @@ impl OperationalHandler {
                         after_relative_path,
                     ) => match self.renamed_local_file(before_relative_path, after_relative_path) {
                         Err(err) => {
-                            eprintln!("{:?}", err)
+                            log::error!("{:?}", err)
                         }
                         _ => {}
                     },
@@ -128,7 +127,7 @@ impl OperationalHandler {
                     OperationalMessage::NewRemoteFile(content_id) => {
                         match self.new_remote_file(content_id) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -136,7 +135,7 @@ impl OperationalHandler {
                     OperationalMessage::ModifiedRemoteFile(content_id) => {
                         match self.modified_remote_file(content_id) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -144,7 +143,7 @@ impl OperationalHandler {
                     OperationalMessage::DeletedRemoteFile(content_id) => {
                         match self.deleted_remote_file(content_id) {
                             Err(err) => {
-                                eprintln!("{:?}", err)
+                                log::error!("{:?}", err)
                             }
                             _ => {}
                         }
@@ -154,7 +153,7 @@ impl OperationalHandler {
         }
     }
 
-    fn new_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
+    fn new_local_file(&mut self, relative_path: String) -> Result<(), Error> {
         // Prevent known bug : new local file is sometime an existing file
         if DatabaseOperation::new(&self.connection).relative_path_is_known(&relative_path)? {
             return self.modified_local_file(relative_path.clone());
@@ -166,7 +165,7 @@ impl OperationalHandler {
             Ok(parent_id) => parent_id,
             Err(error) => match error {
                 // Parent is currently not indexed
-                OperationError::UnIndexedRelativePath(parent_relative_path) => {
+                Error::UnIndexedRelativePath(parent_relative_path) => {
                     self.new_local_file(parent_relative_path.clone())?;
                     Some(
                         DatabaseOperation::new(&self.connection)
@@ -178,6 +177,10 @@ impl OperationalHandler {
         };
 
         // Create it on remote
+        log::debug!(
+            "Create remote content with disk file {:?}",
+            &file_infos.absolute_path
+        );
         let (content_id, revision_id) = match self.client.create_content(
             file_infos.absolute_path,
             file_infos.content_type.clone(),
@@ -198,7 +201,7 @@ impl OperationalHandler {
                 (existing_content_id, existing_revision_id)
             }
             Err(err) => {
-                return Err(OperationError::FailToCreateContentOnRemote(format!(
+                return Err(Error::FailToCreateContentOnRemote(format!(
                     "Fail to create new local file on remote : {:?}",
                     err
                 )))
@@ -216,10 +219,7 @@ impl OperationalHandler {
         Ok(())
     }
 
-    fn modified_local_file(
-        &mut self,
-        relative_path: RelativeFilePath,
-    ) -> Result<(), OperationError> {
+    fn modified_local_file(&mut self, relative_path: RelativeFilePath) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
@@ -232,6 +232,7 @@ impl OperationalHandler {
             .push(OperationalMessage::ModifiedRemoteFile(content_id));
 
         // Update file on remote
+        log::debug!("Update remote remote {}", content_id);
         let revision_id = self.client.update_content(
             file_infos.absolute_path,
             file_infos.file_name,
@@ -249,13 +250,14 @@ impl OperationalHandler {
         Ok(())
     }
 
-    fn deleted_local_file(&mut self, relative_path: String) -> Result<(), OperationError> {
+    fn deleted_local_file(&mut self, relative_path: String) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
         let content_id = database_operation.get_content_id_from_path(relative_path)?;
 
         // Delete on remote
+        log::debug!("Delete remote {}", content_id);
         self.client.trash_content(content_id)?;
 
         // Prepare to ignore remote trashed event
@@ -272,7 +274,7 @@ impl OperationalHandler {
         &mut self,
         before_relative_path: String,
         after_relative_path: String,
-    ) -> Result<(), OperationError> {
+    ) -> Result<(), Error> {
         let before_parent_relative_path = Path::new(&before_relative_path).parent();
         let after_parent_relative_path = Path::new(&after_relative_path).parent();
         let content_id = DatabaseOperation::new(&self.connection)
@@ -284,6 +286,11 @@ impl OperationalHandler {
 
         // If path changes
         if before_parent_relative_path != after_parent_relative_path {
+            log::debug!(
+                "Path of {:?} change for {:?}",
+                &before_parent_relative_path,
+                &after_parent_relative_path
+            );
             // If path changes for a folder
             if let Some(after_parent_relative_path_) = after_parent_relative_path {
                 let after_parent_relative_path_str =
@@ -297,7 +304,7 @@ impl OperationalHandler {
                         ParentIdParameter::Some(after_parent_content_id),
                     )?,
                     // New parent folder is not indexed, create it on remote
-                    Err(OperationError::UnIndexedRelativePath(_)) => {
+                    Err(Error::UnIndexedRelativePath(_)) => {
                         self.new_local_file(after_parent_relative_path_str.clone())?;
                         let after_parent_content_id = DatabaseOperation::new(&self.connection)
                             .get_content_id_from_path(after_parent_relative_path_str.clone())?;
@@ -306,9 +313,7 @@ impl OperationalHandler {
                             ParentIdParameter::Some(after_parent_content_id),
                         )?
                     }
-                    Err(error) => {
-                        return Err(OperationError::UnexpectedError(format!("{:?}", error)))
-                    }
+                    Err(error) => return Err(Error::UnexpectedError(format!("{:?}", error))),
                 }
             // Or change for root
             } else {
@@ -322,6 +327,12 @@ impl OperationalHandler {
 
         // Rename file name if changes
         if before_file_name != after_file_name {
+            log::debug!(
+                "Rename remote {} from {:?} to {:?}",
+                content_id,
+                before_file_name,
+                after_file_name
+            );
             let new_revision_id = self.client.update_content_file_name(
                 content_id,
                 after_file_name.to_str().unwrap().to_string(),
@@ -334,7 +345,7 @@ impl OperationalHandler {
         Ok(())
     }
 
-    fn new_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
+    fn new_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
         // Grab file infos
         let remote_content = self.client.get_remote_content(content_id)?;
         let relative_path = self.client.build_relative_path(&remote_content)?;
@@ -349,20 +360,25 @@ impl OperationalHandler {
             // If parent content id is unknown, folder is not on disk
             if !DatabaseOperation::new(&self.connection).content_id_is_known(parent_id)? {
                 // Use recursive to create this parent and possible parents parent
+                log::debug!("Parent of {:?} is unknown, ensure it", &absolute_path);
                 self.new_remote_file(parent_id)?;
             }
         }
 
         // Write file/folder on disk
         if remote_content.content_type == "folder" {
+            log::debug!("Create disk folder {:?}", &absolute_path);
             match fs::create_dir(&absolute_path) {
                 Ok(_) => {}
-                Err(error) => eprintln!("Error during creation of {:?} : {}", absolute_path, error),
+                Err(error) => {
+                    log::error!("Error during creation of {:?} : {}", absolute_path, error)
+                }
             }
         } else {
             let mut response = self
                 .client
                 .get_file_content_response(remote_content.content_id, remote_content.filename)?;
+            log::debug!("Create disk file {:?}", &absolute_path);
             let mut out = File::create(absolute_path).unwrap();
             io::copy(&mut response, &mut out).unwrap();
         }
@@ -380,7 +396,7 @@ impl OperationalHandler {
         Ok(())
     }
 
-    fn modified_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
+    fn modified_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
@@ -398,6 +414,12 @@ impl OperationalHandler {
                 .parent()
                 .unwrap()
                 .join(remote_content.filename);
+
+            log::info!(
+                "Rename disk folder {:?} into {:?}",
+                &old_absolute_path,
+                &new_absolute_path
+            );
             fs::rename(old_absolute_path, &new_absolute_path).unwrap();
             // Prepare to ignore modified local file
             let new_relative_path = new_absolute_path
@@ -416,9 +438,10 @@ impl OperationalHandler {
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
         let file_infos = FileInfos::from(self.context.folder_path.clone(), current_relative_path);
         if remote_content.filename != file_infos.file_name {
-            println!(
+            log::debug!(
                 "Rename {} into {:?}",
-                file_infos.absolute_path, &absolute_path
+                file_infos.absolute_path,
+                &absolute_path
             );
             match fs::rename(file_infos.absolute_path, &absolute_path) {
                 Ok(_) => {
@@ -426,7 +449,7 @@ impl OperationalHandler {
                         .update_relative_path(content_id, relative_path.clone())?
                     // TODO : manage local event rename by ignoring renamed event
                 }
-                Err(error) => return Err(OperationError::UnexpectedError(format!("{:?}", error))),
+                Err(error) => return Err(Error::UnexpectedError(format!("{:?}", error))),
             }
         }
 
@@ -439,9 +462,10 @@ impl OperationalHandler {
             .client
             .get_file_content_response(content_id, remote_content.filename)?;
         // TODO : Manage case where file don't exist on disk
-        println!(
+        log::debug!(
             "Update disk file {:?} with content {}",
-            &absolute_path, content_id
+            &absolute_path,
+            content_id,
         );
         let mut out = File::create(absolute_path)?;
         io::copy(&mut response, &mut out)?;
@@ -458,7 +482,7 @@ impl OperationalHandler {
         Ok(())
     }
 
-    fn deleted_remote_file(&mut self, content_id: i32) -> Result<(), OperationError> {
+    fn deleted_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos (from local index, remote content has name changes)
@@ -474,7 +498,7 @@ impl OperationalHandler {
             ));
 
         // Delete disk file
-        println!("Remove disk file {:?}", &file_infos.absolute_path);
+        log::debug!("Remove disk file {:?}", &file_infos.absolute_path);
         if file_infos.is_directory {
             fs::remove_dir_all(&file_infos.absolute_path)?;
         } else {

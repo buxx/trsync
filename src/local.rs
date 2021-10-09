@@ -8,6 +8,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
+use crate::error::Error;
 use crate::operation::OperationalMessage;
 
 pub struct LocalWatcher {
@@ -36,13 +37,13 @@ impl LocalWatcher {
         loop {
             match inotify_receiver.recv() {
                 Ok(event) => self.digest_event(event),
-                Err(e) => println!("watch error: {:?}", e),
+                Err(e) => log::error!("Watch error: {:?}", e),
             }
         }
     }
 
     pub fn digest_event(&self, event: DebouncedEvent) {
-        println!("Received local event: {:?}", event);
+        log::debug!("Local event: {:?}", event);
 
         let messages: Vec<OperationalMessage> = match event {
             DebouncedEvent::Create(absolute_path) => {
@@ -90,7 +91,7 @@ impl LocalWatcher {
             }
             // Consider Error as to log it
             DebouncedEvent::Error(err, path) => {
-                eprintln!("Error {} on {:?}", err, path);
+                log::error!("Error {} on {:?}", err, path);
                 vec![]
             }
         };
@@ -99,7 +100,7 @@ impl LocalWatcher {
             match self.operational_sender.send(message) {
                 Ok(_) => (),
                 Err(err) => {
-                    eprintln!(
+                    log::error!(
                         "Error when send operational message from local watcher : {}",
                         err
                     )
@@ -141,7 +142,7 @@ impl LocalSync {
         WalkDir::new(&self.path)
             .into_iter()
             .filter_entry(|e| !self.ignore_entry(e))
-            .for_each(|x| self.sync_disk_file(&x.unwrap()))
+            .for_each(|x| self.sync_disk_file(&x.unwrap()).unwrap())
     }
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
@@ -154,14 +155,12 @@ impl LocalSync {
         }
     }
 
-    fn sync_disk_file(&self, entry: &DirEntry) {
+    fn sync_disk_file(&self, entry: &DirEntry) -> Result<(), Error> {
         let relative_path = entry.path().strip_prefix(&self.path).unwrap();
         // TODO : prevent sync root with more clean way
         if relative_path == Path::new("") {
-            return;
+            return Ok(());
         }
-
-        println!("sync {:?}", relative_path);
 
         let metadata = fs::metadata(self.path.join(relative_path)).unwrap();
         let disk_last_modified_timestamp = metadata
@@ -179,12 +178,7 @@ impl LocalSync {
         ) {
             Ok(last_modified_timestamp) => {
                 // Known file (check if have been modified)
-                println!("{}", last_modified_timestamp);
                 if disk_last_modified_timestamp != last_modified_timestamp {
-                    println!(
-                        "Modified ! {} vs {}",
-                        disk_last_modified_timestamp, last_modified_timestamp
-                    );
                     self.operational_sender
                         .send(OperationalMessage::ModifiedLocalFile(String::from(
                             relative_path.to_str().unwrap(),
@@ -200,10 +194,15 @@ impl LocalSync {
                     )))
                     .unwrap();
             }
-            Err(err) => {
-                eprintln!("Error when reading database : {:?}", err)
+            Err(error) => {
+                return Err(Error::UnexpectedError(format!(
+                    "Error when reading database for synchronize disk file : {:?}",
+                    error
+                )))
             }
-        }
+        };
+
+        Ok(())
     }
 
     fn sync_from_db(&self) {
@@ -216,7 +215,6 @@ impl LocalSync {
         for result in local_iter {
             let relative_path: String = result.unwrap();
             if !self.path.join(&relative_path).exists() {
-                println!("deleted {:?}", relative_path);
                 self.operational_sender
                     .send(OperationalMessage::DeletedLocalFile(relative_path))
                     .unwrap();

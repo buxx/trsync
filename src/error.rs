@@ -2,31 +2,6 @@ use std::{fmt, io};
 
 use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
 
-#[derive(Debug, Clone)]
-pub struct Error {
-    message: String,
-}
-
-impl Error {
-    pub fn new(message: String) -> Self {
-        Self { message }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Self {
-        Self {
-            message: format!("io error: {}", err),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum ClientError {
     InputFileError(AbsoluteFilePath),
@@ -71,27 +46,28 @@ impl fmt::Display for ClientError {
 }
 
 #[derive(Debug)]
-pub enum OperationError {
+pub enum Error {
     FailToCreateContentOnRemote(String),
     FailToCreateContentOnLocal(String),
     UnIndexedRelativePath(String),
     UnexpectedError(String),
+    PathError(String),
 }
 
-impl From<ClientError> for OperationError {
+impl From<ClientError> for Error {
     fn from(err: ClientError) -> Self {
-        OperationError::UnexpectedError(format!("{:?}", err))
+        Error::UnexpectedError(format!("{:?}", err))
     }
 }
 
-impl From<io::Error> for OperationError {
+impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        OperationError::UnexpectedError(format!("{:?}", error))
+        Error::UnexpectedError(format!("{:?}", error))
     }
 }
 
-impl From<rusqlite::Error> for OperationError {
+impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
-        OperationError::UnexpectedError(format!("{:?}", error))
+        Error::UnexpectedError(format!("{:?}", error))
     }
 }

@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 use crate::{
-    error::OperationError,
+    error::Error,
     types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId},
 };
 
@@ -75,10 +75,7 @@ impl<'d> DatabaseOperation<'d> {
         }
     }
 
-    pub fn get_content_id_from_path(
-        &self,
-        relative_path: String,
-    ) -> Result<ContentId, OperationError> {
+    pub fn get_content_id_from_path(&self, relative_path: String) -> Result<ContentId, Error> {
         match self.connection.query_row::<ContentId, _, _>(
             "SELECT content_id FROM file WHERE relative_path = ?",
             params![relative_path],
@@ -86,9 +83,9 @@ impl<'d> DatabaseOperation<'d> {
         ) {
             Ok(content_id) => Ok(content_id),
             Err(rusqlite::Error::QueryReturnedNoRows) => {
-                Err(OperationError::UnIndexedRelativePath(relative_path))
+                Err(Error::UnIndexedRelativePath(relative_path))
             }
-            Err(error) => Err(OperationError::UnexpectedError(format!("{:?}", error))),
+            Err(error) => Err(Error::UnexpectedError(format!("{:?}", error))),
         }
     }
 

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
@@ -84,9 +85,10 @@ impl Client {
             if let Some(parent_content_id) = parent_content_id {
                 data.insert("parent_id".to_string(), json!(parent_content_id));
             };
-            println!(
+            log::debug!(
                 "Create folder {} on remote with url {}",
-                &absolute_file_path, &url
+                &absolute_file_path,
+                &url
             );
             self.client
                 .request(Method::POST, url)
@@ -111,12 +113,14 @@ impl Client {
                     )))
                 }
             };
-            println!(
+            log::debug!(
                 "Create file {} on remote with url {}",
-                &absolute_file_path, &url
+                &absolute_file_path,
+                &url
             );
             self.client
                 .request(Method::POST, url)
+                .timeout(Duration::from_secs(3600 * 6))
                 .basic_auth(
                     self.context.username.clone(),
                     Some(self.context.password.clone()),
@@ -218,9 +222,10 @@ impl Client {
         content_type: ContentType,
         content_id: ContentId,
     ) -> Result<RevisionId, ClientError> {
-        println!(
+        log::debug!(
             "Update remote content {} with file {}",
-            content_id, absolute_file_path
+            content_id,
+            absolute_file_path
         );
 
         let mut url = "".to_string();
@@ -246,6 +251,7 @@ impl Client {
         let response = self
             .client
             .request(Method::PUT, url)
+            .timeout(Duration::from_secs(3600 * 6))
             .basic_auth(
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
@@ -466,7 +472,7 @@ impl Client {
         } else {
             self.context.workspace_url(&format!("files/{}", content_id))
         };
-        println!("Update file {} on remote with url {}", content_id, &url);
+        log::debug!("Update file {} on remote with url {}", content_id, &url);
         let mut data = Map::new();
         data.insert("label".to_string(), json!(new_file_name));
         let response = self

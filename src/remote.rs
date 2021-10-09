@@ -70,10 +70,6 @@ impl RemoteWatcher {
                                     let json_as_str = &line[6..];
                                     match RemoteEvent::from_str(json_as_str) {
                                         Ok(remote_event) => {
-                                            println!(
-                                                "REMOTE EVENT : {}",
-                                                &remote_event.event_type.as_str()
-                                            );
                                             if RemoteEventType::from_str(
                                                 &remote_event.event_type.as_str(),
                                             )
@@ -84,9 +80,10 @@ impl RemoteWatcher {
                                                     .unwrap()["content_id"]
                                                     .as_i64()
                                                     .unwrap();
-                                                println!(
-                                                    "REMOTE EVENT content_id: {:?}",
-                                                    content_id
+                                                log::info!(
+                                                    "remote event : {:} ({})",
+                                                    &remote_event.event_type.as_str(),
+                                                    content_id,
                                                 );
                                                 let message = match remote_event.event_type.as_str()
                                                 {
@@ -126,17 +123,23 @@ impl RemoteWatcher {
                                                 };
                                                 match self.operational_sender.send(message) {
                                                     Ok(_) => (),
+                                                    // FIXME : stop trsync
                                                     Err(err) => {
-                                                        eprintln!(
+                                                        log::error!(
                                                             "Error when send operational message from remote watcher : {}",
                                                             err
                                                         )
                                                     }
                                                 };
+                                            } else {
+                                                log::debug!(
+                                                    "Ignore remote event : {}",
+                                                    &remote_event.event_type.as_str()
+                                                )
                                             }
                                         }
                                         Err(error) => {
-                                            eprintln!("Error when decoding event : {}. Event as str was: {}", error, json_as_str)
+                                            log::error!("Error when decoding event : {}. Event as str was: {}", error, json_as_str)
                                         }
                                     };
                                 }
@@ -144,7 +147,7 @@ impl RemoteWatcher {
                         }
                     }
                     Err(err) => {
-                        eprintln!("Err when reading remote TLM : {:?}", err)
+                        log::error!("Error when reading remote TLM : {:?}", err)
                     }
                 }
             }
@@ -195,10 +198,6 @@ impl RemoteSync {
             {
                 Ok(known_revision_id) => {
                     // File is known but have been modified ?
-                    println!(
-                        "Compare revision for {} : local : {} remote : {}",
-                        content.content_id, known_revision_id, content.current_revision_id
-                    );
                     if known_revision_id != content.current_revision_id {
                         self.operational_sender
                             .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
@@ -211,7 +210,7 @@ impl RemoteSync {
                         .unwrap();
                 }
                 Err(error) => {
-                    eprintln!("Error when comparing revision : {}", error)
+                    log::error!("Error when comparing revision : {}", error)
                 }
             }
         }
@@ -226,7 +225,6 @@ impl RemoteSync {
         for result in local_iter {
             let content_id: i32 = result.unwrap();
             if !content_ids.contains(&content_id) {
-                println!("remotely deleted {:?}", content_id);
                 self.operational_sender
                     .send(OperationalMessage::DeletedRemoteFile(content_id))
                     .unwrap();

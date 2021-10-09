@@ -1,5 +1,8 @@
+use env_logger::Env;
+use error::Error;
 use structopt::StructOpt;
 extern crate notify;
+use log;
 
 use std::sync::mpsc::channel;
 use std::{fs, thread};
@@ -39,32 +42,48 @@ pub struct Opt {
     no_ssl: bool,
 }
 
-fn main() {
+fn main() -> Result<(), Error> {
+    // Initialize static things
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let opt = Opt::from_args();
-    let folder_path = fs::canonicalize(&opt.path)
-        .unwrap()
+
+    // Digest input folder to watch
+    log::info!("Prepare to sync {:?}", &opt.path);
+    let folder_path = fs::canonicalize(&opt.path)?
         .to_str()
-        .unwrap()
+        .ok_or(Error::PathError(format!(
+            "Error when interpreting path '{:?}'",
+            &opt.path
+        )))?
         .to_string();
+
+    // Ask password by input
+    let password = rpassword::read_password_from_tty(Some("Tracim user password ? "))?;
+
+    // Prepare context object
     let context = Context::new(
         !opt.no_ssl,
         opt.tracim_address,
         opt.username,
-        rpassword::read_password_from_tty(Some("Tracim user password ? ")).unwrap(),
+        password,
         folder_path,
         opt.workspace_id,
     );
 
-    println!("Watch {:?}", &opt.path);
+    // Prepare main channel
     let (operational_sender, operational_receiver) = channel();
 
     // Initialize database if needed
+    log::info!("Initialize index");
     Database::new(context.database_path.clone()).with_new_connection(|connection| {
         match DatabaseOperation::new(&connection).create_tables() {
             Ok(_) => {}
+            // FIXME : implement stop application signal
             Err(error) => panic!("{:?}", error),
         }
     });
+
+    log::info!("Start synchronization");
 
     // First, start local sync to know changes since last start
     let local_sync_operational_sender = operational_sender.clone();
@@ -96,6 +115,8 @@ fn main() {
         );
     });
 
+    log::info!("Start watchers");
+
     // Start local watcher
     let local_watcher_operational_sender = operational_sender.clone();
     let local_watcher_context = context.clone();
@@ -112,8 +133,11 @@ fn main() {
     let remote_handle = thread::spawn(move || remote_watcher.listen());
 
     // Wait end of local and remote  sync
+    log::info!("Wait synchronizations to finish their jobs");
     local_sync_handle.join().unwrap();
     remote_sync_handle.join().unwrap();
+
+    log::info!("Synchronization finished, start changes resolver");
 
     // Operational
     let operational_context = context.clone();
@@ -126,4 +150,7 @@ fn main() {
     local_handle.join().unwrap();
     remote_handle.join().unwrap();
     operational_handle.join().unwrap();
+
+    log::info!("Exit application");
+    Ok(())
 }
