@@ -124,7 +124,6 @@ impl Client {
             );
             self.client
                 .request(Method::POST, url)
-                .timeout(Duration::from_secs(3600 * 6))
                 .basic_auth(
                     self.context.username.clone(),
                     Some(self.context.password.clone()),
@@ -255,7 +254,6 @@ impl Client {
         let response = self
             .client
             .request(Method::PUT, url)
-            .timeout(Duration::from_secs(3600 * 6))
             .basic_auth(
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
