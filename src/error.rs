@@ -51,7 +51,8 @@ pub enum Error {
     FailToCreateContentOnLocal(String),
     UnIndexedRelativePath(String),
     UnexpectedError(String),
-    PathError(String),
+    PathCastingError(String),
+    PathManipulationError(String),
 }
 
 impl From<ClientError> for Error {
@@ -69,5 +70,17 @@ impl From<io::Error> for Error {
 impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
         Error::UnexpectedError(format!("{:?}", error))
+    }
+}
+
+impl From<std::time::SystemTimeError> for Error {
+    fn from(error: std::time::SystemTimeError) -> Self {
+        Error::UnexpectedError(format!("{:?}", error))
+    }
+}
+
+impl From<std::path::StripPrefixError> for Error {
+    fn from(error: std::path::StripPrefixError) -> Self {
+        Error::UnexpectedError(format!("Unable to strip prefix {:?}", error))
     }
 }

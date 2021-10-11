@@ -160,7 +160,7 @@ impl OperationalHandler {
         }
 
         // Grab file infos
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let parent_id = match file_infos.parent_id(&self.connection) {
             Ok(parent_id) => parent_id,
             Err(error) => match error {
@@ -223,7 +223,7 @@ impl OperationalHandler {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let content_id =
             database_operation.get_content_id_from_path(file_infos.relative_path.clone())?;
 
@@ -282,7 +282,11 @@ impl OperationalHandler {
         let file_infos = FileInfos::from(
             self.context.folder_path.clone(),
             after_relative_path.clone(),
-        );
+        )?;
+
+        // Prepare to ignore remote trashed event
+        self.ignore_messages
+            .push(OperationalMessage::ModifiedRemoteFile(content_id));
 
         // If path changes
         if before_parent_relative_path != after_parent_relative_path {
@@ -333,14 +337,18 @@ impl OperationalHandler {
                 before_file_name,
                 after_file_name
             );
-            let new_revision_id = self.client.update_content_file_name(
+            self.client.update_content_file_name(
                 content_id,
                 after_file_name.to_str().unwrap().to_string(),
                 file_infos.content_type,
             )?;
-            DatabaseOperation::new(&self.connection)
-                .update_revision_id(after_relative_path, new_revision_id)?;
         }
+
+        DatabaseOperation::new(&self.connection)
+            .update_relative_path(content_id, after_relative_path.clone())?;
+        let remote_content = self.client.get_remote_content(content_id)?;
+        DatabaseOperation::new(&self.connection)
+            .update_revision_id(after_relative_path, remote_content.current_revision_id)?;
 
         Ok(())
     }
@@ -384,7 +392,7 @@ impl OperationalHandler {
         }
 
         // Update database
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let content = self.client.get_remote_content(content_id)?;
         DatabaseOperation::new(&self.connection).insert_new_file(
             file_infos.relative_path,
@@ -436,7 +444,7 @@ impl OperationalHandler {
         // Manage renamed case
         let current_relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), current_relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), current_relative_path)?;
         if remote_content.filename != file_infos.file_name {
             log::debug!(
                 "Rename {} into {:?}",
@@ -471,7 +479,7 @@ impl OperationalHandler {
         io::copy(&mut response, &mut out)?;
 
         // Update database
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         database_operation.update_last_modified_timestamp(
             file_infos.relative_path.clone(),
             file_infos.last_modified_timestamp,
@@ -489,7 +497,7 @@ impl OperationalHandler {
 
         let relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path);
+        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
 
         // Prepare to ignore deleted local file
         self.ignore_messages

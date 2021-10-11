@@ -51,7 +51,7 @@ fn main() -> Result<(), Error> {
     log::info!("Prepare to sync {:?}", &opt.path);
     let folder_path = fs::canonicalize(&opt.path)?
         .to_str()
-        .ok_or(Error::PathError(format!(
+        .ok_or(Error::PathCastingError(format!(
             "Error when interpreting path '{:?}'",
             &opt.path
         )))?

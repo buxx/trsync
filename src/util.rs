@@ -22,26 +22,42 @@ pub struct FileInfos {
 }
 
 impl FileInfos {
-    pub fn from(workspace_path: String, relative_file_path: RelativeFilePath) -> Self {
+    pub fn from(
+        workspace_path: String,
+        relative_file_path: RelativeFilePath,
+    ) -> Result<Self, Error> {
         let absolute_path_buf = Path::new(&workspace_path).join(&relative_file_path);
         let absolute_path = absolute_path_buf.as_path();
+        log::debug!("Build file infos from {:?}", &absolute_path);
         let file_name = absolute_path
             .file_name()
-            .unwrap()
+            .ok_or(Error::PathManipulationError(format!(
+                "Unable to read file name of {:?}",
+                &absolute_path
+            )))?
             .to_str()
-            .unwrap()
+            .ok_or(Error::PathCastingError(format!(
+                "Unable to convert {:?} file name into str",
+                &absolute_path
+            )))?
             .to_string();
         let relative_path_path = Path::new(&relative_file_path);
         let path_components: Vec<Component> = relative_path_path.components().collect();
+        // TODO : to utils
         let parent_relative_path = if path_components.len() > 1 {
             Some(
                 absolute_path
                     .parent()
-                    .unwrap()
-                    .strip_prefix(workspace_path)
-                    .unwrap()
+                    .ok_or(Error::PathManipulationError(format!(
+                        "Unable to find parent of {:?}",
+                        &absolute_path
+                    )))?
+                    .strip_prefix(workspace_path)?
                     .to_str()
-                    .unwrap()
+                    .ok_or(Error::PathCastingError(format!(
+                        "Unable to convert {:?} into str",
+                        &absolute_path
+                    )))?
                     .to_string(),
             )
         } else {
@@ -52,13 +68,13 @@ impl FileInfos {
         } else {
             ContentType::File
         };
-        let metadata = absolute_path.metadata().unwrap();
-        let modified = metadata.modified().unwrap();
-        let since_epoch = modified.duration_since(UNIX_EPOCH).unwrap();
+        let metadata = absolute_path.metadata()?;
+        let modified = metadata.modified()?;
+        let since_epoch = modified.duration_since(UNIX_EPOCH)?;
         let last_modified_timestamp = since_epoch.as_millis() as LastModifiedTimestamp;
         let is_directory = absolute_path.is_dir();
 
-        Self {
+        Ok(Self {
             file_name,
             is_directory,
             last_modified_timestamp,
@@ -66,7 +82,7 @@ impl FileInfos {
             absolute_path: absolute_path.to_str().unwrap().to_string(),
             parent_relative_path,
             content_type,
-        }
+        })
     }
 
     pub fn parent_id(&self, connection: &Connection) -> Result<Option<ContentId>, Error> {
