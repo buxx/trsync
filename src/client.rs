@@ -438,8 +438,10 @@ impl Client {
             "new_parent_id".to_string(),
             json!(new_parent_id.to_parameter_value()),
         );
-        // FIXME : take care of "4"
-        data.insert("new_workspace_id".to_string(), json!("4"));
+        data.insert(
+            "new_workspace_id".to_string(),
+            json!(self.context.workspace_id),
+        );
         let response = self
             .client
             .request(Method::PUT, url)
