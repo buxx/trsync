@@ -1,2 +1,2 @@
 #!/bin/sh
-apk add --no-cache pkg-config libssl-dev libsqlite3-dev
+apk add --no-cache pkgconfig libressl-dev sqlite-dev
