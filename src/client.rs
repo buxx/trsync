@@ -10,6 +10,7 @@ use serde_json::{json, Map, Value};
 use crate::context::Context;
 use crate::error::ClientError;
 use crate::types::RevisionId;
+use crate::util;
 use crate::{
     remote::RemoteContent,
     types::{ContentId, ContentType},
@@ -79,12 +80,7 @@ impl Client {
                 "content_type".to_string(),
                 json!(ContentType::Folder.to_string()),
             );
-            let file_name = Path::new(&absolute_file_path)
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
+            let file_name = util::string_path_file_name(&absolute_file_path)?;
             data.insert("label".to_string(), json!(file_name));
             if let Some(parent_content_id) = parent_content_id {
                 data.insert("parent_id".to_string(), json!(parent_content_id));
@@ -188,21 +184,7 @@ impl Client {
         absolute_file_path: String,
         parent_id: Option<ContentId>,
     ) -> Result<(ContentId, RevisionId), ClientError> {
-        let file_name = match Path::new(&absolute_file_path).file_name() {
-            Some(file_name) => match file_name.to_str() {
-                Some(file_name) => file_name.to_string(),
-                None => return Err(ClientError::RequestError(format!(
-                    "Given absolute file path '{}' produce error when trying to get file_name String version",
-                    absolute_file_path
-                ))),
-            },
-            None => {
-                return Err(ClientError::RequestError(format!(
-                    "Given absolute file path {} doesn't permit to determine file_name",
-                    absolute_file_path
-                )))
-            }
-        };
+        let file_name = util::string_path_file_name(&absolute_file_path)?;
         for remote_content in
             self.get_remote_contents(Some(ParentIdParameter::from_value(parent_id)))?
         {

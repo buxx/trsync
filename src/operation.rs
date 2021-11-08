@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     io,
-    path::{Path},
+    path::Path,
     sync::mpsc::Receiver,
 };
 
@@ -13,7 +13,7 @@ use crate::{
     database::DatabaseOperation,
     error::{ClientError, Error},
     types::{ContentId, ContentType, RelativeFilePath},
-    util::FileInfos,
+    util,
 };
 
 #[derive(Debug, PartialEq)]
@@ -49,40 +49,37 @@ impl OperationalHandler {
         }
     }
 
-    fn ignore_message(&mut self, message: &OperationalMessage) -> bool {
+    fn ignore_message(&mut self, message: &OperationalMessage) -> Result<bool, Error> {
         // TODO : For local files, ignore some patterns given by config : eg. ".*", "*~"
         if self.ignore_messages.contains(&message) {
             self.ignore_messages.retain(|x| *x != *message);
             log::debug!("Ignore message (planned ignore) : {:?}", &message);
-            return true;
+            return Ok(true);
         };
 
-        match message {
+        Ok(match message {
             OperationalMessage::NewLocalFile(relative_path)
             | OperationalMessage::ModifiedLocalFile(relative_path)
             | OperationalMessage::DeletedLocalFile(relative_path) => {
-                Path::new(relative_path)
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .starts_with(".")
-                    | Path::new(relative_path)
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .ends_with("~")
+                util::string_path_file_name(relative_path)?.starts_with(".")
+                    | util::string_path_file_name(relative_path)?.ends_with("~")
             }
             _ => false,
-        }
+        })
     }
 
     pub fn listen(&mut self, receiver: Receiver<OperationalMessage>) {
         // TODO : Why loop is required ?!
         loop {
             for message in receiver.recv() {
-                if self.ignore_message(&message) {
+                if match self.ignore_message(&message) {
+                    Ok(true) => true,
+                    Err(error) => {
+                        log::error!("Error when trying to know if ignore {:?}", error);
+                        false
+                    }
+                    Ok(false) => false,
+                } {
                     continue;
                 }
 
@@ -160,7 +157,7 @@ impl OperationalHandler {
         }
 
         // Grab file infos
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let parent_id = match file_infos.parent_id(&self.connection) {
             Ok(parent_id) => parent_id,
             Err(error) => match error {
@@ -223,7 +220,7 @@ impl OperationalHandler {
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let content_id =
             database_operation.get_content_id_from_path(file_infos.relative_path.clone())?;
 
@@ -279,7 +276,7 @@ impl OperationalHandler {
         let after_parent_relative_path = Path::new(&after_relative_path).parent();
         let content_id = DatabaseOperation::new(&self.connection)
             .get_content_id_from_path(before_relative_path.clone())?;
-        let file_infos = FileInfos::from(
+        let file_infos = util::FileInfos::from(
             self.context.folder_path.clone(),
             after_relative_path.clone(),
         )?;
@@ -392,7 +389,7 @@ impl OperationalHandler {
         }
 
         // Update database
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         let content = self.client.get_remote_content(content_id)?;
         DatabaseOperation::new(&self.connection).insert_new_file(
             file_infos.relative_path,
@@ -444,7 +441,8 @@ impl OperationalHandler {
         // Manage renamed case
         let current_relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), current_relative_path)?;
+        let file_infos =
+            util::FileInfos::from(self.context.folder_path.clone(), current_relative_path)?;
         if remote_content.filename != file_infos.file_name {
             log::debug!(
                 "Rename {} into {:?}",
@@ -479,7 +477,7 @@ impl OperationalHandler {
         io::copy(&mut response, &mut out)?;
 
         // Update database
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
         database_operation.update_last_modified_timestamp(
             file_infos.relative_path.clone(),
             file_infos.last_modified_timestamp,
@@ -497,7 +495,7 @@ impl OperationalHandler {
 
         let relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos = FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
 
         // Prepare to ignore deleted local file
         self.ignore_messages

@@ -107,3 +107,18 @@ pub fn canonicalize_to_string(path: &PathBuf) -> Result<String, Error> {
         )))?
         .to_string())
 }
+
+pub fn string_path_file_name(path: &str) -> Result<String, Error> {
+    Ok(Path::new(path)
+        .file_name()
+        .ok_or(Error::PathCastingError(format!(
+            "Fail to get file name of {:?}",
+            path
+        )))?
+        .to_str()
+        .ok_or(Error::PathCastingError(format!(
+            "Fail to str type of file name from {:?}",
+            path
+        )))?
+        .to_string())
+}

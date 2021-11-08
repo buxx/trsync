@@ -19,6 +19,12 @@ impl From<reqwest::Error> for ClientError {
     }
 }
 
+impl From<Error> for ClientError {
+    fn from(error: Error) -> Self {
+        Self::RequestError(format!("Error happen when make request : {:?}", error))
+    }
+}
+
 impl fmt::Display for ClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
