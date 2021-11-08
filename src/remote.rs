@@ -1,3 +1,4 @@
+use crate::Error;
 use async_std::task;
 use std::sync::mpsc::Sender;
 
@@ -52,7 +53,7 @@ impl RemoteWatcher {
         }
     }
 
-    pub fn listen(&mut self) {
+    pub fn listen(&mut self) -> Result<(), Error> {
         task::block_on(async {
             let client = client::Client::new(self.context.clone());
             let user_id = client.get_user_id().unwrap();
@@ -152,6 +153,8 @@ impl RemoteWatcher {
                 }
             }
         });
+
+        Ok(())
     }
 }
 

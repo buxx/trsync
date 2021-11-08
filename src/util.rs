@@ -1,9 +1,10 @@
 use std::{
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     time::UNIX_EPOCH,
 };
 
 use rusqlite::Connection;
+use std::fs;
 
 use crate::{
     database::DatabaseOperation,
@@ -95,4 +96,14 @@ impl FileInfos {
             Ok(None)
         }
     }
+}
+
+pub fn canonicalize_to_string(path: &PathBuf) -> Result<String, Error> {
+    Ok(fs::canonicalize(path)?
+        .to_str()
+        .ok_or(Error::PathCastingError(format!(
+            "Error when interpreting path '{:?}'",
+            path
+        )))?
+        .to_string())
 }

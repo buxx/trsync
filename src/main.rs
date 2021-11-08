@@ -5,7 +5,7 @@ extern crate notify;
 use log;
 
 use std::sync::mpsc::channel;
-use std::{fs, thread};
+use std::thread;
 
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
@@ -49,13 +49,7 @@ fn main() -> Result<(), Error> {
 
     // Digest input folder to watch
     log::info!("Prepare to sync {:?}", &opt.path);
-    let folder_path = fs::canonicalize(&opt.path)?
-        .to_str()
-        .ok_or(Error::PathCastingError(format!(
-            "Error when interpreting path '{:?}'",
-            &opt.path
-        )))?
-        .to_string();
+    let folder_path = util::canonicalize_to_string(&opt.path)?;
 
     // Ask password by input
     let password = rpassword::read_password_from_tty(Some("Tracim user password ? "))?;
@@ -123,19 +117,31 @@ fn main() -> Result<(), Error> {
     let mut local_watcher = LocalWatcher::new(
         local_watcher_operational_sender,
         local_watcher_context.folder_path.clone(),
-    );
-    let local_handle =
-        thread::spawn(move || local_watcher.listen(local_watcher_context.folder_path.clone()));
+    )
+    .expect("Fail to initialize LocalWatcher");
+    let local_handle = thread::spawn(move || {
+        local_watcher
+            .listen(local_watcher_context.folder_path.clone())
+            .expect("Fail to start listening with local watcher")
+    });
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
     let mut remote_watcher = RemoteWatcher::new(context.clone(), remote_watcher_operational_sender);
-    let remote_handle = thread::spawn(move || remote_watcher.listen());
+    let remote_handle = thread::spawn(move || {
+        remote_watcher
+            .listen()
+            .expect("Fail to listen from remote watcher")
+    });
 
     // Wait end of local and remote  sync
     log::info!("Wait synchronizations to finish their jobs");
-    local_sync_handle.join().unwrap();
-    remote_sync_handle.join().unwrap();
+    local_sync_handle
+        .join()
+        .expect("Fail to join local sync handler");
+    remote_sync_handle
+        .join()
+        .expect("Fail to join remote sync handler");
 
     log::info!("Synchronization finished, start changes resolver");
 
@@ -147,9 +153,15 @@ fn main() -> Result<(), Error> {
         })
     });
 
-    local_handle.join().unwrap();
-    remote_handle.join().unwrap();
-    operational_handle.join().unwrap();
+    local_handle
+        .join()
+        .expect("Fail to join local listener handler");
+    remote_handle
+        .join()
+        .expect("Fail to join remote listener handler");
+    operational_handle
+        .join()
+        .expect("Fail to join operational handler");
 
     log::info!("Exit application");
     Ok(())

@@ -20,19 +20,17 @@ impl LocalWatcher {
     pub fn new(
         operational_sender: Sender<OperationalMessage>,
         workspace_folder_path: String,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        Ok(Self {
             operational_sender,
-            workspace_folder_path: fs::canonicalize(&workspace_folder_path).unwrap(),
-        }
+            workspace_folder_path: fs::canonicalize(&workspace_folder_path)?,
+        })
     }
 
-    pub fn listen(&mut self, path: String) {
+    pub fn listen(&mut self, path: String) -> Result<(), Error> {
         let (inotify_sender, inotify_receiver) = channel();
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
-        inotify_watcher
-            .watch(path, RecursiveMode::Recursive)
-            .unwrap();
+        inotify_watcher.watch(path, RecursiveMode::Recursive)?;
 
         loop {
             match inotify_receiver.recv() {

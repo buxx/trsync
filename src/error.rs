@@ -84,3 +84,9 @@ impl From<std::path::StripPrefixError> for Error {
         Error::UnexpectedError(format!("Unable to strip prefix {:?}", error))
     }
 }
+
+impl From<notify::Error> for Error {
+    fn from(error: notify::Error) -> Self {
+        Error::UnexpectedError(format!("Notify error {:?}", error))
+    }
+}
