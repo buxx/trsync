@@ -231,25 +231,23 @@ impl Client {
             absolute_file_path
         );
 
-        let mut url = "".to_string();
-        let mut form = multipart::Form::new();
         if content_type == ContentType::Folder {
             let content = self.get_remote_content(content_id)?;
             return Ok(content.current_revision_id);
-        } else {
-            form = match form.file("files", &absolute_file_path) {
-                Ok(form) => form,
-                Err(err) => {
-                    return Err(ClientError::InputFileError(format!(
-                        "{}: {:?}",
-                        absolute_file_path, err
-                    )))
-                }
-            };
-            url = self
-                .context
-                .workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
+        }
+
+        let form = match multipart::Form::new().file("files", &absolute_file_path) {
+            Ok(form) => form,
+            Err(err) => {
+                return Err(ClientError::InputFileError(format!(
+                    "{}: {:?}",
+                    absolute_file_path, err
+                )))
+            }
         };
+        let url = self
+            .context
+            .workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
 
         let response = self
             .client

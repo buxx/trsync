@@ -7,7 +7,6 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str;
 
-use reqwest::Method;
 use rusqlite::Connection;
 
 use crate::{
@@ -169,7 +168,7 @@ pub struct RemoteContent {
 }
 
 pub struct RemoteSync {
-    context: Context,
+    _context: Context,
     connection: Connection,
     client: Client,
     operational_sender: Sender<OperationalMessage>,
@@ -182,7 +181,7 @@ impl RemoteSync {
         operational_sender: Sender<OperationalMessage>,
     ) -> Self {
         Self {
-            context: context.clone(),
+            _context: context.clone(),
             connection,
             client: Client::new(context),
             operational_sender,
