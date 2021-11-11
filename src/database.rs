@@ -139,6 +139,14 @@ impl<'d> DatabaseOperation<'d> {
         Ok(())
     }
 
+    pub fn get_last_modified_timestamp(&self, relative_path: &str) -> Result<u64, rusqlite::Error> {
+        Ok(self.connection.query_row::<u64, _, _>(
+            "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
+            params![relative_path],
+            |row| row.get(0),
+        )?)
+    }
+
     pub fn update_revision_id(
         &self,
         relative_path: String,

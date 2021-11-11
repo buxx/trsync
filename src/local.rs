@@ -1,7 +1,7 @@
 use crate::DatabaseOperation;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
@@ -181,11 +181,13 @@ impl LocalSync {
         let disk_last_modified_timestamp =
             metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
-        // TODO : use database module
-        match self.connection.query_row::<u64, _, _>(
-            "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
-            params![relative_path.to_str()],
-            |row| row.get(0),
+        match DatabaseOperation::new(&self.connection).get_last_modified_timestamp(
+            relative_path
+                .to_str()
+                .ok_or(Error::PathManipulationError(format!(
+                    "Error when manipulate path {:?}",
+                    relative_path
+                )))?,
         ) {
             Ok(last_modified_timestamp) => {
                 // Known file (check if have been modified)
@@ -204,13 +206,16 @@ impl LocalSync {
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Unknown file
-                match self.operational_sender
-                    .send(OperationalMessage::NewLocalFile(util::path_to_string(relative_path)?)) {
-                        Err(error) => {
-                            log::error!("Fail to send operational message : {:?}", error)
-                        }
-                        _ => {}
+                match self
+                    .operational_sender
+                    .send(OperationalMessage::NewLocalFile(util::path_to_string(
+                        relative_path,
+                    )?)) {
+                    Err(error) => {
+                        log::error!("Fail to send operational message : {:?}", error)
                     }
+                    _ => {}
+                }
             }
             Err(error) => {
                 return Err(Error::UnexpectedError(format!(
