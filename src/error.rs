@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::{fmt, io, str::Utf8Error};
 
 use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
 
@@ -94,5 +94,11 @@ impl From<std::path::StripPrefixError> for Error {
 impl From<notify::Error> for Error {
     fn from(error: notify::Error) -> Self {
         Error::UnexpectedError(format!("Notify error {:?}", error))
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(error: Utf8Error) -> Self {
+        Error::UnexpectedError(format!("utf8 error {:?}", error))
     }
 }

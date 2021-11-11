@@ -1,5 +1,6 @@
 use crate::Error;
 use async_std::task;
+use bytes::Bytes;
 use std::sync::mpsc::Sender;
 
 use futures_util::StreamExt;
@@ -53,105 +54,111 @@ impl RemoteWatcher {
     }
 
     pub fn listen(&mut self) -> Result<(), Error> {
-        task::block_on(async {
+        task::block_on::<_, Result<(), Error>>(async {
             let client = client::Client::new(self.context.clone());
-            let user_id = client.get_user_id().unwrap();
-            let response = client
-                .get_user_live_messages_response(user_id)
-                .await
-                .unwrap();
+            let user_id = client.get_user_id()?;
+            let response = client.get_user_live_messages_response(user_id).await?;
             let mut stream = response.bytes_stream();
             while let Some(thing) = stream.next().await {
                 match &thing {
-                    Ok(lines) => {
-                        if lines.starts_with(b"event: message") {
-                            for line in str::from_utf8(lines).unwrap().lines() {
-                                if line.starts_with("data: ") {
-                                    let json_as_str = &line[6..];
-                                    match RemoteEvent::from_str(json_as_str) {
-                                        Ok(remote_event) => {
-                                            if RemoteEventType::from_str(
-                                                &remote_event.event_type.as_str(),
-                                            )
-                                            .is_some()
-                                            {
-                                                let content_id = remote_event.fields["content"]
-                                                    .as_object()
-                                                    .unwrap()["content_id"]
-                                                    .as_i64()
-                                                    .unwrap();
-                                                log::info!(
-                                                    "remote event : {:} ({})",
-                                                    &remote_event.event_type.as_str(),
-                                                    content_id,
-                                                );
-                                                let message = match remote_event.event_type.as_str()
-                                                {
-                                                    "content.modified.html-document"
-                                                    | "content.modified.file"
-                                                    | "content.modified.folder" => {
-                                                        OperationalMessage::ModifiedRemoteFile(
-                                                            content_id as i32,
-                                                        )
-                                                    }
-                                                    "content.created.html-document"
-                                                    | "content.created.file"
-                                                    | "content.created.folder" => {
-                                                        OperationalMessage::NewRemoteFile(
-                                                            content_id as i32,
-                                                        )
-                                                    }
-                                                    "content.deleted.html-document"
-                                                    | "content.deleted.file"
-                                                    | "content.deleted.folder" => {
-                                                        OperationalMessage::DeletedRemoteFile(
-                                                            content_id as i32,
-                                                        )
-                                                    }
-                                                    "content.undeleted.html-document"
-                                                    | "content.undeleted.file"
-                                                    | "content.undeleted.folder" => {
-                                                        OperationalMessage::NewRemoteFile(
-                                                            content_id as i32,
-                                                        )
-                                                    }
-                                                    _ => {
-                                                        panic!(
-                                                        "Source code must cover all ACCEPTED_EVENT_TYPES"
-                                                    )
-                                                    }
-                                                };
-                                                match self.operational_sender.send(message) {
-                                                    Ok(_) => (),
-                                                    // FIXME : stop trsync
-                                                    Err(err) => {
-                                                        log::error!(
-                                                            "Error when send operational message from remote watcher : {}",
-                                                            err
-                                                        )
-                                                    }
-                                                };
-                                            } else {
-                                                log::debug!(
-                                                    "Ignore remote event : {}",
-                                                    &remote_event.event_type.as_str()
-                                                )
-                                            }
-                                        }
-                                        Err(error) => {
-                                            log::error!("Error when decoding event : {}. Event as str was: {}", error, json_as_str)
-                                        }
-                                    };
-                                }
-                            }
+                    Ok(lines) => match self.proceed_event_lines(lines) {
+                        Err(error) => {
+                            log::error!("Error when proceed remote event lines: {:?}", error)
                         }
-                    }
+                        _ => {}
+                    },
                     Err(err) => {
                         log::error!("Error when reading remote TLM : {:?}", err)
                     }
                 }
             }
-        });
+
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn proceed_event_lines(&self, lines: &Bytes) -> Result<(), Error> {
+        if lines.starts_with(b"event: message") {
+            for line in str::from_utf8(lines)?.lines() {
+                if line.starts_with("data: ") {
+                    let json_as_str = &line[6..];
+                    match RemoteEvent::from_str(json_as_str) {
+                        Ok(remote_event) => self.proceed_remote_event(remote_event)?,
+                        Err(error) => {
+                            log::error!(
+                                "Error when decoding event : {}. Event as str was: {}",
+                                error,
+                                json_as_str
+                            )
+                        }
+                    };
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn proceed_remote_event(&self, remote_event: RemoteEvent) -> Result<(), Error> {
+        log::debug!("Proceed remote event {:?}", remote_event);
+
+        if RemoteEventType::from_str(&remote_event.event_type.as_str()).is_some() {
+            let content_id =
+                remote_event.fields["content"]
+                    .as_object()
+                    .ok_or(Error::UnexpectedError(format!(
+                        "Remote event content not appear to not be obect"
+                    )))?["content_id"]
+                    .as_i64()
+                    .ok_or(Error::UnexpectedError(format!(
+                        "Remote event content content_id appear to not be integer"
+                    )))?;
+            log::info!(
+                "remote event : {:} ({})",
+                &remote_event.event_type.as_str(),
+                content_id,
+            );
+            let message = match remote_event.event_type.as_str() {
+                "content.modified.html-document"
+                | "content.modified.file"
+                | "content.modified.folder" => {
+                    OperationalMessage::ModifiedRemoteFile(content_id as i32)
+                }
+                "content.created.html-document"
+                | "content.created.file"
+                | "content.created.folder" => OperationalMessage::NewRemoteFile(content_id as i32),
+                "content.deleted.html-document"
+                | "content.deleted.file"
+                | "content.deleted.folder" => {
+                    OperationalMessage::DeletedRemoteFile(content_id as i32)
+                }
+                "content.undeleted.html-document"
+                | "content.undeleted.file"
+                | "content.undeleted.folder" => {
+                    OperationalMessage::NewRemoteFile(content_id as i32)
+                }
+                _ => {
+                    panic!("Source code must cover all ACCEPTED_EVENT_TYPES")
+                }
+            };
+            match self.operational_sender.send(message) {
+                Ok(_) => (),
+                // FIXME : stop trsync
+                Err(err) => {
+                    log::error!(
+                        "Error when send operational message from remote watcher : {}",
+                        err
+                    )
+                }
+            };
+        } else {
+            log::debug!(
+                "Ignore remote event : {}",
+                &remote_event.event_type.as_str()
+            )
+        }
 
         Ok(())
     }
