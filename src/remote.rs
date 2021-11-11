@@ -188,28 +188,44 @@ impl RemoteSync {
         }
     }
 
-    pub fn sync(&mut self) {
-        // TODO : move into client
-        let contents = self.client.get_remote_contents(None).unwrap();
-        let content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
+    pub fn sync(&mut self) -> Result<(), Error> {
+        let contents = self.client.get_remote_contents(None)?;
+        let remote_content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
 
         for content in &contents {
-            // TODO : use database module
             match DatabaseOperation::new(&self.connection)
                 .get_revision_id_from_content_id(content.content_id)
             {
                 Ok(known_revision_id) => {
                     // File is known but have been modified ?
                     if known_revision_id != content.current_revision_id {
-                        self.operational_sender
+                        match self
+                            .operational_sender
                             .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
-                            .unwrap();
+                        {
+                            Err(error) => {
+                                log::error!(
+                                    "Error when send operational message from remote sync : {}",
+                                    error
+                                )
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    self.operational_sender
+                    match self
+                        .operational_sender
                         .send(OperationalMessage::NewRemoteFile(content.content_id))
-                        .unwrap();
+                    {
+                        Err(error) => {
+                            log::error!(
+                                "Error when send operational message from remote sync : {}",
+                                error
+                            )
+                        }
+                        _ => {}
+                    }
                 }
                 Err(error) => {
                     log::error!("Error when comparing revision : {}", error)
@@ -218,19 +234,24 @@ impl RemoteSync {
         }
 
         // Search for remote deleted files
-        // TODO : move into database module
-        let mut stmt = self
-            .connection
-            .prepare("SELECT content_id FROM file WHERE content_id IS NOT NULL")
-            .unwrap();
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
-        for result in local_iter {
-            let content_id: i32 = result.unwrap();
-            if !content_ids.contains(&content_id) {
-                self.operational_sender
-                    .send(OperationalMessage::DeletedRemoteFile(content_id))
-                    .unwrap();
+        let content_ids = DatabaseOperation::new(&self.connection).get_content_ids()?;
+        for content_id in &content_ids {
+            if !remote_content_ids.contains(content_id) {
+                match self
+                    .operational_sender
+                    .send(OperationalMessage::DeletedRemoteFile(*content_id))
+                {
+                    Err(error) => {
+                        log::error!(
+                            "Error when send operational message from remote sync : {}",
+                            error
+                        )
+                    }
+                    _ => {}
+                }
             }
         }
+
+        Ok(())
     }
 }

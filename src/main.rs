@@ -108,7 +108,8 @@ fn main() -> Result<(), Error> {
                     connection,
                     remote_sync_operational_sender,
                 )
-                .sync();
+                .sync()
+                .expect("Fail to make remote sync");
             })
             .expect("Fail to make database connection when start remote sync");
     });

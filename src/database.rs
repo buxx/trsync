@@ -189,4 +189,15 @@ impl<'d> DatabaseOperation<'d> {
         }
         Ok(relative_paths)
     }
+
+    pub fn get_content_ids(&self) -> Result<Vec<ContentId>, rusqlite::Error> {
+        let mut content_ids = vec![];
+        let mut stmt = self.connection.prepare("SELECT content_id FROM file")?;
+        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        for result in local_iter {
+            let content_id: i32 = result?;
+            content_ids.push(content_id)
+        }
+        Ok(content_ids)
+    }
 }
