@@ -120,7 +120,8 @@ impl RemoteWatcher {
                 &remote_event.event_type.as_str(),
                 content_id,
             );
-            let message = match remote_event.event_type.as_str() {
+            let event_type = remote_event.event_type.as_str();
+            let message = match event_type {
                 "content.modified.html-document"
                 | "content.modified.file"
                 | "content.modified.folder" => {
@@ -140,7 +141,7 @@ impl RemoteWatcher {
                     OperationalMessage::NewRemoteFile(content_id as i32)
                 }
                 _ => {
-                    panic!("Source code must cover all ACCEPTED_EVENT_TYPES")
+                    return Err(Error::UnexpectedError(format!("Not managed event type : {}", event_type)))
                 }
             };
             match self.operational_sender.send(message) {
