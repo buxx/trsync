@@ -170,4 +170,15 @@ impl<'d> DatabaseOperation<'d> {
         )?;
         Ok(())
     }
+
+    pub fn get_relative_paths(&self) -> Result<Vec<String>, rusqlite::Error> {
+        let mut relative_paths = vec![];
+        let mut stmt = self.connection.prepare("SELECT relative_path FROM file")?;
+        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        for result in local_iter {
+            let relative_path: String = result?;
+            relative_paths.push(relative_path);
+        }
+        Ok(relative_paths)
+    }
 }

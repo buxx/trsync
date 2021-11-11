@@ -1,3 +1,4 @@
+use crate::DatabaseOperation;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
@@ -121,26 +122,38 @@ impl LocalSync {
         connection: Connection,
         path: String,
         operational_sender: Sender<OperationalMessage>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        Ok(Self {
             connection,
-            path: fs::canonicalize(&path).unwrap(),
+            path: fs::canonicalize(&path)?,
             operational_sender,
-        }
+        })
     }
 
-    pub fn sync(&self) {
+    pub fn sync(&self) -> Result<(), Error> {
         // Look at disk files and compare to db
         self.sync_from_disk();
         // TODO : look ate db to search deleted files
-        self.sync_from_db();
+        self.sync_from_db()?;
+
+        Ok(())
     }
 
     fn sync_from_disk(&self) {
         WalkDir::new(&self.path)
             .into_iter()
             .filter_entry(|e| !self.ignore_entry(e))
-            .for_each(|x| self.sync_disk_file(&x.unwrap()).unwrap())
+            .for_each(|dir_entry| match &dir_entry {
+                Ok(dir_entry_) => match self.sync_disk_file(&dir_entry_) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        log::error!("Fail to sync disk file {:?} : {:?}", dir_entry_, error);
+                    }
+                },
+                Err(error) => {
+                    log::error!("Fail to walk on dir {:?} : {}", &dir_entry, error)
+                }
+            })
     }
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
@@ -203,20 +216,22 @@ impl LocalSync {
         Ok(())
     }
 
-    fn sync_from_db(&self) {
-        // TODO : use database module
-        let mut stmt = self
-            .connection
-            .prepare("SELECT relative_path FROM file")
-            .unwrap();
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
-        for result in local_iter {
-            let relative_path: String = result.unwrap();
+    fn sync_from_db(&self) -> Result<(), Error> {
+        let relative_paths = DatabaseOperation::new(&self.connection).get_relative_paths()?;
+        for relative_path in &relative_paths {
             if !self.path.join(&relative_path).exists() {
-                self.operational_sender
-                    .send(OperationalMessage::DeletedLocalFile(relative_path))
-                    .unwrap();
+                match self
+                    .operational_sender
+                    .send(OperationalMessage::DeletedLocalFile(relative_path.clone()))
+                {
+                    Err(error) => {
+                        log::error!("Fail to send operational message : {}", error)
+                    }
+                    _ => {}
+                }
             }
         }
+
+        Ok(())
     }
 }
