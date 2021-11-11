@@ -75,7 +75,7 @@ fn main() -> Result<(), Error> {
             // FIXME : implement stop application signal
             Err(error) => panic!("{:?}", error),
         }
-    });
+    })?;
 
     log::info!("Start synchronization");
 
@@ -90,7 +90,7 @@ fn main() -> Result<(), Error> {
                 local_sync_operational_sender,
             )
             .sync();
-        });
+        }).expect("Fail to make database connection when start local sync");
     });
 
     // Second, start remote sync to know remote changes since last run
@@ -106,7 +106,7 @@ fn main() -> Result<(), Error> {
                 )
                 .sync();
             },
-        );
+        ).expect("Fail to make database connection when start remote sync");
     });
 
     log::info!("Start watchers");
@@ -150,7 +150,7 @@ fn main() -> Result<(), Error> {
     let operational_handle = thread::spawn(move || {
         Database::new(context.database_path.clone()).with_new_connection(|connection| {
             OperationalHandler::new(operational_context, connection).listen(operational_receiver);
-        })
+        }).expect("Fail to make database connection when start operational handler")
     });
 
     local_handle

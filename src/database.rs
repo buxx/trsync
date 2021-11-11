@@ -14,12 +14,13 @@ impl Database {
         Self { database_file_path }
     }
 
-    pub fn with_new_connection<F>(&self, f: F)
+    pub fn with_new_connection<F>(&self, f: F) -> Result<(), Error>
     where
         F: FnOnce(Connection),
     {
-        let connection = Connection::open(self.database_file_path.clone()).unwrap();
+        let connection = Connection::open(self.database_file_path.clone())?;
         f(connection);
+        Ok(())
     }
 }
 
