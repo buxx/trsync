@@ -11,6 +11,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::error::Error;
 use crate::operation::OperationalMessage;
+use crate::util;
 
 pub struct LocalWatcher {
     operational_sender: Sender<OperationalMessage>,
@@ -30,55 +31,49 @@ impl LocalWatcher {
 
     pub fn listen(&mut self, path: String) -> Result<(), Error> {
         let (inotify_sender, inotify_receiver) = channel();
-        let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
+        let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1))?;
         inotify_watcher.watch(path, RecursiveMode::Recursive)?;
 
         loop {
             match inotify_receiver.recv() {
-                Ok(event) => self.digest_event(event),
+                Ok(event) => match self.digest_event(&event) {
+                    Err(error) => {
+                        log::error!("Error when digest event {:?} : {:?}", &event, error)
+                    }
+                    _ => {}
+                },
                 Err(e) => log::error!("Watch error: {:?}", e),
             }
         }
     }
 
-    pub fn digest_event(&self, event: DebouncedEvent) {
+    pub fn digest_event(&self, event: &DebouncedEvent) -> Result<(), Error> {
         log::debug!("Local event: {:?}", event);
 
         let messages: Vec<OperationalMessage> = match event {
             DebouncedEvent::Create(absolute_path) => {
-                let relative_path = absolute_path
-                    .strip_prefix(&self.workspace_folder_path)
-                    .unwrap();
-                vec![OperationalMessage::NewLocalFile(
-                    relative_path.to_str().unwrap().to_string(),
-                )]
+                vec![OperationalMessage::NewLocalFile(util::path_to_string(
+                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                )?)]
             }
             DebouncedEvent::Write(absolute_path) => {
-                let relative_path = absolute_path
-                    .strip_prefix(&self.workspace_folder_path)
-                    .unwrap();
-                vec![OperationalMessage::ModifiedLocalFile(
-                    relative_path.to_str().unwrap().to_string(),
-                )]
+                vec![OperationalMessage::ModifiedLocalFile(util::path_to_string(
+                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                )?)]
             }
             DebouncedEvent::Remove(absolute_path) => {
-                let relative_path = absolute_path
-                    .strip_prefix(&self.workspace_folder_path)
-                    .unwrap();
-                vec![OperationalMessage::DeletedLocalFile(
-                    relative_path.to_str().unwrap().to_string(),
-                )]
+                vec![OperationalMessage::DeletedLocalFile(util::path_to_string(
+                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                )?)]
             }
             DebouncedEvent::Rename(absolute_source_path, absolute_dest_path) => {
-                let before_relative_path = absolute_source_path
-                    .strip_prefix(&self.workspace_folder_path)
-                    .unwrap();
-                let after_relative_path = absolute_dest_path
-                    .strip_prefix(&self.workspace_folder_path)
-                    .unwrap();
                 vec![OperationalMessage::RenamedLocalFile(
-                    before_relative_path.to_str().unwrap().to_string(),
-                    after_relative_path.to_str().unwrap().to_string(),
+                    util::path_to_string(
+                        absolute_source_path.strip_prefix(&self.workspace_folder_path)?,
+                    )?,
+                    util::path_to_string(
+                        absolute_dest_path.strip_prefix(&self.workspace_folder_path)?,
+                    )?,
                 )]
             }
             // Ignore these
@@ -106,6 +101,8 @@ impl LocalWatcher {
                 }
             };
         }
+
+        Ok(())
     }
 }
 
@@ -158,28 +155,31 @@ impl LocalSync {
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
         // TODO : patterns from config object
-        // TODO : this is ugly code !!!
-        let entry_path = entry.path();
-        match entry_path.file_name() {
-            Some(x) => format!("{}", x.to_str().unwrap()).starts_with("."),
-            None => false,
+        if let Some(file_name) = entry.path().file_name() {
+            if let Some(file_name_) = file_name.to_str() {
+                let file_name_as_str = format!("{}", file_name_);
+                if file_name_as_str.starts_with(".")
+                    || file_name_as_str.starts_with("~")
+                    || file_name_as_str.starts_with("#")
+                {
+                    return true;
+                }
+            }
         }
+
+        false
     }
 
     fn sync_disk_file(&self, entry: &DirEntry) -> Result<(), Error> {
-        let relative_path = entry.path().strip_prefix(&self.path).unwrap();
+        let relative_path = entry.path().strip_prefix(&self.path)?;
         // TODO : prevent sync root with more clean way
         if relative_path == Path::new("") {
             return Ok(());
         }
 
-        let metadata = fs::metadata(self.path.join(relative_path)).unwrap();
-        let disk_last_modified_timestamp = metadata
-            .modified()
-            .unwrap()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64; // TODO : type can contains this timestamp ?
+        let metadata = fs::metadata(self.path.join(relative_path))?;
+        let disk_last_modified_timestamp =
+            metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
         // TODO : use database module
         match self.connection.query_row::<u64, _, _>(
@@ -190,20 +190,27 @@ impl LocalSync {
             Ok(last_modified_timestamp) => {
                 // Known file (check if have been modified)
                 if disk_last_modified_timestamp != last_modified_timestamp {
-                    self.operational_sender
-                        .send(OperationalMessage::ModifiedLocalFile(String::from(
-                            relative_path.to_str().unwrap(),
-                        )))
-                        .unwrap();
+                    match self
+                        .operational_sender
+                        .send(OperationalMessage::ModifiedLocalFile(util::path_to_string(
+                            relative_path,
+                        )?)) {
+                        Err(error) => {
+                            log::error!("Fail to send operational message : {:?}", error)
+                        }
+                        _ => {}
+                    }
                 }
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 // Unknown file
-                self.operational_sender
-                    .send(OperationalMessage::NewLocalFile(String::from(
-                        relative_path.to_str().unwrap(),
-                    )))
-                    .unwrap();
+                match self.operational_sender
+                    .send(OperationalMessage::NewLocalFile(util::path_to_string(relative_path)?)) {
+                        Err(error) => {
+                            log::error!("Fail to send operational message : {:?}", error)
+                        }
+                        _ => {}
+                    }
             }
             Err(error) => {
                 return Err(Error::UnexpectedError(format!(

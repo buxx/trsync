@@ -122,3 +122,13 @@ pub fn string_path_file_name(path: &str) -> Result<String, Error> {
         )))?
         .to_string())
 }
+
+pub fn path_to_string(path: &Path) -> Result<String, Error> {
+    Ok(path
+        .to_str()
+        .ok_or(Error::PathManipulationError(format!(
+            "Error when manipulate path {:?}",
+            path,
+        )))?
+        .to_string())
+}
