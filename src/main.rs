@@ -1,10 +1,11 @@
 use env_logger::Env;
 use error::Error;
+use operation::OperationalMessage;
 use structopt::StructOpt;
 extern crate notify;
 use log;
 
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 
 use crate::context::Context;
@@ -42,6 +43,40 @@ pub struct Opt {
     no_ssl: bool,
 }
 
+fn local_sync(
+    local_sync_context: Context,
+    local_sync_operational_sender: Sender<OperationalMessage>,
+) -> Result<(), Error> {
+    Database::new(local_sync_context.database_path.clone()).with_new_connection(|connection| {
+        LocalSync::new(
+            connection,
+            local_sync_context.folder_path.clone(),
+            local_sync_operational_sender,
+        )?
+        .sync()?;
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+fn remote_sync(
+    remote_sync_context: Context,
+    remote_sync_operational_sender: Sender<OperationalMessage>,
+) -> Result<(), Error> {
+    Database::new(remote_sync_context.database_path.clone()).with_new_connection(|connection| {
+        RemoteSync::new(
+            remote_sync_context,
+            connection,
+            remote_sync_operational_sender,
+        )?
+        .sync()?;
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     // Initialize static things
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -70,11 +105,8 @@ fn main() -> Result<(), Error> {
     // Initialize database if needed
     log::info!("Initialize index");
     Database::new(context.database_path.clone()).with_new_connection(|connection| {
-        match DatabaseOperation::new(&connection).create_tables() {
-            Ok(_) => {}
-            // FIXME : implement stop application signal
-            Err(error) => panic!("{:?}", error),
-        }
+        DatabaseOperation::new(&connection).create_tables()?;
+        Ok(())
     })?;
 
     log::info!("Start synchronization");
@@ -82,38 +114,14 @@ fn main() -> Result<(), Error> {
     // First, start local sync to know changes since last start
     let local_sync_operational_sender = operational_sender.clone();
     let local_sync_context = context.clone();
-    let local_sync_handle = thread::spawn(move || {
-        Database::new(local_sync_context.database_path.clone())
-            .with_new_connection(|connection| {
-                LocalSync::new(
-                    connection,
-                    local_sync_context.folder_path.clone(),
-                    local_sync_operational_sender,
-                )
-                .expect("Fail to create local sync")
-                .sync()
-                .expect("Fail to local sync");
-            })
-            .expect("Fail to make database connection when start local sync");
-    });
+    let local_sync_handle =
+        thread::spawn(move || local_sync(local_sync_context, local_sync_operational_sender));
 
     // Second, start remote sync to know remote changes since last run
     let remote_sync_operational_sender = operational_sender.clone();
     let remote_sync_context = context.clone();
-    let remote_sync_handle = thread::spawn(move || {
-        Database::new(remote_sync_context.database_path.clone())
-            .with_new_connection(|connection| {
-                RemoteSync::new(
-                    remote_sync_context.clone(),
-                    connection,
-                    remote_sync_operational_sender,
-                )
-                .expect("Fail to create remote sync")
-                .sync()
-                .expect("Fail to make remote sync");
-            })
-            .expect("Fail to make database connection when start remote sync");
-    });
+    let remote_sync_handle =
+        thread::spawn(move || remote_sync(remote_sync_context, remote_sync_operational_sender));
 
     log::info!("Start watchers");
 
@@ -123,44 +131,46 @@ fn main() -> Result<(), Error> {
     let mut local_watcher = LocalWatcher::new(
         local_watcher_operational_sender,
         local_watcher_context.folder_path.clone(),
-    )
-    .expect("Fail to initialize LocalWatcher");
-    let local_handle = thread::spawn(move || {
-        local_watcher
-            .listen(local_watcher_context.folder_path.clone())
-            .expect("Fail to start listening with local watcher")
-    });
+    )?;
+    let local_handle =
+        thread::spawn(move || local_watcher.listen(local_watcher_context.folder_path.clone()));
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
     let mut remote_watcher = RemoteWatcher::new(context.clone(), remote_watcher_operational_sender);
-    let remote_handle = thread::spawn(move || {
-        remote_watcher
-            .listen()
-            .expect("Fail to listen from remote watcher")
-    });
+    let remote_handle = thread::spawn(move || remote_watcher.listen());
 
+    // FIXME BS NOW : il faut check si il y a une erreur quelque soit le thread qui plante ne premier !
     // Wait end of local and remote  sync
     log::info!("Wait synchronizations to finish their jobs");
-    local_sync_handle
+    let local_sync_result = local_sync_handle
         .join()
         .expect("Fail to join local sync handler");
-    remote_sync_handle
+    let remote_sync_result = remote_sync_handle
         .join()
         .expect("Fail to join remote sync handler");
+
+    if let Err(error) = &local_sync_result {
+        log::error!("Local sync failed: {:?}", error);
+    }
+    if let Err(error) = &remote_sync_result {
+        log::error!("Remote sync failed: {:?}", error);
+    }
+    if local_sync_result.is_err() || remote_sync_result.is_err() {
+        return Err(Error::StartupError(format!(
+            "Synchronization fail, interrupt now"
+        )));
+    }
 
     log::info!("Synchronization finished, start changes resolver");
 
     // Operational
     let operational_context = context.clone();
     let operational_handle = thread::spawn(move || {
-        Database::new(context.database_path.clone())
-            .with_new_connection(|connection| {
-                OperationalHandler::new(operational_context, connection)
-                    .expect("Fail to create operational handler")
-                    .listen(operational_receiver);
-            })
-            .expect("Fail to make database connection when start operational handler")
+        Database::new(context.database_path.clone()).with_new_connection(|connection| {
+            OperationalHandler::new(operational_context, connection)?.listen(operational_receiver);
+            Ok(())
+        })
     });
 
     local_handle

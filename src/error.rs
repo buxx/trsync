@@ -59,6 +59,7 @@ pub enum Error {
     UnexpectedError(String),
     PathCastingError(String),
     PathManipulationError(String),
+    StartupError(String),
 }
 
 impl From<ClientError> for Error {

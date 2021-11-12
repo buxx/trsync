@@ -16,10 +16,10 @@ impl Database {
 
     pub fn with_new_connection<F>(&self, f: F) -> Result<(), Error>
     where
-        F: FnOnce(Connection),
+        F: FnOnce(Connection) -> Result<(), Error>,
     {
         let connection = Connection::open(self.database_file_path.clone())?;
-        f(connection);
+        f(connection)?;
         Ok(())
     }
 }
