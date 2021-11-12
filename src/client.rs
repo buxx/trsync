@@ -8,7 +8,7 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::context::Context;
-use crate::error::ClientError;
+use crate::error::{ClientError, Error};
 use crate::types::RevisionId;
 use crate::util;
 use crate::{
@@ -57,14 +57,13 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(context: Context) -> Self {
-        Self {
+    pub fn new(context: Context) -> Result<Self, Error> {
+        Ok(Self {
             context,
             client: reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
-                .build()
-                .unwrap(),
-        }
+                .build()?,
+        })
     }
 
     pub fn create_content(
@@ -131,9 +130,18 @@ impl Client {
         let response_status = &response.status().as_u16();
         match response_status {
             200 => {
-                let value = response.json::<Value>().unwrap();
-                let data = value.as_object().unwrap();
-                let content_id = data["content_id"].as_i64().unwrap() as ContentId;
+                let value = response.json::<Value>()?;
+                let data = value.as_object().ok_or(Error::UnexpectedError(format!(
+                    "Response content not appear to be an object : {:?}",
+                    value
+                )))?;
+                let content_id =
+                    data["content_id"]
+                        .as_i64()
+                        .ok_or(Error::UnexpectedError(format!(
+                            "Response content object do not contains a integer content_id : {:?}",
+                            data
+                        )))? as ContentId;
                 let revision_id = self.get_remote_content(content_id)?.current_revision_id;
                 Ok((content_id, revision_id))
             }
@@ -472,9 +480,18 @@ impl Client {
         let response_status_code = response.status().as_u16();
         match response_status_code {
             200 => {
-                let value = response.json::<Value>().unwrap();
-                let data = value.as_object().unwrap();
-                let revision_id = data["last_revision_id"].as_i64().unwrap() as RevisionId;
+                let value = response.json::<Value>()?;
+                let data = value.as_object().ok_or(Error::UnexpectedError(format!(
+                    "Response content not appear to be an object : {:?}",
+                    value
+                )))?;
+                let revision_id =
+                    data["last_revision_id"]
+                        .as_i64()
+                        .ok_or(Error::UnexpectedError(format!(
+                    "Response content object do not contains a integer last_revision_id : {:?}",
+                    data
+                )))? as RevisionId;
                 Ok(revision_id)
             }
             _ => {
@@ -501,9 +518,17 @@ impl Client {
         let response_status_code = response.status().as_u16();
         match response_status_code {
             200 => {
-                let value = response.json::<Value>().unwrap();
-                let data = value.as_object().unwrap();
-                let user_id = data["user_id"].as_i64().unwrap();
+                let value = response.json::<Value>()?;
+                let data = value.as_object().ok_or(Error::UnexpectedError(format!(
+                    "Response content not appear to be an object : {:?}",
+                    value
+                )))?;
+                let user_id = data["user_id"]
+                    .as_i64()
+                    .ok_or(Error::UnexpectedError(format!(
+                        "Response content object do not contains a integer user_id : {:?}",
+                        data
+                    )))?;
                 Ok(user_id as i32)
             }
             _ => {

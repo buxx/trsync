@@ -1,5 +1,8 @@
 use std::path::Path;
 
+use crate::error::Error;
+use crate::util;
+
 #[derive(Debug, Clone)]
 pub struct Context {
     pub base_address: String,
@@ -18,22 +21,18 @@ impl Context {
         password: String,
         folder_path: String,
         workspace_id: i32,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let protocol = if ssl { "https" } else { "http" };
         let base_address = format!("{}://{}/api/", protocol, address);
-        let database_path = Path::new(&folder_path)
-            .join(".trsync.db")
-            .to_str()
-            .unwrap()
-            .to_string();
-        Self {
+        let database_path = util::path_to_string(&Path::new(&folder_path).join(".trsync.db"))?;
+        Ok(Self {
             base_address,
             username,
             password,
             folder_path,
             database_path,
             workspace_id,
-        }
+        })
     }
 
     pub fn workspace_url(&self, suffix: &str) -> String {

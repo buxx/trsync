@@ -40,13 +40,13 @@ pub struct OperationalHandler {
 }
 
 impl OperationalHandler {
-    pub fn new(context: Context, connection: Connection) -> Self {
-        Self {
+    pub fn new(context: Context, connection: Connection) -> Result<Self, Error> {
+        Ok(Self {
             context: context.clone(),
             connection,
-            client: Client::new(context),
+            client: Client::new(context)?,
             ignore_messages: vec![],
-        }
+        })
     }
 
     fn ignore_message(&mut self, message: &OperationalMessage) -> Result<bool, Error> {
@@ -295,7 +295,7 @@ impl OperationalHandler {
             // If path changes for a folder
             if let Some(after_parent_relative_path_) = after_parent_relative_path {
                 let after_parent_relative_path_str =
-                    after_parent_relative_path_.to_str().unwrap().to_string();
+                    util::path_to_string(after_parent_relative_path_)?;
                 match DatabaseOperation::new(&self.connection)
                     .get_content_id_from_path(after_parent_relative_path_str.clone())
                 {
@@ -323,8 +323,8 @@ impl OperationalHandler {
             }
         }
 
-        let before_file_name = Path::new(&before_relative_path).file_name().unwrap();
-        let after_file_name = Path::new(&after_relative_path).file_name().unwrap();
+        let before_file_name = util::string_path_file_name(&before_relative_path)?;
+        let after_file_name = util::string_path_file_name(&after_relative_path)?;
 
         // Rename file name if changes
         if before_file_name != after_file_name {
@@ -336,7 +336,7 @@ impl OperationalHandler {
             );
             self.client.update_content_file_name(
                 content_id,
-                after_file_name.to_str().unwrap().to_string(),
+                after_file_name,
                 file_infos.content_type,
             )?;
         }
@@ -384,8 +384,8 @@ impl OperationalHandler {
                 .client
                 .get_file_content_response(remote_content.content_id, remote_content.filename)?;
             log::debug!("Create disk file {:?}", &absolute_path);
-            let mut out = File::create(absolute_path).unwrap();
-            io::copy(&mut response, &mut out).unwrap();
+            let mut out = File::create(absolute_path)?;
+            io::copy(&mut response, &mut out)?;
         }
 
         // Update database
@@ -417,7 +417,10 @@ impl OperationalHandler {
             let old_absolute_path = Path::new(&self.context.folder_path).join(relative_path);
             let new_absolute_path = old_absolute_path
                 .parent()
-                .unwrap()
+                .ok_or(Error::PathManipulationError(format!(
+                    "Unable to get parent folder of {:?}",
+                    old_absolute_path
+                )))?
                 .join(remote_content.filename);
 
             log::info!(
@@ -425,14 +428,10 @@ impl OperationalHandler {
                 &old_absolute_path,
                 &new_absolute_path
             );
-            fs::rename(old_absolute_path, &new_absolute_path).unwrap();
+            fs::rename(old_absolute_path, &new_absolute_path)?;
             // Prepare to ignore modified local file
-            let new_relative_path = new_absolute_path
-                .strip_prefix(&self.context.folder_path)
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
+            let new_relative_path =
+                util::path_to_string(new_absolute_path.strip_prefix(&self.context.folder_path)?)?;
             self.ignore_messages
                 .push(OperationalMessage::ModifiedLocalFile(new_relative_path));
             return Ok(());

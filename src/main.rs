@@ -62,7 +62,7 @@ fn main() -> Result<(), Error> {
         password,
         folder_path,
         opt.workspace_id,
-    );
+    )?;
 
     // Prepare main channel
     let (operational_sender, operational_receiver) = channel();
@@ -108,6 +108,7 @@ fn main() -> Result<(), Error> {
                     connection,
                     remote_sync_operational_sender,
                 )
+                .expect("Fail to create remote sync")
                 .sync()
                 .expect("Fail to make remote sync");
             })
@@ -156,6 +157,7 @@ fn main() -> Result<(), Error> {
         Database::new(context.database_path.clone())
             .with_new_connection(|connection| {
                 OperationalHandler::new(operational_context, connection)
+                    .expect("Fail to create operational handler")
                     .listen(operational_receiver);
             })
             .expect("Fail to make database connection when start operational handler")

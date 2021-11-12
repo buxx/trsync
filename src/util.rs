@@ -10,6 +10,7 @@ use crate::{
     database::DatabaseOperation,
     error::Error,
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
+    util,
 };
 
 pub struct FileInfos {
@@ -80,7 +81,7 @@ impl FileInfos {
             is_directory,
             last_modified_timestamp,
             relative_path: relative_file_path,
-            absolute_path: absolute_path.to_str().unwrap().to_string(),
+            absolute_path: util::path_to_string(absolute_path)?,
             parent_relative_path,
             content_type,
         })

@@ -55,7 +55,7 @@ impl RemoteWatcher {
 
     pub fn listen(&mut self) -> Result<(), Error> {
         task::block_on::<_, Result<(), Error>>(async {
-            let client = client::Client::new(self.context.clone());
+            let client = client::Client::new(self.context.clone())?;
             let user_id = client.get_user_id()?;
             let response = client.get_user_live_messages_response(user_id).await?;
             let mut stream = response.bytes_stream();
@@ -141,7 +141,10 @@ impl RemoteWatcher {
                     OperationalMessage::NewRemoteFile(content_id as i32)
                 }
                 _ => {
-                    return Err(Error::UnexpectedError(format!("Not managed event type : {}", event_type)))
+                    return Err(Error::UnexpectedError(format!(
+                        "Not managed event type : {}",
+                        event_type
+                    )))
                 }
             };
             match self.operational_sender.send(message) {
@@ -187,13 +190,13 @@ impl RemoteSync {
         context: Context,
         connection: Connection,
         operational_sender: Sender<OperationalMessage>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        Ok(Self {
             _context: context.clone(),
             connection,
-            client: Client::new(context),
+            client: Client::new(context)?,
             operational_sender,
-        }
+        })
     }
 
     pub fn sync(&mut self) -> Result<(), Error> {

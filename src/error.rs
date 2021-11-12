@@ -102,3 +102,9 @@ impl From<Utf8Error> for Error {
         Error::UnexpectedError(format!("utf8 error {:?}", error))
     }
 }
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Error::UnexpectedError(format!("reqwest error {:?}", error))
+    }
+}
