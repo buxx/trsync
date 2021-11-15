@@ -6,7 +6,7 @@ extern crate notify;
 use log;
 
 use std::sync::mpsc::{channel, Sender};
-use std::thread;
+use std::{env, thread};
 
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
@@ -41,6 +41,9 @@ pub struct Opt {
 
     #[structopt(short, long)]
     no_ssl: bool,
+
+    #[structopt(name = "--env-var-pass", long, short)]
+    env_var_pass: Option<String>,
 }
 
 fn local_sync(
@@ -86,8 +89,20 @@ fn main() -> Result<(), Error> {
     log::info!("Prepare to sync {:?}", &opt.path);
     let folder_path = util::canonicalize_to_string(&opt.path)?;
 
-    // Ask password by input
-    let password = rpassword::read_password_from_tty(Some("Tracim user password ? "))?;
+    // Ask password by input or get it from env var
+    let password = if let Some(env_var_pass) = opt.env_var_pass {
+        match env::var(&env_var_pass) {
+            Ok(password) => password,
+            Err(_) => {
+                return Err(Error::UnexpectedError(format!(
+                    "No en var set for name {}",
+                    &env_var_pass
+                )))
+            }
+        }
+    } else {
+        rpassword::read_password_from_tty(Some("Tracim user password ? "))?
+    };
 
     // Prepare context object
     let context = Context::new(

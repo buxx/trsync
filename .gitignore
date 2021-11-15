@@ -17,3 +17,7 @@ Cargo.lock
 .history
 .vscode
 .idea
+
+# Exploitation
+fleet.ini
+/*.log
