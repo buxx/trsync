@@ -85,66 +85,41 @@ impl OperationalHandler {
 
                 log::info!("Operation : {:?}", &message);
 
-                match message {
+                let return_ = match &message {
                     // Local changes
                     OperationalMessage::NewLocalFile(relative_path) => {
-                        match self.new_local_file(relative_path) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.new_local_file(relative_path.clone())
                     }
                     OperationalMessage::ModifiedLocalFile(relative_path) => {
-                        match self.modified_local_file(relative_path) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.modified_local_file(relative_path.clone())
                     }
                     OperationalMessage::DeletedLocalFile(relative_path) => {
-                        match self.deleted_local_file(relative_path) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.deleted_local_file(relative_path.clone())
                     }
                     OperationalMessage::RenamedLocalFile(
                         before_relative_path,
                         after_relative_path,
-                    ) => match self.renamed_local_file(before_relative_path, after_relative_path) {
-                        Err(err) => {
-                            log::error!("{:?}", err)
-                        }
-                        _ => {}
-                    },
+                    ) => self.renamed_local_file(
+                        before_relative_path.clone(),
+                        after_relative_path.clone(),
+                    ),
                     // Remote changes
                     OperationalMessage::NewRemoteFile(content_id) => {
-                        match self.new_remote_file(content_id) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.new_remote_file(*content_id)
                     }
                     OperationalMessage::ModifiedRemoteFile(content_id) => {
-                        match self.modified_remote_file(content_id) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.modified_remote_file(*content_id)
                     }
                     OperationalMessage::DeletedRemoteFile(content_id) => {
-                        match self.deleted_remote_file(content_id) {
-                            Err(err) => {
-                                log::error!("{:?}", err)
-                            }
-                            _ => {}
-                        }
+                        self.deleted_remote_file(*content_id)
                     }
+                };
+
+                match return_ {
+                    Err(err) => {
+                        log::log!(err.level(), "Error when {:?} : {:?}", message, err)
+                    }
+                    _ => {}
                 }
             }
         }
@@ -373,10 +348,16 @@ impl OperationalHandler {
         // Write file/folder on disk
         if remote_content.content_type == "folder" {
             log::debug!("Create disk folder {:?}", &absolute_path);
-            match fs::create_dir(&absolute_path) {
+            match fs::create_dir_all(&absolute_path) {
                 Ok(_) => {}
                 Err(error) => {
-                    log::error!("Error during creation of {:?} : {}", absolute_path, error)
+                    let level = util::io_error_to_log_level(&error);
+                    log::log!(
+                        level,
+                        "Error during creation of {:?} : {}",
+                        absolute_path,
+                        error
+                    )
                 }
             }
         } else {

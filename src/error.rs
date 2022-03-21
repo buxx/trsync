@@ -11,6 +11,7 @@ pub enum ClientError {
     AlreadyExistResponseAndFailToFoundIt(String),
     NotFoundResponse(String),
     DecodingResponseError(String),
+    NotRelevant(String),
 }
 
 impl From<reqwest::Error> for ClientError {
@@ -46,6 +47,7 @@ impl fmt::Display for ClientError {
             ),
             ClientError::NotFoundResponse(message) => format!("Not found : {}", message),
             ClientError::DecodingResponseError(message) => format!("Decoding error : {}", message),
+            ClientError::NotRelevant(message) => format!("Note : {}", message),
         };
         write!(f, "{}", message)
     }
@@ -60,11 +62,24 @@ pub enum Error {
     PathCastingError(String),
     PathManipulationError(String),
     StartupError(String),
+    NotRelevant(String),
+}
+
+impl Error {
+    pub fn level(&self) -> log::Level {
+        match self {
+            Error::NotRelevant(_) => log::Level::Info,
+            _ => log::Level::Error,
+        }
+    }
 }
 
 impl From<ClientError> for Error {
     fn from(err: ClientError) -> Self {
-        Error::UnexpectedError(format!("{:?}", err))
+        match err {
+            ClientError::NotRelevant(message) => Error::NotRelevant(message),
+            _ => Error::UnexpectedError(format!("{:?}", err)),
+        }
     }
 }
 

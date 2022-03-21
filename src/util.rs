@@ -1,4 +1,5 @@
 use std::{
+    io,
     path::{Component, Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -132,4 +133,11 @@ pub fn path_to_string(path: &Path) -> Result<String, Error> {
             path,
         )))?
         .to_string())
+}
+
+pub fn io_error_to_log_level(error: &io::Error) -> log::Level {
+    match error.kind() {
+        io::ErrorKind::AlreadyExists => log::Level::Info,
+        _ => log::Level::Error,
+    }
 }

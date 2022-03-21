@@ -305,12 +305,17 @@ impl Client {
             let mut path_parts: Vec<String> = vec![content.filename.clone()];
             let mut last_seen_parent_id = parent_id;
             loop {
+                log::debug!(
+                    "Building path for content {}: get parent {}",
+                    content.content_id,
+                    last_seen_parent_id
+                );
                 let response = self
                     .client
                     .request(
                         Method::GET,
                         self.context
-                            .workspace_url(&format!("folders/{}", last_seen_parent_id)),
+                            .workspace_url(&format!("contents/{}", last_seen_parent_id)),
                     )
                     .basic_auth(
                         self.context.username.clone(),
@@ -329,6 +334,16 @@ impl Client {
                 };
 
                 let folder = response.json::<RemoteContent>()?;
+
+                // Tracim can put content into an other content (comment's file for example)
+                // If this parent is not a folder, don't manage it
+                if folder.content_type != "folder" {
+                    return Err(ClientError::NotRelevant(format!(
+                        "Parent content {} is not a folder, ignore it",
+                        content.filename
+                    )));
+                }
+
                 path_parts.push(folder.filename);
                 if let Some(folder_parent_id) = folder.parent_id {
                     last_seen_parent_id = folder_parent_id;
