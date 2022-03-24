@@ -21,3 +21,6 @@ Cargo.lock
 # Exploitation
 fleet.ini
 /*.log
+.venv
+__pycache__
+*.pyc

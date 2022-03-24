@@ -344,6 +344,14 @@ impl Client {
                     )));
                 }
 
+                // If parent is a deleted folder, don't manage it
+                if folder.is_deleted {
+                    return Err(ClientError::NotRelevant(format!(
+                        "Parent content {} is deleted, ignore it",
+                        content.filename
+                    )));
+                }
+
                 path_parts.push(folder.filename);
                 if let Some(folder_parent_id) = folder.parent_id {
                     last_seen_parent_id = folder_parent_id;

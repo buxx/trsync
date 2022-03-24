@@ -176,6 +176,7 @@ pub struct RemoteContent {
     pub content_type: String,
     pub modified: String,
     pub filename: String,
+    pub is_deleted: bool,
 }
 
 pub struct RemoteSync {

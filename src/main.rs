@@ -39,11 +39,14 @@ pub struct Opt {
     #[structopt(name = "username")]
     username: String,
 
-    #[structopt(short, long)]
+    #[structopt(name = "--no-ssl", short, long)]
     no_ssl: bool,
 
     #[structopt(name = "--env-var-pass", long, short)]
     env_var_pass: Option<String>,
+
+    #[structopt(name = "--exit-after-sync", long)]
+    exit_after_sync: bool,
 }
 
 fn local_sync(
@@ -112,6 +115,7 @@ fn main() -> Result<(), Error> {
         password,
         folder_path,
         opt.workspace_id,
+        opt.exit_after_sync,
     )?;
 
     // Prepare main channel
@@ -147,13 +151,25 @@ fn main() -> Result<(), Error> {
         local_watcher_operational_sender,
         local_watcher_context.folder_path.clone(),
     )?;
-    let local_handle =
-        thread::spawn(move || local_watcher.listen(local_watcher_context.folder_path.clone()));
+    let local_handle = thread::spawn(move || {
+        if !local_watcher_context.exit_after_sync {
+            local_watcher.listen(local_watcher_context.folder_path.clone())
+        } else {
+            Ok(())
+        }
+    });
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
+    let remote_watcher_context = context.clone();
     let mut remote_watcher = RemoteWatcher::new(context.clone(), remote_watcher_operational_sender);
-    let remote_handle = thread::spawn(move || remote_watcher.listen());
+    let remote_handle = thread::spawn(move || {
+        if !remote_watcher_context.exit_after_sync {
+            remote_watcher.listen()
+        } else {
+            Ok(())
+        }
+    });
 
     // FIXME BS NOW : il faut check si il y a une erreur quelque soit le thread qui plante ne premier !
     // Wait end of local and remote  sync
@@ -177,7 +193,12 @@ fn main() -> Result<(), Error> {
         )));
     }
 
-    log::info!("Synchronization finished, start changes resolver");
+    if context.exit_after_sync {
+        log::info!("Synchronization finished");
+        operational_sender.send(OperationalMessage::Exit).unwrap();
+    } else {
+        log::info!("Synchronization finished, start changes resolver");
+    }
 
     // Operational
     let operational_context = context.clone();
@@ -190,13 +211,13 @@ fn main() -> Result<(), Error> {
 
     local_handle
         .join()
-        .expect("Fail to join local listener handler");
+        .expect("Fail to join local listener handler")?;
     remote_handle
         .join()
-        .expect("Fail to join remote listener handler");
+        .expect("Fail to join remote listener handler")?;
     operational_handle
         .join()
-        .expect("Fail to join operational handler");
+        .expect("Fail to join operational handler")?;
 
     log::info!("Exit application");
     Ok(())

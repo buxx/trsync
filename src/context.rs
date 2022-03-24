@@ -11,6 +11,7 @@ pub struct Context {
     pub folder_path: String,
     pub database_path: String,
     pub workspace_id: i32,
+    pub exit_after_sync: bool,
 }
 
 impl Context {
@@ -21,6 +22,7 @@ impl Context {
         password: String,
         folder_path: String,
         workspace_id: i32,
+        exit_after_sync: bool,
     ) -> Result<Self, Error> {
         let protocol = if ssl { "https" } else { "http" };
         let base_address = format!("{}://{}/api/", protocol, address);
@@ -32,6 +34,7 @@ impl Context {
             folder_path,
             database_path,
             workspace_id,
+            exit_after_sync,
         })
     }
 

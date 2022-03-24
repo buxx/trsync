@@ -119,11 +119,32 @@ impl<'d> DatabaseOperation<'d> {
         content_id: ContentId,
         revision_id: RevisionId,
     ) -> Result<(), rusqlite::Error> {
-        self.connection
+        log::debug!("Insert new file with path {:?}", relative_path);
+
+        match self.connection
             .execute(
                 "INSERT INTO file (relative_path, last_modified_timestamp, content_id, revision_id) VALUES (?1, ?2, ?3, ?4)",
                 params![relative_path, last_modified_timestamp, content_id, revision_id],
-            )?;
+            ) {
+                Ok(_) => {},
+                Err(error) => {
+                    match &error {
+                        rusqlite::Error::SqliteFailure(sqlite_error, message) => {
+                            match sqlite_error.code {
+                                rusqlite::ErrorCode::ConstraintViolation => {
+                                    if message == &Some("UNIQUE constraint failed: file.relative_path".to_string()) {
+                                        log::debug!("File with path {:?} already exists", relative_path);
+                                    } else {
+                                        return Err(error)
+                                    }
+                                },
+                                _ => return Err(error),
+                            }
+                        }
+                        _ => return Err(error),
+                    }
+                }
+            };
         Ok(())
     }
 
@@ -132,6 +153,12 @@ impl<'d> DatabaseOperation<'d> {
         relative_path: String,
         last_modified_timestamp: LastModifiedTimestamp,
     ) -> Result<(), rusqlite::Error> {
+        log::debug!(
+            "Update last modified timestamp of {:?} with {:?}",
+            relative_path,
+            last_modified_timestamp
+        );
+
         self.connection.execute(
             "UPDATE file SET last_modified_timestamp = ?1 WHERE relative_path = ?2",
             params![last_modified_timestamp, relative_path],
@@ -152,6 +179,12 @@ impl<'d> DatabaseOperation<'d> {
         relative_path: String,
         revision_id: RevisionId,
     ) -> Result<(), rusqlite::Error> {
+        log::debug!(
+            "Update revision_id of {:?} with {:?}",
+            relative_path,
+            revision_id
+        );
+
         self.connection.execute(
             "UPDATE file SET revision_id = ?1 WHERE relative_path = ?2",
             params![revision_id, relative_path],
@@ -164,6 +197,12 @@ impl<'d> DatabaseOperation<'d> {
         content_id: ContentId,
         relative_path: RelativeFilePath,
     ) -> Result<(), rusqlite::Error> {
+        log::debug!(
+            "Update relative path relative path of content {:?} with {:?}",
+            content_id,
+            relative_path
+        );
+
         self.connection.execute(
             "UPDATE file SET relative_path = ?1 WHERE content_id = ?2",
             params![relative_path, content_id],

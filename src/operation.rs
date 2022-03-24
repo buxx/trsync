@@ -27,6 +27,8 @@ pub enum OperationalMessage {
     NewRemoteFile(ContentId),
     ModifiedRemoteFile(ContentId),
     DeletedRemoteFile(ContentId),
+    // Internal messages
+    Exit,
 }
 
 // TODO : Manage a flag set to true when program start to indicate to manage conflicts.
@@ -113,6 +115,7 @@ impl OperationalHandler {
                     OperationalMessage::DeletedRemoteFile(content_id) => {
                         self.deleted_remote_file(*content_id)
                     }
+                    OperationalMessage::Exit => return (),
                 };
 
                 match return_ {
