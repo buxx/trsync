@@ -119,7 +119,11 @@ impl<'d> DatabaseOperation<'d> {
         content_id: ContentId,
         revision_id: RevisionId,
     ) -> Result<(), rusqlite::Error> {
-        log::debug!("Insert new file with path {:?}", relative_path);
+        log::debug!(
+            "Insert new file with path {:?} and timestamp {}",
+            relative_path,
+            last_modified_timestamp,
+        );
 
         match self.connection
             .execute(

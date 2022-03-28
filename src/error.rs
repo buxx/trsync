@@ -68,7 +68,7 @@ pub enum Error {
 impl Error {
     pub fn level(&self) -> log::Level {
         match self {
-            Error::NotRelevant(_) => log::Level::Info,
+            Error::NotRelevant(_) => log::Level::Debug,
             _ => log::Level::Error,
         }
     }
