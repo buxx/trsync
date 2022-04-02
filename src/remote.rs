@@ -109,7 +109,7 @@ impl RemoteWatcher {
                 remote_event.fields["content"]
                     .as_object()
                     .ok_or(Error::UnexpectedError(format!(
-                        "Remote event content not appear to not be obect"
+                        "Remote event content not appear to not be object"
                     )))?["content_id"]
                     .as_i64()
                     .ok_or(Error::UnexpectedError(format!(
