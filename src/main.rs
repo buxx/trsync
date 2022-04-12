@@ -6,7 +6,7 @@ extern crate notify;
 use log;
 
 use std::sync::mpsc::{channel, Sender};
-use std::{env, thread};
+use std::{env, fs, thread};
 
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
@@ -90,6 +90,7 @@ fn main() -> Result<(), Error> {
 
     // Digest input folder to watch
     log::info!("Prepare to sync {:?}", &opt.path);
+    fs::create_dir_all(&opt.path)?;
     let folder_path = util::canonicalize_to_string(&opt.path)?;
 
     // Ask password by input or get it from env var
