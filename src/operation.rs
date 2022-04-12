@@ -31,6 +31,11 @@ pub enum OperationalMessage {
     Exit,
 }
 
+#[derive(Debug)]
+pub enum SupervisorMessage {
+    RemoteActivityReceived,
+}
+
 // TODO : Manage a flag set to true when program start to indicate to manage conflicts.
 // When resolution done, set flag to false and proceed local and remote messages without
 // taking care of conflicts

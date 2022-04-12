@@ -1,6 +1,9 @@
-use std::{fmt, io, str::Utf8Error};
+use std::{fmt, io, str::Utf8Error, sync::mpsc::SendError};
 
-use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
+use crate::{
+    operation::SupervisorMessage,
+    types::{AbsoluteFilePath, ContentId, RevisionId},
+};
 
 #[derive(Debug)]
 pub enum ClientError {
@@ -122,5 +125,11 @@ impl From<Utf8Error> for Error {
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Error::UnexpectedError(format!("reqwest error {:?}", error))
+    }
+}
+
+impl From<SendError<SupervisorMessage>> for Error {
+    fn from(error: SendError<SupervisorMessage>) -> Self {
+        Error::UnexpectedError(format!("Internal channel error {:?}", error))
     }
 }

@@ -1,11 +1,12 @@
 use env_logger::Env;
 use error::Error;
-use operation::OperationalMessage;
+use operation::{OperationalMessage, SupervisorMessage};
 use structopt::StructOpt;
 extern crate notify;
 use log;
 
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::Instant;
 use std::{env, fs, thread};
 
 use crate::context::Context;
@@ -83,6 +84,47 @@ fn remote_sync(
     Ok(())
 }
 
+pub fn supervisor(
+    context: Context,
+    operational_sender: Sender<OperationalMessage>,
+    supervisor_receiver: Receiver<SupervisorMessage>,
+) -> Result<(), Error> {
+    let mut last_remote_activity: Instant = Instant::now();
+
+    loop {
+        match supervisor_receiver.recv() {
+            Ok(SupervisorMessage::RemoteActivityReceived) => {
+                // FIXME as param
+                let no_activity_since = last_remote_activity.elapsed().as_secs();
+                log::debug!(
+                    "Remote activity received (no_activity_since : {})",
+                    no_activity_since
+                );
+                last_remote_activity = Instant::now();
+
+                if no_activity_since > 60 {
+                    log::info!(
+                        "Remote activity received after '{}' seconds, make a sync",
+                        no_activity_since
+                    );
+                    match remote_sync(context.clone(), operational_sender.clone()) {
+                        Err(error) => {
+                            log::error!("Error when sync with remote : {:?}", error);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(error) => {
+                log::error!("Error when supervisor receive message : {}", error);
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     // Initialize static things
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -121,6 +163,7 @@ fn main() -> Result<(), Error> {
 
     // Prepare main channel
     let (operational_sender, operational_receiver) = channel();
+    let (supervisor_sender, supervisor_receiver) = channel();
 
     // Initialize database if needed
     log::info!("Initialize index");
@@ -162,14 +205,30 @@ fn main() -> Result<(), Error> {
 
     // Start remote watcher
     let remote_watcher_operational_sender = operational_sender.clone();
+    let remote_watcher_supervisor_sender = supervisor_sender.clone();
     let remote_watcher_context = context.clone();
-    let mut remote_watcher = RemoteWatcher::new(context.clone(), remote_watcher_operational_sender);
+    let mut remote_watcher = RemoteWatcher::new(
+        context.clone(),
+        remote_watcher_operational_sender,
+        remote_watcher_supervisor_sender,
+    );
     let remote_handle = thread::spawn(move || {
         if !remote_watcher_context.exit_after_sync {
             remote_watcher.listen()
         } else {
             Ok(())
         }
+    });
+
+    // Start supervisor
+    let supervisor_context = context.clone();
+    let supervisor_operational_sender = operational_sender.clone();
+    let supervisor_handle = thread::spawn(move || {
+        supervisor(
+            supervisor_context,
+            supervisor_operational_sender,
+            supervisor_receiver,
+        )
     });
 
     // FIXME BS NOW : il faut check si il y a une erreur quelque soit le thread qui plante ne premier !

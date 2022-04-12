@@ -1,7 +1,7 @@
-use crate::Error;
-use async_std::task;
+use crate::{operation::SupervisorMessage, Error};
+use async_std::task::{self, sleep};
 use bytes::Bytes;
-use std::sync::mpsc::Sender;
+use std::{sync::mpsc::Sender, time::Duration};
 
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
@@ -39,6 +39,7 @@ impl RemoteEvent {
 pub struct RemoteWatcher {
     context: Context,
     operational_sender: Sender<OperationalMessage>,
+    supervisor_sender: Sender<SupervisorMessage>,
 }
 
 // TODO : Must have a local db with tuple (content_id,modified_timestamp)
@@ -46,10 +47,15 @@ pub struct RemoteWatcher {
 // Jon of this watcher is to react on remote changes : for now it is a simple
 // pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
-    pub fn new(context: Context, operational_sender: Sender<OperationalMessage>) -> Self {
+    pub fn new(
+        context: Context,
+        operational_sender: Sender<OperationalMessage>,
+        supervisor_sender: Sender<SupervisorMessage>,
+    ) -> Self {
         Self {
             context,
             operational_sender,
+            supervisor_sender,
         }
     }
 
@@ -80,6 +86,11 @@ impl RemoteWatcher {
     }
 
     fn proceed_event_lines(&self, lines: &Bytes) -> Result<(), Error> {
+        // Notify supervisor activity
+        self.supervisor_sender
+            .send(SupervisorMessage::RemoteActivityReceived)?;
+
+        // Parse lines
         if lines.starts_with(b"event: message") {
             for line in str::from_utf8(lines)?.lines() {
                 if line.starts_with("data: ") {
