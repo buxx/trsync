@@ -105,7 +105,7 @@ fn main() -> Result<(), Error> {
             }
         }
     } else {
-        rpassword::read_password_from_tty(Some("Tracim user password ? "))?
+        rpassword::prompt_password("Tracim user password ? ")?
     };
 
     // Prepare context object
