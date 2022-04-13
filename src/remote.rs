@@ -88,18 +88,26 @@ impl RemoteWatcher {
                                 _ => {}
                             },
                             Err(err) => {
-                                log::error!("Error when reading remote TLM : {:?}", err)
+                                log::error!("Error when reading remote TLM : {:?}", err);
+                                self.main_sender
+                                    .send(MainMessage::Exit)
+                                    .expect("Channel was closed");
+                                // FIXME : ITS A HACK to be able to stop local watcher AND operational
+                                self.main_sender
+                                    .send(MainMessage::Exit)
+                                    .expect("Channel was closed");
+                                break;
                             }
                         }
                     }
                     _ => {
                         // FIXME 60s
-                        if last_activity.elapsed().as_secs() > 5 {
-                            log::info!("No activity for 5 seconds, break");
+                        if last_activity.elapsed().as_secs() > 60 {
+                            log::info!("No activity since 60 seconds, break");
                             self.main_sender
                                 .send(MainMessage::ConnectionLost)
                                 .expect("Channel was closed");
-                            // FIXME : ITS A HACK
+                            // FIXME : ITS A HACK to be able to stop local watcher AND operational
                             self.main_sender
                                 .send(MainMessage::ConnectionLost)
                                 .expect("Channel was closed");

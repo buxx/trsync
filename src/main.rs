@@ -8,6 +8,7 @@ use log;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::{env, fs};
 
+use crate::client::ensure_availability;
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
 use crate::local::{start_local_sync, start_local_watch};
@@ -108,6 +109,9 @@ fn main() -> Result<(), Error> {
             Sender<OperationalMessage>,
             Receiver<OperationalMessage>,
         ) = channel();
+
+        // Blocks until remote api successfully responded
+        ensure_availability(&context)?;
 
         log::info!("Start synchronization");
         // First, start local sync to know local changes since last start

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::thread;
 use std::time::Duration;
 
 use reqwest::blocking::{multipart, Response};
@@ -536,7 +537,6 @@ impl Client {
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
             )
-            .timeout(Duration::from_secs(10))
             .send()?;
 
         let response_status_code = response.status().as_u16();
@@ -579,7 +579,6 @@ impl Client {
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
             )
-            .timeout(Duration::from_secs(10))
             .send()
             .await?;
         let response_status_code = response.status().as_u16();
@@ -594,4 +593,24 @@ impl Client {
             }
         }
     }
+}
+
+pub fn ensure_availability(context: &Context) -> Result<(), Error> {
+    let client = Client::new(context.clone())?;
+
+    loop {
+        match client.get_user_id() {
+            Ok(_) => break,
+            Err(ClientError::UnexpectedResponse(message)) => {
+                return Err(Error::UnexpectedError(message));
+            }
+            Err(error) => {
+                log::info!("Remote unavailable, retry in 10 second");
+                log::debug!("Error was : {:?}", error);
+                thread::sleep(Duration::from_secs(10));
+            }
+        }
+    }
+
+    Ok(())
 }
