@@ -1,12 +1,18 @@
-use crate::Error;
+use crate::{database::Database, Error, MainMessage};
 use async_std::task;
 use bytes::Bytes;
-use std::sync::mpsc::Sender;
+use std::{
+    sync::mpsc::Sender,
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
 
+use crossbeam_channel::Sender as CrossbeamSender;
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str;
+use tokio::time::timeout;
 
 use rusqlite::Connection;
 
@@ -38,6 +44,7 @@ impl RemoteEvent {
 
 pub struct RemoteWatcher {
     context: Context,
+    main_sender: CrossbeamSender<MainMessage>,
     operational_sender: Sender<OperationalMessage>,
 }
 
@@ -46,9 +53,14 @@ pub struct RemoteWatcher {
 // Jon of this watcher is to react on remote changes : for now it is a simple
 // pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
-    pub fn new(context: Context, operational_sender: Sender<OperationalMessage>) -> Self {
+    pub fn new(
+        context: Context,
+        main_sender: CrossbeamSender<MainMessage>,
+        operational_sender: Sender<OperationalMessage>,
+    ) -> Self {
         Self {
             context,
+            main_sender,
             operational_sender,
         }
     }
@@ -59,16 +71,40 @@ impl RemoteWatcher {
             let user_id = client.get_user_id()?;
             let response = client.get_user_live_messages_response(user_id).await?;
             let mut stream = response.bytes_stream();
-            while let Some(thing) = stream.next().await {
-                match &thing {
-                    Ok(lines) => match self.proceed_event_lines(lines) {
-                        Err(error) => {
-                            log::error!("Error when proceed remote event lines: {:?}", error)
+
+            let mut last_activity = Instant::now();
+            loop {
+                match timeout(Duration::from_millis(250), stream.next()).await {
+                    Ok(Some(things)) => {
+                        last_activity = Instant::now();
+                        match &things {
+                            Ok(lines) => match self.proceed_event_lines(lines) {
+                                Err(error) => {
+                                    log::error!(
+                                        "Error when proceed remote event lines: {:?}",
+                                        error
+                                    )
+                                }
+                                _ => {}
+                            },
+                            Err(err) => {
+                                log::error!("Error when reading remote TLM : {:?}", err)
+                            }
                         }
-                        _ => {}
-                    },
-                    Err(err) => {
-                        log::error!("Error when reading remote TLM : {:?}", err)
+                    }
+                    _ => {
+                        // FIXME 60s
+                        if last_activity.elapsed().as_secs() > 5 {
+                            log::info!("No activity for 5 seconds, break");
+                            self.main_sender
+                                .send(MainMessage::ConnectionLost)
+                                .expect("Channel was closed");
+                            // FIXME : ITS A HACK
+                            self.main_sender
+                                .send(MainMessage::ConnectionLost)
+                                .expect("Channel was closed");
+                            break;
+                        }
                     }
                 }
             }
@@ -266,4 +302,53 @@ impl RemoteSync {
 
         Ok(())
     }
+}
+
+pub fn start_remote_sync(
+    context: &Context,
+    operational_sender: &Sender<OperationalMessage>,
+) -> JoinHandle<Result<(), Error>> {
+    let remote_sync_context = context.clone();
+    let remote_sync_operational_sender = operational_sender.clone();
+
+    thread::spawn(move || {
+        Database::new(remote_sync_context.database_path.clone()).with_new_connection(
+            |connection| {
+                RemoteSync::new(
+                    remote_sync_context,
+                    connection,
+                    remote_sync_operational_sender,
+                )?
+                .sync()?;
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    })
+}
+
+pub fn start_remote_watch(
+    context: &Context,
+    operational_sender: &Sender<OperationalMessage>,
+    main_sender: &CrossbeamSender<MainMessage>,
+) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    let exit_after_sync = context.exit_after_sync;
+    let remote_watcher_context = context.clone();
+    let remote_watcher_main_sender = main_sender.clone();
+    let remote_watcher_operational_sender = operational_sender.clone();
+
+    let mut remote_watcher = RemoteWatcher::new(
+        remote_watcher_context,
+        remote_watcher_main_sender,
+        remote_watcher_operational_sender,
+    );
+
+    Ok(thread::spawn(move || {
+        if !exit_after_sync {
+            remote_watcher.listen()
+        } else {
+            Ok(())
+        }
+    }))
 }

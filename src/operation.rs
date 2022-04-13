@@ -3,17 +3,20 @@ use std::{
     io,
     path::Path,
     sync::mpsc::Receiver,
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
+use crossbeam_channel::Receiver as CrossbeamReceiver;
 use rusqlite::Connection;
 
 use crate::{
     client::{Client, ParentIdParameter},
     context::Context,
-    database::DatabaseOperation,
+    database::{Database, DatabaseOperation},
     error::{ClientError, Error},
     types::{ContentId, ContentType, RelativeFilePath},
-    util,
+    util, MainMessage,
 };
 
 #[derive(Debug, PartialEq)]
@@ -70,59 +73,75 @@ impl OperationalHandler {
         })
     }
 
-    pub fn listen(&mut self, receiver: Receiver<OperationalMessage>) {
+    pub fn listen(
+        &mut self,
+        receiver: Receiver<OperationalMessage>,
+        main_receiver: CrossbeamReceiver<MainMessage>,
+    ) {
         // TODO : Why loop is required ?!
-        loop {
-            for message in receiver.recv() {
-                if match self.ignore_message(&message) {
-                    Ok(true) => true,
-                    Err(error) => {
-                        log::error!("Error when trying to know if ignore {:?}", error);
-                        false
+        'main: loop {
+            match receiver.recv_timeout(Duration::from_millis(150)) {
+                Err(_) => {
+                    for message in main_receiver.recv() {
+                        match message {
+                            MainMessage::ConnectionLost | MainMessage::Exit => {
+                                log::info!("Finish operational");
+                                break 'main;
+                            }
+                        }
                     }
-                    Ok(false) => false,
-                } {
-                    continue;
                 }
+                Ok(message) => {
+                    if match self.ignore_message(&message) {
+                        Ok(true) => true,
+                        Err(error) => {
+                            log::error!("Error when trying to know if ignore {:?}", error);
+                            false
+                        }
+                        Ok(false) => false,
+                    } {
+                        continue;
+                    }
 
-                log::info!("Operation : {:?}", &message);
+                    log::info!("Operation : {:?}", &message);
 
-                let return_ = match &message {
-                    // Local changes
-                    OperationalMessage::NewLocalFile(relative_path) => {
-                        self.new_local_file(relative_path.clone())
-                    }
-                    OperationalMessage::ModifiedLocalFile(relative_path) => {
-                        self.modified_local_file(relative_path.clone())
-                    }
-                    OperationalMessage::DeletedLocalFile(relative_path) => {
-                        self.deleted_local_file(relative_path.clone())
-                    }
-                    OperationalMessage::RenamedLocalFile(
-                        before_relative_path,
-                        after_relative_path,
-                    ) => self.renamed_local_file(
-                        before_relative_path.clone(),
-                        after_relative_path.clone(),
-                    ),
-                    // Remote changes
-                    OperationalMessage::NewRemoteFile(content_id) => {
-                        self.new_remote_file(*content_id)
-                    }
-                    OperationalMessage::ModifiedRemoteFile(content_id) => {
-                        self.modified_remote_file(*content_id)
-                    }
-                    OperationalMessage::DeletedRemoteFile(content_id) => {
-                        self.deleted_remote_file(*content_id)
-                    }
-                    OperationalMessage::Exit => return (),
-                };
+                    let return_ = match &message {
+                        // Local changes
+                        OperationalMessage::NewLocalFile(relative_path) => {
+                            self.new_local_file(relative_path.clone())
+                        }
+                        OperationalMessage::ModifiedLocalFile(relative_path) => {
+                            self.modified_local_file(relative_path.clone())
+                        }
+                        OperationalMessage::DeletedLocalFile(relative_path) => {
+                            self.deleted_local_file(relative_path.clone())
+                        }
+                        OperationalMessage::RenamedLocalFile(
+                            before_relative_path,
+                            after_relative_path,
+                        ) => self.renamed_local_file(
+                            before_relative_path.clone(),
+                            after_relative_path.clone(),
+                        ),
+                        // Remote changes
+                        OperationalMessage::NewRemoteFile(content_id) => {
+                            self.new_remote_file(*content_id)
+                        }
+                        OperationalMessage::ModifiedRemoteFile(content_id) => {
+                            self.modified_remote_file(*content_id)
+                        }
+                        OperationalMessage::DeletedRemoteFile(content_id) => {
+                            self.deleted_remote_file(*content_id)
+                        }
+                        OperationalMessage::Exit => return (),
+                    };
 
-                match return_ {
-                    Err(err) => {
-                        log::log!(err.level(), "Error when {:?} : {:?}", message, err)
+                    match return_ {
+                        Err(err) => {
+                            log::log!(err.level(), "Error when {:?} : {:?}", message, err)
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
@@ -498,4 +517,21 @@ impl OperationalHandler {
 
         Ok(())
     }
+}
+
+pub fn start_operation(
+    context: &Context,
+    operational_receiver: Receiver<OperationalMessage>,
+    main_receiver: &CrossbeamReceiver<MainMessage>,
+) -> JoinHandle<Result<(), Error>> {
+    let operational_context = context.clone();
+    let operational_main_receiver = main_receiver.clone();
+
+    thread::spawn(move || {
+        Database::new(operational_context.database_path.clone()).with_new_connection(|connection| {
+            OperationalHandler::new(operational_context, connection)?
+                .listen(operational_receiver, operational_main_receiver);
+            Ok(())
+        })
+    })
 }

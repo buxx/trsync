@@ -1,12 +1,16 @@
-use crate::DatabaseOperation;
+use crate::context::Context;
+use crate::database::Database;
+use crate::{DatabaseOperation, MainMessage};
+use crossbeam_channel::Receiver as CrossbeamReceiver;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
+use std::thread::JoinHandle;
 use std::time::{Duration, UNIX_EPOCH};
+use std::{fs, thread};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::error::Error;
@@ -14,16 +18,19 @@ use crate::operation::OperationalMessage;
 use crate::util;
 
 pub struct LocalWatcher {
+    main_receiver: CrossbeamReceiver<MainMessage>,
     operational_sender: Sender<OperationalMessage>,
     workspace_folder_path: PathBuf,
 }
 
 impl LocalWatcher {
     pub fn new(
+        main_receiver: CrossbeamReceiver<MainMessage>,
         operational_sender: Sender<OperationalMessage>,
         workspace_folder_path: String,
     ) -> Result<Self, Error> {
         Ok(Self {
+            main_receiver,
             operational_sender,
             workspace_folder_path: fs::canonicalize(&workspace_folder_path)?,
         })
@@ -34,17 +41,28 @@ impl LocalWatcher {
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1))?;
         inotify_watcher.watch(path, RecursiveMode::Recursive)?;
 
-        loop {
-            match inotify_receiver.recv() {
+        'main: loop {
+            match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
                 Ok(event) => match self.digest_event(&event) {
                     Err(error) => {
                         log::error!("Error when digest event {:?} : {:?}", &event, error)
                     }
                     _ => {}
                 },
-                Err(e) => log::error!("Watch error: {:?}", e),
+                Err(_) => {
+                    for message in self.main_receiver.recv() {
+                        match message {
+                            MainMessage::ConnectionLost | MainMessage::Exit => {
+                                log::info!("Finish local listening");
+                                break 'main;
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        Ok(())
     }
 
     pub fn digest_event(&self, event: &DebouncedEvent) -> Result<(), Error> {
@@ -246,4 +264,52 @@ impl LocalSync {
 
         Ok(())
     }
+}
+
+pub fn start_local_sync(
+    context: &Context,
+    operational_sender: &Sender<OperationalMessage>,
+) -> JoinHandle<Result<(), Error>> {
+    let local_sync_context = context.clone();
+    let local_sync_operational_sender = operational_sender.clone();
+
+    thread::spawn(move || {
+        Database::new(local_sync_context.database_path.clone()).with_new_connection(
+            |connection| {
+                LocalSync::new(
+                    connection,
+                    local_sync_context.folder_path.clone(),
+                    local_sync_operational_sender,
+                )?
+                .sync()?;
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    })
+}
+
+pub fn start_local_watch(
+    context: &Context,
+    operational_sender: &Sender<OperationalMessage>,
+    main_receiver: &CrossbeamReceiver<MainMessage>,
+) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    let local_watcher_context = context.clone();
+    let local_watcher_operational_sender = operational_sender.clone();
+    let local_watcher_main_receiver = main_receiver.clone();
+
+    let mut local_watcher = LocalWatcher::new(
+        local_watcher_main_receiver,
+        local_watcher_operational_sender,
+        local_watcher_context.folder_path.clone(),
+    )?;
+
+    Ok(thread::spawn(move || {
+        if !local_watcher_context.exit_after_sync {
+            local_watcher.listen(local_watcher_context.folder_path.clone())
+        } else {
+            Ok(())
+        }
+    }))
 }

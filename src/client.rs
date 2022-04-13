@@ -536,6 +536,7 @@ impl Client {
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
             )
+            .timeout(Duration::from_secs(10))
             .send()?;
 
         let response_status_code = response.status().as_u16();
@@ -578,6 +579,7 @@ impl Client {
                 self.context.username.clone(),
                 Some(self.context.password.clone()),
             )
+            .timeout(Duration::from_secs(10))
             .send()
             .await?;
         let response_status_code = response.status().as_u16();
