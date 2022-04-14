@@ -82,7 +82,7 @@ impl OperationalHandler {
         'main: loop {
             match receiver.recv_timeout(Duration::from_millis(150)) {
                 Err(_) => {
-                    for message in main_receiver.recv() {
+                    while let Ok(message) = main_receiver.try_recv() {
                         match message {
                             MainMessage::ConnectionLost | MainMessage::Exit => {
                                 log::info!("Finish operational");

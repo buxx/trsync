@@ -50,7 +50,7 @@ impl LocalWatcher {
                     _ => {}
                 },
                 Err(_) => {
-                    for message in self.main_receiver.recv() {
+                    while let Ok(message) = self.main_receiver.try_recv() {
                         match message {
                             MainMessage::ConnectionLost | MainMessage::Exit => {
                                 log::info!("Finish local listening");
