@@ -159,6 +159,22 @@ impl RemoteWatcher {
                     .ok_or(Error::UnexpectedError(format!(
                         "Remote event content content_id appear to not be integer"
                     )))?;
+            let workspace_id =
+                remote_event.fields["workspace"]
+                    .as_object()
+                    .ok_or(Error::UnexpectedError(format!(
+                        "Remote event workspace not appear to not be object"
+                    )))?["workspace_id"]
+                    .as_i64()
+                    .ok_or(Error::UnexpectedError(format!(
+                        "Remote event workspace workspace_id appear to not be integer"
+                    )))?;
+
+            if self.context.workspace_id != workspace_id as i32 {
+                log::info!("Remote event is not for current workspace, skip");
+                return Ok(());
+            }
+
             log::info!(
                 "remote event : {:} ({})",
                 &remote_event.event_type.as_str(),
