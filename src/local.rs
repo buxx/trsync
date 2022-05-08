@@ -1,6 +1,6 @@
 use crate::context::Context;
-use crate::database::Database;
-use crate::{DatabaseOperation, MainMessage};
+use crate::database::{Database, DatabaseOperation};
+use crate::MainMessage;
 use crossbeam_channel::Receiver as CrossbeamReceiver;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
