@@ -1,0 +1,16 @@
+[package]
+name = "trsync-systray"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tray-item = "0.7.0"
+structopt = "0.3.23"
+rust-ini = "0.18.0"
+dirs = "4.0.0"
+
+[target.'cfg(unix)'.dependencies]
+gtk = "0.15.4"
+
+[target.'cfg(windows)'.build-dependencies]
+windres = "*"
