@@ -2,7 +2,11 @@ use std::{
     fs::{self, File},
     io,
     path::Path,
-    sync::mpsc::Receiver,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -10,13 +14,14 @@ use std::{
 use crossbeam_channel::Receiver as CrossbeamReceiver;
 use rusqlite::Connection;
 
+use crate::message::MainMessage;
 use crate::{
     client::{Client, ParentIdParameter},
     context::Context,
     database::{Database, DatabaseOperation},
     error::{ClientError, Error},
     types::{ContentId, ContentType, RelativeFilePath},
-    util, MainMessage,
+    util,
 };
 
 #[derive(Debug, PartialEq)]
@@ -42,15 +47,24 @@ pub struct OperationalHandler {
     connection: Connection,
     client: Client,
     ignore_messages: Vec<OperationalMessage>,
+    stop_signal: Arc<AtomicBool>,
+    restart_signal: Arc<AtomicBool>,
 }
 
 impl OperationalHandler {
-    pub fn new(context: Context, connection: Connection) -> Result<Self, Error> {
+    pub fn new(
+        context: Context,
+        connection: Connection,
+        stop_signal: Arc<AtomicBool>,
+        restart_signal: Arc<AtomicBool>,
+    ) -> Result<Self, Error> {
         Ok(Self {
             context: context.clone(),
             connection,
             client: Client::new(context)?,
             ignore_messages: vec![],
+            stop_signal,
+            restart_signal,
         })
     }
 
@@ -73,22 +87,18 @@ impl OperationalHandler {
         })
     }
 
-    pub fn listen(
-        &mut self,
-        receiver: Receiver<OperationalMessage>,
-        main_receiver: CrossbeamReceiver<MainMessage>,
-    ) {
+    pub fn listen(&mut self, receiver: Receiver<OperationalMessage>) {
         // TODO : Why loop is required ?!
-        'main: loop {
+        loop {
             match receiver.recv_timeout(Duration::from_millis(150)) {
                 Err(_) => {
-                    while let Ok(message) = main_receiver.try_recv() {
-                        match message {
-                            MainMessage::ConnectionLost | MainMessage::Exit => {
-                                log::info!("Finish operational");
-                                break 'main;
-                            }
-                        }
+                    if self.stop_signal.load(Ordering::Relaxed) {
+                        log::info!("Finished operational (on stop signal)");
+                        break;
+                    }
+                    if self.restart_signal.load(Ordering::Relaxed) {
+                        log::info!("Finished operational (on restart signal)");
+                        break;
                     }
                 }
                 Ok(message) => {
@@ -522,15 +532,22 @@ impl OperationalHandler {
 pub fn start_operation(
     context: &Context,
     operational_receiver: Receiver<OperationalMessage>,
-    main_receiver: &CrossbeamReceiver<MainMessage>,
+    stop_signal: &Arc<AtomicBool>,
+    restart_signal: &Arc<AtomicBool>,
 ) -> JoinHandle<Result<(), Error>> {
     let operational_context = context.clone();
-    let operational_main_receiver = main_receiver.clone();
+    let operational_stop_signal = stop_signal.clone();
+    let operational_restart_signal = restart_signal.clone();
 
     thread::spawn(move || {
         Database::new(operational_context.database_path.clone()).with_new_connection(|connection| {
-            OperationalHandler::new(operational_context, connection)?
-                .listen(operational_receiver, operational_main_receiver);
+            OperationalHandler::new(
+                operational_context,
+                connection,
+                operational_stop_signal,
+                operational_restart_signal,
+            )?
+            .listen(operational_receiver);
             Ok(())
         })
     })

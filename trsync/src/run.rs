@@ -4,46 +4,21 @@ use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
 use crate::error::Error;
 use crate::local::{start_local_sync, start_local_watch};
+use crate::message::MainMessage;
 use crate::operation::start_operation;
 use crate::operation::OperationalMessage;
 use crate::remote::{start_remote_sync, start_remote_watch};
-use crate::{util, MainMessage, Opt};
 use crossbeam_channel::{unbounded, Receiver as CrossbeamReceiver, Sender as CrossbeamSender};
 use log;
+use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::{env, fs};
+use std::sync::Arc;
 
-pub fn start(opt: Opt) -> Result<(), Error> {
+pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> {
     // Digest input folder to watch
-    log::info!("Prepare to sync {:?}", &opt.path);
-    fs::create_dir_all(&opt.path)?;
-    let folder_path = util::canonicalize_to_string(&opt.path)?;
-
-    // Ask password by input or get it from env var
-    let password = if let Some(env_var_pass) = opt.env_var_pass {
-        match env::var(&env_var_pass) {
-            Ok(password) => password,
-            Err(_) => {
-                return Err(Error::UnexpectedError(format!(
-                    "No en var set for name {}",
-                    &env_var_pass
-                )))
-            }
-        }
-    } else {
-        rpassword::prompt_password("Tracim user password ? ")?
-    };
-
-    // Prepare context object
-    let context = Context::new(
-        !opt.no_ssl,
-        opt.tracim_address,
-        opt.username,
-        password,
-        folder_path,
-        opt.workspace_id,
-        opt.exit_after_sync,
-    )?;
+    log::info!("Prepare to sync {:?}", &context.folder_path);
+    fs::create_dir_all(&context.folder_path)?;
     let exit_after_sync = context.exit_after_sync;
 
     // Initialize database if needed
@@ -54,15 +29,12 @@ pub fn start(opt: Opt) -> Result<(), Error> {
     })?;
 
     loop {
-        // Main channel used for communication between threads, like interruption
-        let (main_sender, main_receiver): (
-            CrossbeamSender<MainMessage>,
-            CrossbeamReceiver<MainMessage>,
-        ) = unbounded();
         let (operational_sender, operational_receiver): (
             Sender<OperationalMessage>,
             Receiver<OperationalMessage>,
         ) = channel();
+
+        let restart_signal = Arc::new(AtomicBool::new(false));
 
         // Blocks until remote api successfully responded
         ensure_availability(&context)?;
@@ -75,9 +47,11 @@ pub fn start(opt: Opt) -> Result<(), Error> {
 
         log::info!("Start watchers");
         // Start local watcher
-        let local_watch_handle = start_local_watch(&context, &operational_sender, &main_receiver)?;
+        let local_watch_handle =
+            start_local_watch(&context, &operational_sender, &stop_signal, &restart_signal)?;
         // Start remote watcher
-        let remote_watch_handle = start_remote_watch(&context, &operational_sender, &main_sender)?;
+        let remote_watch_handle =
+            start_remote_watch(&context, &operational_sender, &stop_signal, &restart_signal)?;
 
         // Wait end of local and remote sync
         log::info!("Wait synchronizations to finish their jobs");
@@ -109,8 +83,15 @@ pub fn start(opt: Opt) -> Result<(), Error> {
             log::info!("Synchronization finished, start changes resolver");
         }
 
+        // FIXME BS NOW : close channel ?
+
         // Operational
-        let operational_handle = start_operation(&context, operational_receiver, &main_receiver);
+        let operational_handle = start_operation(
+            &context,
+            operational_receiver,
+            &stop_signal,
+            &restart_signal,
+        );
 
         local_watch_handle
             .join()
@@ -122,11 +103,10 @@ pub fn start(opt: Opt) -> Result<(), Error> {
             .join()
             .expect("Fail to join operational handler")?;
 
-        if false {
+        if stop_signal.load(Ordering::Relaxed) {
             break;
         }
     }
 
-    log::info!("Exit application");
     Ok(())
 }

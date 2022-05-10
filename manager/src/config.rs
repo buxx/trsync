@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ini::Ini;
 
-use crate::{error::Error, model::Instance, security::get_password};
+use crate::{error::Error, model::Instance};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -60,6 +60,13 @@ impl Config {
             }
         }
         .to_string();
+
+        if local_folder.trim() == "" {
+            return Err(Error::ReadConfigError(
+                "read local_folder config from server section is empty".to_string(),
+            ));
+        }
+
         let trsync_bin_path = match config_ini.get_from(Some("server"), "trsync_bin_path") {
             Some(value) => value,
             None => {

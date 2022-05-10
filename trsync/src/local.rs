@@ -1,13 +1,13 @@
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
-use crate::MainMessage;
-use crossbeam_channel::Receiver as CrossbeamReceiver;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{fs, thread};
@@ -18,19 +18,22 @@ use crate::operation::OperationalMessage;
 use crate::util;
 
 pub struct LocalWatcher {
-    main_receiver: CrossbeamReceiver<MainMessage>,
+    stop_signal: Arc<AtomicBool>,
+    restart_signal: Arc<AtomicBool>,
     operational_sender: Sender<OperationalMessage>,
     workspace_folder_path: PathBuf,
 }
 
 impl LocalWatcher {
     pub fn new(
-        main_receiver: CrossbeamReceiver<MainMessage>,
+        stop_signal: Arc<AtomicBool>,
+        restart_signal: Arc<AtomicBool>,
         operational_sender: Sender<OperationalMessage>,
         workspace_folder_path: String,
     ) -> Result<Self, Error> {
         Ok(Self {
-            main_receiver,
+            stop_signal,
+            restart_signal,
             operational_sender,
             workspace_folder_path: fs::canonicalize(&workspace_folder_path)?,
         })
@@ -41,7 +44,7 @@ impl LocalWatcher {
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1))?;
         inotify_watcher.watch(path, RecursiveMode::Recursive)?;
 
-        'main: loop {
+        loop {
             match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
                 Ok(event) => match self.digest_event(&event) {
                     Err(error) => {
@@ -50,13 +53,13 @@ impl LocalWatcher {
                     _ => {}
                 },
                 Err(_) => {
-                    while let Ok(message) = self.main_receiver.try_recv() {
-                        match message {
-                            MainMessage::ConnectionLost | MainMessage::Exit => {
-                                log::info!("Finish local listening");
-                                break 'main;
-                            }
-                        }
+                    if self.stop_signal.load(Ordering::Relaxed) {
+                        log::info!("Finished local listening (on stop signal)");
+                        break;
+                    }
+                    if self.restart_signal.load(Ordering::Relaxed) {
+                        log::info!("Finished local listening (on restart signal)");
+                        break;
                     }
                 }
             }
@@ -293,14 +296,17 @@ pub fn start_local_sync(
 pub fn start_local_watch(
     context: &Context,
     operational_sender: &Sender<OperationalMessage>,
-    main_receiver: &CrossbeamReceiver<MainMessage>,
+    stop_signal: &Arc<AtomicBool>,
+    restart_signal: &Arc<AtomicBool>,
 ) -> Result<JoinHandle<Result<(), Error>>, Error> {
     let local_watcher_context = context.clone();
     let local_watcher_operational_sender = operational_sender.clone();
-    let local_watcher_main_receiver = main_receiver.clone();
+    let local_watcher_stop_signal = stop_signal.clone();
+    let local_watcher_restart_signal = restart_signal.clone();
 
     let mut local_watcher = LocalWatcher::new(
-        local_watcher_main_receiver,
+        local_watcher_stop_signal,
+        local_watcher_restart_signal,
         local_watcher_operational_sender,
         local_watcher_context.folder_path.clone(),
     )?;

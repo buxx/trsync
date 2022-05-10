@@ -1,8 +1,14 @@
-use crate::{database::Database, Error, MainMessage};
+use crate::database::Database;
+use crate::error::Error;
+use crate::message::MainMessage;
 use async_std::task;
 use bytes::Bytes;
 use std::{
-    sync::mpsc::Sender,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Sender,
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -44,7 +50,8 @@ impl RemoteEvent {
 
 pub struct RemoteWatcher {
     context: Context,
-    main_sender: CrossbeamSender<MainMessage>,
+    stop_signal: Arc<AtomicBool>,
+    restart_signal: Arc<AtomicBool>,
     operational_sender: Sender<OperationalMessage>,
 }
 
@@ -55,12 +62,14 @@ pub struct RemoteWatcher {
 impl RemoteWatcher {
     pub fn new(
         context: Context,
-        main_sender: CrossbeamSender<MainMessage>,
+        stop_signal: Arc<AtomicBool>,
+        restart_signal: Arc<AtomicBool>,
         operational_sender: Sender<OperationalMessage>,
     ) -> Self {
         Self {
             context,
-            main_sender,
+            stop_signal,
+            restart_signal,
             operational_sender,
         }
     }
@@ -89,28 +98,15 @@ impl RemoteWatcher {
                             },
                             Err(err) => {
                                 log::error!("Error when reading remote TLM : {:?}", err);
-                                self.main_sender
-                                    .send(MainMessage::Exit)
-                                    .expect("Channel was closed");
-                                // FIXME : ITS A HACK to be able to stop local watcher AND operational
-                                self.main_sender
-                                    .send(MainMessage::Exit)
-                                    .expect("Channel was closed");
-                                break;
+                                // TODO : What to do here ?
                             }
                         }
                     }
                     _ => {
-                        // FIXME 60s
+                        // FIXME 60s as configurable
                         if last_activity.elapsed().as_secs() > 60 {
                             log::info!("No activity since 60 seconds, break");
-                            self.main_sender
-                                .send(MainMessage::ConnectionLost)
-                                .expect("Channel was closed");
-                            // FIXME : ITS A HACK to be able to stop local watcher AND operational
-                            self.main_sender
-                                .send(MainMessage::ConnectionLost)
-                                .expect("Channel was closed");
+                            self.restart_signal.swap(true, Ordering::Relaxed);
                             break;
                         }
                     }
@@ -355,16 +351,19 @@ pub fn start_remote_sync(
 pub fn start_remote_watch(
     context: &Context,
     operational_sender: &Sender<OperationalMessage>,
-    main_sender: &CrossbeamSender<MainMessage>,
+    stop_signal: &Arc<AtomicBool>,
+    restart_signal: &Arc<AtomicBool>,
 ) -> Result<JoinHandle<Result<(), Error>>, Error> {
     let exit_after_sync = context.exit_after_sync;
     let remote_watcher_context = context.clone();
-    let remote_watcher_main_sender = main_sender.clone();
+    let remote_watcher_stop_signal = stop_signal.clone();
+    let remote_watcher_restart_signal = restart_signal.clone();
     let remote_watcher_operational_sender = operational_sender.clone();
 
     let mut remote_watcher = RemoteWatcher::new(
         remote_watcher_context,
-        remote_watcher_main_sender,
+        remote_watcher_stop_signal,
+        remote_watcher_restart_signal,
         remote_watcher_operational_sender,
     );
 

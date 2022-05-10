@@ -1,6 +1,5 @@
-use env_logger::Env;
-
 use crate::config::Config;
+use env_logger::Env;
 
 mod client;
 mod config;

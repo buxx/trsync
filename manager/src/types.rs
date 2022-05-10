@@ -20,3 +20,9 @@ impl TrsyncUid {
         &self.workspace_id
     }
 }
+
+impl std::fmt::Display for TrsyncUid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.instance_address, self.workspace_id)
+    }
+}

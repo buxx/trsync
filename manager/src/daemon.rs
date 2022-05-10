@@ -1,15 +1,14 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    process::{Child, Command},
-    sync::mpsc::Receiver,
-};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
+use trsync;
 
 use crate::{client::Client, config::Config, error::Error, message::DaemonMessage, types::*};
 
 pub struct Daemon {
     config: Config,
-    processes: HashMap<TrsyncUid, Child>,
+    processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
 }
 
 impl Daemon {
@@ -124,63 +123,40 @@ impl Daemon {
             .join(&instance.address)
             .join(workspace.label);
 
-        let child = if cfg!(target_os = "windows") {
-            let sub_command = [
-                &self.config.trsync_bin_path,
-                &folder_path.to_str().unwrap().to_string(),
-                &instance.address,
-                &format!("{}", workspace.workspace_id),
-                &instance.username,
-                "--env-var-pass",
-                "PASSWORD",
-            ]
-            .join(" ");
-            match Command::new("cmd")
-                .arg("/c")
-                .arg(sub_command)
-                .env("PASSWORD", &instance.password)
-                // FIXME : output to file ?
-                .spawn()
-            {
-                // FIXME details (specific error to spawn, stop ...)
-                Err(_) => return Err(Error::FailToSpawnTrsyncProcess),
-                Ok(child) => child,
-            }
-        } else {
-            // FIXME BS NOW : bin path ?
-            match Command::new(&self.config.trsync_bin_path)
-                .arg(folder_path)
-                .arg(&instance.address)
-                // FIXME BS NOW : add unsecure option
-                .arg(format!("{}", workspace.workspace_id))
-                .arg(&instance.username)
-                .arg("--env-var-pass")
-                .arg("PASSWORD")
-                .env("PASSWORD", &instance.password)
-                // FIXME : output to file ?
-                .spawn()
-            {
-                // FIXME details (specific error to spawn, stop ...)
-                Err(_) => return Err(Error::FailToSpawnTrsyncProcess),
-                Ok(child) => child,
+        let trsync_context = match trsync::context::Context::new(
+            !instance.unsecure,
+            instance.address.clone(),
+            instance.username.clone(),
+            instance.password.clone(),
+            // TODO
+            folder_path.to_str().unwrap().to_string(),
+            workspace.workspace_id as i32,
+            false,
+        ) {
+            Ok(context_) => context_,
+            Err(error) => {
+                return Err(Error::UnexpectedError(format!(
+                    "Unable to build trsync context : {:?}",
+                    error,
+                )))
             }
         };
 
-        self.processes.insert(trsync_uid, child);
+        let stop_signal = Arc::new(AtomicBool::new(false));
+        let thread_stop_signal = stop_signal.clone();
+        thread::spawn(move || trsync::run::run(trsync_context, thread_stop_signal));
+        self.processes.insert(trsync_uid, stop_signal);
         Ok(())
     }
 
     fn stop_process(&mut self, trsync_uid: TrsyncUid) -> Result<(), Error> {
-        let child = self
+        let stop_signal = self
             .processes
             .get_mut(&trsync_uid)
             .expect("Stop process imply that process exists");
 
-        log::info!("Stop process with pid '{}'", child.id());
-        // FIXME BS NOW : manage errors
-        child.kill().unwrap();
-        child.wait().unwrap();
-        log::info!("Stopped process with pid '{}'", child.id());
+        log::info!("Signal '{}' to stop", trsync_uid);
+        stop_signal.swap(true, Ordering::Relaxed);
 
         self.processes.remove(&trsync_uid);
         Ok(())
