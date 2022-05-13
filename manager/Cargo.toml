@@ -1,7 +1,15 @@
 [package]
-name = "trsync-manager"
+name = "trsync_manager"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "trsync_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "trsync_manager"
+path = "src/bin.rs"
 
 [dependencies]
 trsync = { path = "../trsync" }

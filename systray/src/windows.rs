@@ -13,7 +13,7 @@ pub fn run_tray(configure_bin_path: String) -> Result<(), String> {
     };
 
     match tray.add_menu_item("Configurer", move || {
-        println!("Run {}", configure_bin_path);
+        log::info!("Run {}", configure_bin_path);
         Command::new("cmd")
             .arg("/c")
             .arg(&configure_bin_path)

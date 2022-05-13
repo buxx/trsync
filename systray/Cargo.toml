@@ -1,13 +1,17 @@
 [package]
-name = "trsync-systray"
+name = "trsync_manager_systray"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+trsync_manager = {path = "../manager"}
+env_logger = "0.9.0"
+log = "0.4.13"
 tray-item = "0.7.0"
 structopt = "0.3.23"
 rust-ini = "0.18.0"
 dirs = "4.0.0"
+crossbeam-channel = "0.5"
 
 [target.'cfg(unix)'.dependencies]
 gtk = "0.15.4"

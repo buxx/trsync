@@ -1,4 +1,6 @@
-use std::{io, sync::mpsc::RecvError};
+use std::io;
+
+use crossbeam_channel::RecvError;
 
 #[derive(Debug)]
 pub enum Error {

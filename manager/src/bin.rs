@@ -1,4 +1,5 @@
-use crate::config::Config;
+use crate::{config::Config, message::DaemonControlMessage};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 
 mod client;
@@ -14,13 +15,20 @@ mod types;
 fn main() -> Result<(), error::Error> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    log::info!("Build config from env");
+    let (main_channel_sender, main_channel_receiver): (
+        Sender<DaemonControlMessage>,
+        Receiver<DaemonControlMessage>,
+    ) = unbounded();
+
+    log::info!("Read config");
     let config = Config::from_env()?;
+
     log::info!("Build and run reload watcher");
-    let reload_channel = reload::ReloadWatcher::new(config.clone()).watch()?;
+    reload::ReloadWatcher::new(config.clone(), main_channel_sender.clone()).start()?;
+
     log::info!("Start daemon");
     // FIXME : si erreur la pas de print :(
-    daemon::Daemon::new(config).run(reload_channel)?;
+    daemon::Daemon::new(config, main_channel_receiver).run()?;
     log::info!("Daemon finished, exit");
 
     Ok(())

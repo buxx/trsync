@@ -1,4 +1,7 @@
-use std::env;
+use std::{
+    env,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use env_logger::Env;
 use error::Error;
@@ -76,7 +79,8 @@ fn main() -> Result<(), Error> {
     };
 
     let context = opt.to_context(password.clone())?;
-    run::run(context)?;
+    let _stop_signal = Arc::new(AtomicBool::new(false));
+    run::run(context, _stop_signal)?;
     log::info!("Exit application");
     Ok(())
 }

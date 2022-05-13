@@ -15,7 +15,7 @@ pub fn run_tray(configure_bin_path: String) -> Result<(), String> {
     };
 
     match tray.add_menu_item("Configurer", move || {
-        println!("Run {}", configure_bin_path);
+        log::info!("Run {}", configure_bin_path);
         Command::new(&configure_bin_path).spawn().unwrap();
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),

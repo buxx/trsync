@@ -1,26 +1,24 @@
-use std::{
-    fs::OpenOptions,
-    sync::mpsc::{channel, Receiver},
-    thread,
-    time::Duration,
-};
+use std::{fs::OpenOptions, sync::mpsc::channel, thread, time::Duration};
 
+use crossbeam_channel::Sender;
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 
-use crate::{config::Config, error::Error, message::DaemonMessage};
+use crate::{config::Config, error::Error, message::DaemonControlMessage};
 
 pub struct ReloadWatcher {
     _config: Config,
+    main_channel_sender: Sender<DaemonControlMessage>,
 }
 
 impl ReloadWatcher {
-    pub fn new(config: Config) -> Self {
-        Self { _config: config }
+    pub fn new(config: Config, main_channel_sender: Sender<DaemonControlMessage>) -> Self {
+        Self {
+            _config: config,
+            main_channel_sender,
+        }
     }
 
-    pub fn watch(&mut self) -> Result<Receiver<DaemonMessage>, Error> {
-        let (sender, receiver) = channel();
-
+    pub fn start(&mut self) -> Result<(), Error> {
         let user_home_folder_path = match dirs::home_dir() {
             Some(folder) => folder,
             None => return Err(Error::UnableToFindHomeUser),
@@ -47,6 +45,7 @@ impl ReloadWatcher {
         }
         let (inotify_sender, inotify_receiver) = channel();
 
+        let main_channel_sender = self.main_channel_sender.clone();
         thread::spawn(move || {
             // FIXME error
             let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
@@ -65,7 +64,7 @@ impl ReloadWatcher {
                                 continue;
                             }
                         };
-                        match sender.send(DaemonMessage::ReloadFromConfig(config)) {
+                        match main_channel_sender.send(DaemonControlMessage::Reload(config)) {
                             Err(error) => {
                                 log::error!("Unable to send reload message : {:?}", error);
                                 // FIXME : Should interupt or restart daemon ?
@@ -86,6 +85,6 @@ impl ReloadWatcher {
             log::info!("End inotify thread");
         });
 
-        Ok(receiver)
+        Ok(())
     }
 }

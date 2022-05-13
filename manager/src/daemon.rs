@@ -1,35 +1,40 @@
+use crossbeam_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
+use std::{collections::HashMap, path::Path};
 use trsync;
 
-use crate::{client::Client, config::Config, error::Error, message::DaemonMessage, types::*};
+use crate::{
+    client::Client, config::Config, error::Error, message::DaemonControlMessage, types::*,
+};
 
 pub struct Daemon {
     config: Config,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
+    main_channel_receiver: Receiver<DaemonControlMessage>,
 }
 
 impl Daemon {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, main_channel_receiver: Receiver<DaemonControlMessage>) -> Self {
         Self {
             config,
             processes: HashMap::new(),
+            main_channel_receiver,
         }
     }
 
-    pub fn run(&mut self, reload_channel: Receiver<DaemonMessage>) -> Result<(), Error> {
+    pub fn run(&mut self) -> Result<(), Error> {
         self.ensure_processes()?;
 
         loop {
-            // Blocking until new message received
-            match reload_channel.recv() {
-                Ok(DaemonMessage::ReloadFromConfig(new_config)) => {
+            // Block until new message received
+            match self.main_channel_receiver.recv() {
+                Ok(DaemonControlMessage::Reload(new_config)) => {
                     self.config = new_config;
                     self.ensure_processes()?
                 }
-                Ok(DaemonMessage::Stop) => break,
+                Ok(DaemonControlMessage::Stop) => break,
                 Err(error) => return Err(Error::from(error)),
             }
         }
