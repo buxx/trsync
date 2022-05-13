@@ -6,7 +6,6 @@ use crate::{error::Error, model::Instance};
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub trsync_bin_path: String,
     pub listen_timeout: Duration,
     pub local_folder: String,
     pub instances: Vec<Instance>,
@@ -66,16 +65,6 @@ impl Config {
                 "read local_folder config from server section is empty".to_string(),
             ));
         }
-
-        let trsync_bin_path = match config_ini.get_from(Some("server"), "trsync_bin_path") {
-            Some(value) => value,
-            None => {
-                return Err(Error::ReadConfigError(
-                    "Unable to read trsync_bin_path config from server section".to_string(),
-                ))
-            }
-        }
-        .to_string();
 
         let mut instances = vec![];
         let instances_raw = match config_ini.get_from(Some("server"), "instances") {
@@ -179,7 +168,6 @@ impl Config {
         }
 
         Ok(Self {
-            trsync_bin_path,
             listen_timeout,
             local_folder,
             instances,

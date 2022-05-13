@@ -4,7 +4,6 @@ use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub trsync_manager_bin_path: String,
     pub trsync_manager_configure_bin_path: String,
 }
 impl Config {
@@ -35,18 +34,6 @@ impl Config {
     }
 
     pub fn from_ini(config_ini: Ini) -> Result<Self, Error> {
-        let trsync_manager_bin_path = match config_ini
-            .get_from(Some("server"), "trsync_manager_bin_path")
-        {
-            Some(value) => value,
-            None => {
-                return Err(Error::ReadConfigError(
-                    "Unable to read trsync_manager_bin_path config from server section".to_string(),
-                ))
-            }
-        }
-        .to_string();
-
         let trsync_manager_configure_bin_path =
             match config_ini.get_from(Some("server"), "trsync_manager_configure_bin_path") {
                 Some(value) => value,
@@ -58,7 +45,6 @@ impl Config {
             .to_string();
 
         Ok(Self {
-            trsync_manager_bin_path,
             trsync_manager_configure_bin_path,
         })
     }
