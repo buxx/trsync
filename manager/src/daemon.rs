@@ -43,6 +43,12 @@ impl Daemon {
     }
 
     pub fn ensure_processes(&mut self) -> Result<(), Error> {
+        // Managing process is valid only if local folder has been configured
+        if self.config.local_folder.is_none() {
+            log::info!("Local folder is not configured, skipping process management");
+            return Ok(());
+        }
+
         let processes_to_start = self.get_processes_to_start();
         let processes_to_stop = self.get_processes_to_stop();
 
@@ -110,6 +116,11 @@ impl Daemon {
     }
 
     fn start_process(&mut self, trsync_uid: TrsyncUid) -> Result<(), Error> {
+        let local_folder = self
+            .config
+            .local_folder
+            .clone()
+            .expect("Local folder is not configured");
         let instance = self
             .config
             .instances
@@ -124,7 +135,7 @@ impl Daemon {
                     return Err(Error::FailToSpawnTrsyncProcess);
                 }
             };
-        let folder_path = Path::new(&self.config.local_folder)
+        let folder_path = Path::new(&local_folder)
             .join(&instance.address)
             .join(workspace.label);
 

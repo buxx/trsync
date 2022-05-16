@@ -7,7 +7,7 @@ use crate::{error::Error, model::Instance};
 #[derive(Debug, Clone)]
 pub struct Config {
     pub listen_timeout: Duration,
-    pub local_folder: String,
+    pub local_folder: Option<String>,
     pub instances: Vec<Instance>,
 }
 impl Config {
@@ -51,20 +51,19 @@ impl Config {
             }
         };
         let local_folder = match config_ini.get_from(Some("server"), "local_folder") {
-            Some(value) => value,
+            Some(value) => {
+                if value.trim() == "" {
+                    None
+                } else {
+                    Some(value.to_string())
+                }
+            }
             None => {
                 return Err(Error::ReadConfigError(
                     "Unable to read local_folder config from server section".to_string(),
                 ))
             }
-        }
-        .to_string();
-
-        if local_folder.trim() == "" {
-            return Err(Error::ReadConfigError(
-                "read local_folder config from server section is empty".to_string(),
-            ));
-        }
+        };
 
         let mut instances = vec![];
         let instances_raw = match config_ini.get_from(Some("server"), "instances") {
