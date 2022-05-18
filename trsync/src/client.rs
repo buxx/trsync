@@ -510,7 +510,7 @@ impl Client {
                     value
                 )))?;
                 let revision_id =
-                    data["last_revision_id"]
+                    data["current_revision_id"]
                         .as_i64()
                         .ok_or(Error::UnexpectedError(format!(
                     "Response content object do not contains a integer last_revision_id : {:?}",
