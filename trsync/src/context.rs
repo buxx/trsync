@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::error::Error;
 use crate::util;
 
+// FIXME : exclude password from debug print
 #[derive(Debug, Clone)]
 pub struct Context {
     pub base_address: String,
