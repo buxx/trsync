@@ -135,9 +135,14 @@ impl Daemon {
                     return Err(Error::FailToSpawnTrsyncProcess);
                 }
             };
-        let folder_path = Path::new(&local_folder)
-            .join(&instance.address)
-            .join(workspace.label);
+
+        // FIXME : clean this code
+        let folder_path = std::fs::canonicalize(
+            Path::new(&local_folder)
+                .join(&instance.address)
+                .join(workspace.label),
+        )
+        .unwrap();
 
         let trsync_context = match trsync::context::Context::new(
             !instance.unsecure,
