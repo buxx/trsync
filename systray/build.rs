@@ -1,5 +1,9 @@
+#[cfg(target_os = "windows")]
 use windres::Build;
 
 fn main() {
-    Build::new().compile("tray.rc").unwrap();
+    #[cfg(target_os = "windows")]
+    {
+        Build::new().compile("trsync.rc").unwrap();
+    }
 }
