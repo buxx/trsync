@@ -6,20 +6,78 @@ Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) sh
 
 ## State of trsync
 
-trsync is in development. You can try it by following next sections.
+Trsync is in development. You can try it by following next sections.
 
-## Run development version
+## What is in this repository
 
-You must have [rust](https://www.rust-lang.org/) programming language installed on you system.
+### trsync
 
-You need some dependencies, debian-like command to install them :
+This is the tool permitting to synchronize one Tracim shared space with one local folder.
+
+### manager
+
+Daemon which manage multiples trsync executions by reading a config file.
+
+### systray
+
+Task bar icon program permitting to start a graphical configuration window to fill manager config file.
+
+## What is not in this repository
+
+### configure
+
+The configuration windows program is available to [buxx/trsync-manager-configure](https://github.com/buxx/trsync-manager-configure)
+
+## Install from source
+
+Please install following dependencies, on linux :
 
     apt-get install build-essential pkg-config libssl-dev libsqlite3-dev
 
-From root of this repository, run :
+On Windows, install C++ build tools and sqlite3 dev.
 
-    cargo run <path of folder to sync> <tracim address> <workspace id> <tracim username>
+### trsync
+
+Required : [Rust](https://www.rust-lang.org/tools/install)
+
+1. Clone this repository
+2. `cargo build --release --bin trsync` (`cargo build --features windows --release --bin trsync` if compiling with Windows)
+3. Binary file available in `target/release`folder
+
+### manager
+
+1. Clone this repository
+2. `cargo build --release --bin trsync_manager` (`cargo build --features windows --release --bin trsync_manager` if compiling with Windows)
+3. Binary file available in `target/release`folder
+
+### systray
+
+1. Clone this repository
+2. `cargo build --release --bin trsync_manager_systray` (`cargo build --features windows --release --bin trsync_manager_systray` if compiling with Windows)
+3. Binary file available in `target/release`folder
+
+## Usage
+
+### trsync
+
+Usage :
+
+    trsync <path of folder to sync> <tracim address> <workspace id> <tracim username>
 
 Example :
 
     cargo run ~/Tracim/MyProject mon.tracim.fr 42 bux
+
+### manager
+
+Create file at `~/trsync.conf` from `trsync.conf.tpl` and filled with your needs.
+
+Then start `trsync_manager` binary.
+
+### systray
+
+You need [trsync-manager-configure](https://github.com/buxx/trsync-manager-configure) bin on your system.
+
+You need a configuration file like at previous "manager" section.
+
+Then start `trsync_manager_systray` binary.
