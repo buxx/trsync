@@ -4,4 +4,5 @@ use crate::config::Config;
 pub enum DaemonControlMessage {
     Reload(Config),
     Stop,
+    StorePassword(String, String), // instance_name, password
 }

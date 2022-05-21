@@ -9,6 +9,7 @@ pub struct Config {
     pub listen_timeout: Duration,
     pub local_folder: Option<String>,
     pub instances: Vec<Instance>,
+    pub use_raw_passwords: bool,
 }
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
@@ -170,6 +171,12 @@ impl Config {
             listen_timeout,
             local_folder,
             instances,
+            use_raw_passwords: true,
         })
+    }
+
+    pub fn with_use_raw_passwords(mut self, use_raw_passwords: bool) -> Self {
+        self.use_raw_passwords = use_raw_passwords;
+        self
     }
 }

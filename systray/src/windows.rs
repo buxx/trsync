@@ -14,11 +14,20 @@ pub fn run_tray(configure_bin_path: String) -> Result<(), String> {
 
     match tray.add_menu_item("Configurer", move || {
         log::info!("Run {}", configure_bin_path);
-        Command::new("cmd")
-            .arg("/c")
-            .arg(&configure_bin_path)
-            .spawn()
-            .unwrap();
+        if let Some(password_setter_port_) = password_setter_port {
+            Command::new("cmd")
+                .arg("/c")
+                .arg(&configure_bin_path)
+                .arg(format!("--password-setter-port={}", password_setter_port_))
+                .spawn()
+                .unwrap();
+        } else {
+            Command::new("cmd")
+                .arg("/c")
+                .arg(&configure_bin_path)
+                .spawn()
+                .unwrap();
+        };
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
         _ => {}
