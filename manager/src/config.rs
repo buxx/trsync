@@ -2,17 +2,17 @@ use std::time::Duration;
 
 use ini::Ini;
 
-use crate::{error::Error, model::Instance};
+use crate::{error::Error, model::Instance, security};
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub listen_timeout: Duration,
     pub local_folder: Option<String>,
     pub instances: Vec<Instance>,
-    pub use_raw_passwords: bool,
+    pub allow_raw_passwords: bool,
 }
 impl Config {
-    pub fn from_env() -> Result<Self, Error> {
+    pub fn from_env(allow_raw_passwords: bool) -> Result<Self, Error> {
         let user_home_folder_path = match dirs::home_dir() {
             Some(folder) => folder,
             None => return Err(Error::UnableToFindHomeUser),
@@ -35,10 +35,11 @@ impl Config {
                 )))
             }
         };
-        Self::from_ini(config_ini)
+        Self::from_ini(config_ini, allow_raw_passwords)
     }
 
-    pub fn from_ini(config_ini: Ini) -> Result<Self, Error> {
+    pub fn from_ini(config_ini: Ini, allow_raw_passwords: bool) -> Result<Self, Error> {
+        let os_username = whoami::username();
         let listen_timeout = match config_ini
             .get_from(Some("server"), "listen_timeout")
             .unwrap_or("60")
@@ -120,25 +121,34 @@ impl Config {
                     )))
                 }
             };
-            // FIXME : password asked with debian 11
-            // let password = match get_password(&address, &username) {
-            //     Ok(password) => password,
-            //     Err(_) => {
-            //         log::error!("Experimental feature : read password from config file instead use keyring service");
-            //         config_ini
-            //             .get_from(Some(&section_name), "password")
-            //             .unwrap()
-            //             .to_string()
-            //         // return Err(Error::ReadConfigError(format!(
-            //         //     "Unable to get password from keyring for instance {} (trsync::{},{}) and username {} : {}",
-            //         //     &instance_name, address, username, username, error
-            //         // )))
-            //     }
-            // };
-            let password = config_ini
-                .get_from(Some(&section_name), "password")
-                .unwrap()
-                .to_string();
+
+            // try to get password from keyring
+            let password = match security::get_password(&address, &os_username) {
+                Ok(password_) => password_,
+                Err(error) => {
+                    if !allow_raw_passwords {
+                        log::error!(
+                            "Unable to read password from keyring for instance '{}' and user '{os_username}', this instance will be ignored : '{}'",
+                            &address,
+                            error,
+                        );
+                        continue;
+                    }
+
+                    match config_ini.get_from(Some(&section_name), "password") {
+                        Some(password) => password.to_string(),
+                        None => {
+                            log::error!(
+                                "Unable to read password from config for instance '{}' and user '{os_username}', this instance will be ignored : '{}'",
+                                &address,
+                                error,
+                            );
+                            continue;
+                        }
+                    }
+                }
+            };
+
             if workspace_ids_raw.trim() != "" {
                 for workspace_id_raw in workspace_ids_raw
                     .split(",")
@@ -171,12 +181,7 @@ impl Config {
             listen_timeout,
             local_folder,
             instances,
-            use_raw_passwords: true,
+            allow_raw_passwords,
         })
-    }
-
-    pub fn with_use_raw_passwords(mut self, use_raw_passwords: bool) -> Self {
-        self.use_raw_passwords = use_raw_passwords;
-        self
     }
 }

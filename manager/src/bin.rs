@@ -21,7 +21,7 @@ fn main() -> Result<(), error::Error> {
     ) = unbounded();
 
     log::info!("Read config");
-    let config = Config::from_env()?;
+    let config = Config::from_env(true)?;
 
     log::info!("Build and run reload watcher");
     reload::ReloadWatcher::new(config.clone(), main_channel_sender.clone()).start()?;

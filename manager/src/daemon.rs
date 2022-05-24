@@ -5,7 +5,6 @@ use std::thread;
 use std::{collections::HashMap, path::Path};
 use trsync;
 
-use crate::security;
 use crate::{
     client::Client, config::Config, error::Error, message::DaemonControlMessage, types::*,
 };
@@ -26,7 +25,6 @@ impl Daemon {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
-        let username = whoami::username();
         self.ensure_processes()?;
 
         loop {
@@ -35,10 +33,6 @@ impl Daemon {
                 Ok(DaemonControlMessage::Reload(new_config)) => {
                     self.config = new_config;
                     self.ensure_processes()?
-                }
-                Ok(DaemonControlMessage::StorePassword(instance_name, password)) => {
-                    // FIXME : manage error
-                    security::set_password(&instance_name, &username, &password).unwrap();
                 }
                 Ok(DaemonControlMessage::Stop) => break,
                 Err(error) => return Err(Error::from(error)),

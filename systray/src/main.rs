@@ -2,8 +2,8 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 use error::Error;
 use std::process::exit;
-use structopt::StructOpt;
 use trsync_manager;
+use uuid::Uuid;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -16,21 +16,8 @@ mod error;
 mod password;
 mod utils;
 
-enum PasswordMode {
-    Raw,
-    Keyring,
-}
-
-#[derive(StructOpt, Debug)]
-#[structopt(name = "basic")]
-struct Opt {
-    #[structopt(name = "--use-raw-password", short, long)]
-    use_raw_password: bool,
-}
-
 fn run() -> Result<(), Error> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    let opt = Opt::from_args();
 
     let config = match config::Config::from_env() {
         Ok(config_) => config_,
@@ -48,8 +35,7 @@ fn run() -> Result<(), Error> {
         Sender<trsync_manager::message::DaemonControlMessage>,
         Receiver<trsync_manager::message::DaemonControlMessage>,
     ) = unbounded();
-    let config =
-        trsync_manager::config::Config::from_env()?.with_use_raw_passwords(opt.use_raw_password);
+    let config = trsync_manager::config::Config::from_env(false)?;
     trsync_manager::reload::ReloadWatcher::new(config.clone(), main_channel_sender.clone())
         .start()?;
     let manager_child = std::thread::spawn(move || {
@@ -59,23 +45,20 @@ fn run() -> Result<(), Error> {
             .unwrap();
     });
 
-    // If raw password is disabled, start password http receiver
-    let password_setter_port = if !opt.use_raw_password {
-        log::info!("Raw password disabled, prepare to start password receiver");
-        let available_port = utils::get_available_port().unwrap();
-        password::start_password_receiver_server(main_channel_sender.clone(), available_port);
-        log::info!("Password receiver started on port: {}", available_port);
-        Some(available_port)
-    } else {
-        None
-    };
+    // Start password http receiver
+    log::info!("Raw password disabled, prepare to start password receiver");
+    let password_port = utils::get_available_port().unwrap();
+    let password_token = Uuid::new_v4().to_string();
+    password::start_password_receiver_server(password_port, &password_token);
+    log::info!("Password receiver started on port: {}", &password_port);
 
     log::info!("Start systray");
     #[cfg(target_os = "linux")]
     {
         match linux::run_tray(
             trsync_manager_configure_bin_path.clone(),
-            password_setter_port,
+            password_port,
+            &password_token,
         ) {
             Err(error) => {
                 log::error!("{}", error)
@@ -88,7 +71,8 @@ fn run() -> Result<(), Error> {
     {
         match windows::run_tray(
             trsync_manager_configure_bin_path.clone(),
-            password_setter_port,
+            password_port,
+            &password_token,
         ) {
             Err(error) => {
                 log::error!("{}", error)
