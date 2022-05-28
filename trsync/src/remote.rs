@@ -1,6 +1,5 @@
 use crate::database::Database;
 use crate::error::Error;
-use crate::message::MainMessage;
 use async_std::task;
 use bytes::Bytes;
 use std::{
@@ -13,7 +12,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossbeam_channel::Sender as CrossbeamSender;
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
@@ -29,6 +27,8 @@ use crate::{
     operation::OperationalMessage,
     types::{ContentId, RemoteEventType, RevisionId},
 };
+
+const LAST_ACTIVITY_TIMEOUT: u64 = 60;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RemoteEvent {
@@ -103,9 +103,11 @@ impl RemoteWatcher {
                         }
                     }
                     _ => {
-                        // FIXME 60s as configurable
-                        if last_activity.elapsed().as_secs() > 60 {
-                            log::info!("No activity since 60 seconds, break");
+                        if last_activity.elapsed().as_secs() > LAST_ACTIVITY_TIMEOUT {
+                            log::info!(
+                                "No activity since '{}' seconds, break",
+                                LAST_ACTIVITY_TIMEOUT
+                            );
                             self.restart_signal.swap(true, Ordering::Relaxed);
                             break;
                         }
@@ -128,7 +130,7 @@ impl RemoteWatcher {
                         Ok(remote_event) => self.proceed_remote_event(remote_event)?,
                         Err(error) => {
                             log::error!(
-                                "Error when decoding event : {}. Event as str was: {}",
+                                "Error when decoding event : '{}'. Event as str was: '{}'",
                                 error,
                                 json_as_str
                             )
@@ -198,24 +200,24 @@ impl RemoteWatcher {
                 }
                 _ => {
                     return Err(Error::UnexpectedError(format!(
-                        "Not managed event type : {}",
+                        "Not managed event type : '{}'",
                         event_type
                     )))
                 }
             };
             match self.operational_sender.send(message) {
                 Ok(_) => (),
-                // FIXME : stop trsync
+                // TODO : stop trsync ?
                 Err(err) => {
                     log::error!(
-                        "Error when send operational message from remote watcher : {}",
+                        "Error when send operational message from remote watcher : '{}'",
                         err
                     )
                 }
             };
         } else {
             log::debug!(
-                "Ignore remote event : {}",
+                "Ignore remote event : '{}'",
                 &remote_event.event_type.as_str()
             )
         }
@@ -273,7 +275,7 @@ impl RemoteSync {
                         {
                             Err(error) => {
                                 log::error!(
-                                    "Error when send operational message from remote sync : {}",
+                                    "Error when send operational message from remote sync : '{}'",
                                     error
                                 )
                             }
@@ -288,7 +290,7 @@ impl RemoteSync {
                     {
                         Err(error) => {
                             log::error!(
-                                "Error when send operational message from remote sync : {}",
+                                "Error when send operational message from remote sync : '{}'",
                                 error
                             )
                         }
@@ -296,7 +298,7 @@ impl RemoteSync {
                     }
                 }
                 Err(error) => {
-                    log::error!("Error when comparing revision : {}", error)
+                    log::error!("Error when comparing revision : '{}'", error)
                 }
             }
         }
@@ -311,7 +313,7 @@ impl RemoteSync {
                 {
                     Err(error) => {
                         log::error!(
-                            "Error when send operational message from remote sync : {}",
+                            "Error when send operational message from remote sync : '{}'",
                             error
                         )
                     }

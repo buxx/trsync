@@ -116,7 +116,7 @@ impl LocalWatcher {
                 Ok(_) => (),
                 Err(err) => {
                     log::error!(
-                        "Error when send operational message from local watcher : {}",
+                        "Error when send operational message from local watcher : '{}'",
                         err
                     )
                 }
@@ -169,7 +169,7 @@ impl LocalSync {
                     }
                 },
                 Err(error) => {
-                    log::error!("Fail to walk on dir {:?} : {}", &dir_entry, error)
+                    log::error!("Fail to walk on dir {:?} : '{}'", &dir_entry, error)
                 }
             })
     }
@@ -258,7 +258,7 @@ impl LocalSync {
                     .send(OperationalMessage::DeletedLocalFile(relative_path.clone()))
                 {
                     Err(error) => {
-                        log::error!("Fail to send operational message : {}", error)
+                        log::error!("Fail to send operational message : '{}'", error)
                     }
                     _ => {}
                 }

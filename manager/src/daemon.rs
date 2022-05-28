@@ -137,13 +137,18 @@ impl Daemon {
                 }
             };
 
-        // FIXME : clean this code
-        let folder_path = std::fs::canonicalize(
+        let folder_path = match std::fs::canonicalize(
             Path::new(&local_folder)
                 .join(&instance.address)
                 .join(workspace.label),
-        )
-        .unwrap();
+        ) {
+            Ok(folder_path_) => folder_path_,
+            Err(error) => {
+                return Err(Error::FailToSpawnTrsyncProcess(Some(format!(
+                    "Error during folder path canonicalization : '{error}'"
+                ))))
+            }
+        };
 
         let trsync_context = match trsync::context::Context::new(
             !instance.unsecure,

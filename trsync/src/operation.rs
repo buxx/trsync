@@ -386,7 +386,7 @@ impl OperationalHandler {
                     let level = util::io_error_to_log_level(&error);
                     log::log!(
                         level,
-                        "Error during creation of {:?} : {}",
+                        "Error during creation of {:?} : '{}'",
                         absolute_path,
                         error
                     )

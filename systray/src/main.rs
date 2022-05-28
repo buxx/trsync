@@ -50,7 +50,7 @@ fn run() -> Result<(), Error> {
     let password_port = utils::get_available_port().unwrap();
     let password_token = Uuid::new_v4().to_string();
     password::start_password_receiver_server(password_port, &password_token);
-    log::info!("Password receiver started on port: {}", &password_port);
+    log::info!("Password receiver started on port: '{}'", &password_port);
 
     log::info!("Start systray");
     #[cfg(target_os = "linux")]

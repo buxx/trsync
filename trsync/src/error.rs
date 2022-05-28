@@ -33,21 +33,23 @@ impl fmt::Display for ClientError {
                 format!("Error when reading input file '{}'", absolute_file_path)
             }
             ClientError::RequestError(message) => {
-                format!("Error when making request : {}", message)
+                format!("Error when making request : '{}'", message)
             }
             ClientError::UnexpectedResponse(message) => {
-                format!("UnExpected response : {}", message)
+                format!("UnExpected response : '{}'", message)
             }
             ClientError::AlreadyExistResponse(content_id, revision_id) => {
-                format!("Content already exist : {}({})", content_id, revision_id)
+                format!("Content already exist : '{}'({})", content_id, revision_id)
             }
             ClientError::AlreadyExistResponseAndFailToFoundIt(message) => format!(
-                "Already exist but fail to found remote content : {}",
+                "Already exist but fail to found remote content : '{}'",
                 message
             ),
-            ClientError::NotFoundResponse(message) => format!("Not found : {}", message),
-            ClientError::DecodingResponseError(message) => format!("Decoding error : {}", message),
-            ClientError::NotRelevant(message) => format!("Note : {}", message),
+            ClientError::NotFoundResponse(message) => format!("Not found : '{}'", message),
+            ClientError::DecodingResponseError(message) => {
+                format!("Decoding error : '{}'", message)
+            }
+            ClientError::NotRelevant(message) => format!("Note : '{}'", message),
         };
         write!(f, "{}", message)
     }

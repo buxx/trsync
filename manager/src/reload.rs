@@ -48,11 +48,21 @@ impl ReloadWatcher {
         let main_channel_sender = self.main_channel_sender.clone();
         let allow_raw_passwords = self.config.allow_raw_passwords;
         thread::spawn(move || {
-            // FIXME error
-            let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1)).unwrap();
-            inotify_watcher
-                .watch(tracked_file_path, RecursiveMode::NonRecursive)
-                .unwrap(); // FIXME
+            let mut inotify_watcher = match watcher(inotify_sender, Duration::from_secs(1)) {
+                Ok(watcher) => watcher,
+                Err(error) => {
+                    // TODO : display error to the user
+                    log::error!("Unable to create inotify watcher: '{}'", error);
+                    return;
+                }
+            };
+            if let Err(error) =
+                inotify_watcher.watch(tracked_file_path, RecursiveMode::NonRecursive)
+            {
+                // TODO : display error to the user
+                log::error!("Unable to start reload watcher : '{}'", error);
+                return;
+            }
 
             loop {
                 match inotify_receiver.recv() {
@@ -60,30 +70,28 @@ impl ReloadWatcher {
                         let config = match Config::from_env(allow_raw_passwords) {
                             Ok(config_) => config_,
                             Err(error) => {
-                                // FIXME more elegant message
-                                log::error!("{:?}", error);
+                                // TODO : Notify user of error
+                                log::error!("Error during config reading : '{:?}'", error);
                                 continue;
                             }
                         };
                         match main_channel_sender.send(DaemonControlMessage::Reload(config)) {
                             Err(error) => {
-                                log::error!("Unable to send reload message : {:?}", error);
-                                // FIXME : Should interupt or restart daemon ?
-                                break;
+                                log::error!("Unable to send reload message : '{:?}'", error);
+                                // TODO : Notify user of error
+                                continue;
                             }
                             _ => {}
                         };
                     }
                     Ok(_) => {}
                     Err(error) => {
-                        log::error!("Unable to send reload message : {:?}", error);
-                        // FIXME : Should interupt or restart daemon ?
-                        break;
+                        log::error!("Unable to send reload message : '{:?}'", error);
+                        // TODO : Notify user of error
+                        continue;
                     }
                 }
             }
-
-            log::info!("End inotify thread");
         });
 
         Ok(())

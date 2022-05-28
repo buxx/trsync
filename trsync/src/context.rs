@@ -1,10 +1,10 @@
+use std::fmt;
 use std::path::Path;
 
 use crate::error::Error;
 use crate::util;
 
-// FIXME : exclude password from debug print
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Context {
     pub base_address: String,
     pub username: String,
@@ -44,5 +44,18 @@ impl Context {
             "{}workspaces/{}/{}",
             self.base_address, self.workspace_id, suffix
         )
+    }
+}
+
+impl fmt::Debug for Context {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Context")
+            .field("base_address", &self.base_address)
+            .field("username", &self.username)
+            .field("folder_path", &self.folder_path)
+            .field("base_address", &self.base_address)
+            .field("workspace_id", &self.workspace_id)
+            .field("exit_after_sync", &self.exit_after_sync)
+            .finish()
     }
 }

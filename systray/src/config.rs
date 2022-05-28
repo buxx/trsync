@@ -25,7 +25,7 @@ impl Config {
             Ok(content) => content,
             Err(error) => {
                 return Err(Error::ReadConfigError(format!(
-                    "Unable to read or load '{:?}' config file : {}",
+                    "Unable to read or load '{:?}' config file : '{}'",
                     &config_file_path, error,
                 )))
             }

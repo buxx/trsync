@@ -166,7 +166,7 @@ impl Client {
                             }
                             Err(err) => {
                                 Err(ClientError::AlreadyExistResponseAndFailToFoundIt(format!(
-                                    "Error when trying to found already existing content : {}",
+                                    "Error when trying to found already existing content : '{}'",
                                     err
                                 )))
                             }
@@ -181,7 +181,7 @@ impl Client {
             _ => {
                 let text = response.text()?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status was {} and response : {}",
+                    "Unexpected response status was {} and response : '{}'",
                     response_status, text
                 )))
             }
@@ -430,7 +430,7 @@ impl Client {
             _ => {
                 let text = response.text()?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status {} during fetching contents (parent_ids={:?}) : {}",
+                    "Unexpected response status {} during fetching contents (parent_ids={:?}) : '{}'",
                     status_code, parent_id, text
                 )))
             }
@@ -469,7 +469,7 @@ impl Client {
             _ => {
                 let text = response.text()?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status {} : {}",
+                    "Unexpected response status {} : '{}'",
                     response_status_code, text,
                 )))
             }
@@ -521,7 +521,7 @@ impl Client {
             _ => {
                 let text = response.text()?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status {} : {}",
+                    "Unexpected response status {} : '{}'",
                     response_status_code, text,
                 )))
             }
@@ -558,7 +558,7 @@ impl Client {
             _ => {
                 let text = response.text()?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status {} : {}",
+                    "Unexpected response status {} : '{}'",
                     response_status_code, text,
                 )))
             }
@@ -587,7 +587,7 @@ impl Client {
             _ => {
                 let text = response.text().await?;
                 Err(ClientError::UnexpectedResponse(format!(
-                    "Unexpected response status {} : {}",
+                    "Unexpected response status {} : '{}'",
                     response_status_code, text,
                 )))
             }
