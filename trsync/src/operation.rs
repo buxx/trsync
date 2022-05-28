@@ -11,10 +11,8 @@ use std::{
     time::Duration,
 };
 
-use crossbeam_channel::Receiver as CrossbeamReceiver;
 use rusqlite::Connection;
 
-use crate::message::MainMessage;
 use crate::{
     client::{Client, ParentIdParameter},
     context::Context,

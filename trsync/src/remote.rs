@@ -113,6 +113,11 @@ impl RemoteWatcher {
                         }
                     }
                 }
+
+                if self.stop_signal.load(Ordering::Relaxed) {
+                    log::info!("Finished remote listening (on stop signal)");
+                    break;
+                }
             }
 
             Ok(())
