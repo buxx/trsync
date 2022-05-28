@@ -81,8 +81,6 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
             log::info!("Synchronization finished, start changes resolver");
         }
 
-        // FIXME BS NOW : close channel ?
-
         // Operational
         let operational_handle = start_operation(
             &context,

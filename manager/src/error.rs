@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt::Display, io};
 
 use crossbeam_channel::RecvError;
 
@@ -7,7 +7,7 @@ pub enum Error {
     ChannelError(RecvError),
     UnableToFindHomeUser,
     ReadConfigError(String),
-    FailToSpawnTrsyncProcess,
+    FailToSpawnTrsyncProcess(Option<String>),
     UnexpectedError(String),
 }
 
@@ -39,5 +39,19 @@ impl From<notify::Error> for Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Error::UnexpectedError(format!("{:?}", error))
+    }
+}
+
+impl Display for ClientError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClientError::RequestError(message) => {
+                write!(f, "Error during http request: '{message}'")
+            }
+            ClientError::Unauthorized => write!(f, "Error during http request: Unauthorized"),
+            ClientError::UnexpectedResponse(message) => {
+                write!(f, "Unexpected http response: '{message}'")
+            }
+        }
     }
 }

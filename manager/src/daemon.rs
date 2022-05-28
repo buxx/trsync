@@ -120,19 +120,20 @@ impl Daemon {
             .config
             .local_folder
             .clone()
-            .expect("Local folder is not configured");
+            .expect("Local folder config must be configured");
         let instance = self
             .config
             .instances
             .iter()
             .find(|instance| instance.address == trsync_uid.instance_address())
-            .expect("Start process imply that instance exists");
+            .expect("Start process imply its instance exists");
         let workspace =
             match Client::new(instance.clone()).get_workspace(*trsync_uid.workspace_id()) {
                 Ok(workspace) => workspace,
-                Err(_) => {
-                    // FIXME BS NOW : more details
-                    return Err(Error::FailToSpawnTrsyncProcess);
+                Err(error) => {
+                    return Err(Error::FailToSpawnTrsyncProcess(Some(format!(
+                        "Error during workspace fetching : '{error}'"
+                    ))));
                 }
             };
 
