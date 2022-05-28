@@ -46,12 +46,38 @@ impl Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ClientError::RequestError(message) => {
-                write!(f, "Error during http request: '{message}'")
+                write!(f, "Error during http request: '{}'", message)
             }
             ClientError::Unauthorized => write!(f, "Error during http request: Unauthorized"),
             ClientError::UnexpectedResponse(message) => {
-                write!(f, "Unexpected http response: '{message}'")
+                write!(f, "Unexpected http response: '{}'", message)
             }
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::ChannelError(message) => {
+                write!(f, "Channel communication error : '{}'", message)
+            }
+            Error::UnableToFindHomeUser => write!(f, "Unable to find user home path"),
+            Error::ReadConfigError(message) => {
+                write!(f, "Error when reading config : '{}'", message)
+            }
+            Error::FailToSpawnTrsyncProcess(message) => {
+                if let Some(message_) = message {
+                    write!(
+                        f,
+                        "Error when trying to spawn trsync process : '{}'",
+                        message_
+                    )
+                } else {
+                    write!(f, "Error when trying to spawn trsync process")
+                }
+            }
+            Error::UnexpectedError(message) => write!(f, "Unexpected error : '{}'", message),
         }
     }
 }
