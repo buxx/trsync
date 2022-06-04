@@ -36,6 +36,10 @@ Please install following dependencies, on linux :
 
 On Windows, install C++ build tools and sqlite3 dev.
 
+For systray, install :
+
+    apt-get install libpango1.0-dev libgtk-3-dev
+
 Rust minimal required version is 1.56.0.
 
 ### trsync
