@@ -36,6 +36,8 @@ Please install following dependencies, on linux :
 
 On Windows, install C++ build tools and sqlite3 dev.
 
+Rust minimal required version is 1.56.0.
+
 ### trsync
 
 Required : [Rust](https://www.rust-lang.org/tools/install)
