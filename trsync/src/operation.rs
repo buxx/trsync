@@ -95,11 +95,19 @@ impl OperationalHandler {
             match receiver.recv_timeout(Duration::from_millis(150)) {
                 Err(_) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
-                        log::info!("Finished operational (on stop signal)");
+                        log::info!(
+                            "[{}::{}] Finished operational (on stop signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         break;
                     }
                     if self.restart_signal.load(Ordering::Relaxed) {
-                        log::info!("Finished operational (on restart signal)");
+                        log::info!(
+                            "[{}::{}] Finished operational (on restart signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         break;
                     }
                 }
@@ -148,7 +156,14 @@ impl OperationalHandler {
 
                     match return_ {
                         Err(err) => {
-                            log::log!(err.level(), "Error when {:?} : {:?}", message, err)
+                            log::log!(
+                                err.level(),
+                                "[{}::{}] Error when {:?} : {:?}",
+                                self.context.instance_name,
+                                self.context.workspace_id,
+                                message,
+                                err
+                            )
                         }
                         _ => {}
                     }
@@ -189,7 +204,9 @@ impl OperationalHandler {
 
         // Create it on remote
         log::debug!(
-            "Create remote content with disk file {:?}",
+            "[{}::{}] Create remote content with disk file {:?}",
+            self.context.instance_name,
+            self.context.workspace_id,
             &file_infos.absolute_path
         );
         let (content_id, revision_id) = match self.client.create_content(
@@ -250,7 +267,12 @@ impl OperationalHandler {
             .push(OperationalMessage::ModifiedRemoteFile(content_id));
 
         // Update file on remote
-        log::debug!("Update remote remote {}", content_id);
+        log::debug!(
+            "[{}::{}] Update remote {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            content_id
+        );
         let revision_id = self.client.update_content(
             file_infos.absolute_path,
             file_infos.file_name,
@@ -282,7 +304,12 @@ impl OperationalHandler {
         let content_id = database_operation.get_content_id_from_path(relative_path)?;
 
         // Delete on remote
-        log::debug!("Delete remote {}", content_id);
+        log::debug!(
+            "[{}::{}] Delete remote {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            content_id
+        );
         self.client.trash_content(content_id)?;
 
         // Prepare to ignore remote trashed event
@@ -324,7 +351,9 @@ impl OperationalHandler {
         // If path changes
         if before_parent_relative_path != after_parent_relative_path {
             log::debug!(
-                "Path of {:?} change for {:?}",
+                "[{}::{}] Path of {:?} change for {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
                 &before_parent_relative_path,
                 &after_parent_relative_path
             );
@@ -365,7 +394,9 @@ impl OperationalHandler {
         // Rename file name if changes
         if before_file_name != after_file_name {
             log::debug!(
-                "Rename remote {} from {:?} to {:?}",
+                "[{}::{}] Rename remote {} from {:?} to {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
                 content_id,
                 before_file_name,
                 after_file_name
@@ -415,21 +446,33 @@ impl OperationalHandler {
             // If parent content id is unknown, folder is not on disk
             if !DatabaseOperation::new(&self.connection).content_id_is_known(parent_id)? {
                 // Use recursive to create this parent and possible parents parent
-                log::debug!("Parent of {:?} is unknown, ensure it", &absolute_path);
+                log::debug!(
+                    "[{}::{}] Parent of {:?} is unknown, ensure it",
+                    self.context.instance_name,
+                    self.context.workspace_id,
+                    &absolute_path
+                );
                 self.new_remote_file(parent_id)?;
             }
         }
 
         // Write file/folder on disk
         if remote_content.content_type == "folder" {
-            log::debug!("Create disk folder {:?}", &absolute_path);
+            log::debug!(
+                "[{}::{}] Create disk folder {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &absolute_path
+            );
             match fs::create_dir_all(&absolute_path) {
                 Ok(_) => {}
                 Err(error) => {
                     let level = util::io_error_to_log_level(&error);
                     log::log!(
                         level,
-                        "Error during creation of {:?} : '{}'",
+                        "[{}::{}] Error during creation of {:?} : '{}'",
+                        self.context.instance_name,
+                        self.context.workspace_id,
                         absolute_path,
                         error
                     )
@@ -439,7 +482,12 @@ impl OperationalHandler {
             let mut response = self
                 .client
                 .get_file_content_response(remote_content.content_id, remote_content.filename)?;
-            log::debug!("Create disk file {:?}", &absolute_path);
+            log::debug!(
+                "[{}::{}] Create disk file {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &absolute_path
+            );
             let mut out = File::create(absolute_path)?;
             io::copy(&mut response, &mut out)?;
         }
@@ -494,7 +542,9 @@ impl OperationalHandler {
                 .join(remote_content.filename);
 
             log::info!(
-                "Rename disk folder {:?} into {:?}",
+                "[{}::{}] Rename disk folder {:?} into {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
                 &old_absolute_path,
                 &new_absolute_path
             );
@@ -514,7 +564,9 @@ impl OperationalHandler {
             util::FileInfos::from(self.context.folder_path.clone(), current_relative_path)?;
         if remote_content.filename != file_infos.file_name {
             log::debug!(
-                "Rename {} into {:?}",
+                "[{}::{}] Rename {} into {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
                 file_infos.absolute_path,
                 &absolute_path
             );
@@ -538,7 +590,9 @@ impl OperationalHandler {
             .get_file_content_response(content_id, remote_content.filename)?;
         // TODO : Manage case where file don't exist on disk
         log::debug!(
-            "Update disk file {:?} with content {}",
+            "[{}::{}] Update disk file {:?} with content {}",
+            self.context.instance_name,
+            self.context.workspace_id,
             &absolute_path,
             content_id,
         );
@@ -587,7 +641,12 @@ impl OperationalHandler {
             ));
 
         // Delete disk file
-        log::debug!("Remove disk file {:?}", &file_infos.absolute_path);
+        log::debug!(
+            "[{}::{}] Remove disk file {:?}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            &file_infos.absolute_path
+        );
         if file_infos.is_directory {
             fs::remove_dir_all(&file_infos.absolute_path)?;
         } else {
