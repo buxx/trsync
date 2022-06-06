@@ -488,9 +488,20 @@ impl Client {
         } else {
             self.context.workspace_url(&format!("files/{}", content_id))
         };
-        log::debug!("Update file {} on remote with url {}", content_id, &url);
+        log::debug!("Update file '{}' on remote with url '{}'", content_id, &url);
+
+        let label = {
+            let splitted = new_file_name.split(".").collect::<Vec<&str>>();
+            if splitted.len() > 1 {
+                splitted[splitted.len() - 2].to_string()
+            } else {
+                new_file_name.clone()
+            }
+        };
+
         let mut data = Map::new();
-        data.insert("label".to_string(), json!(new_file_name));
+        data.insert("label".to_string(), json!(label));
+        data.insert("file_name".to_string(), json!(new_file_name));
         let response = self
             .client
             .request(Method::PUT, url)
