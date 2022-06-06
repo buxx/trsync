@@ -1,8 +1,8 @@
 use crossbeam_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::{collections::HashMap, path::Path};
+use std::{fs, thread};
 use trsync;
 
 use crate::{
@@ -131,29 +131,36 @@ impl Daemon {
             match Client::new(instance.clone())?.get_workspace(*trsync_uid.workspace_id()) {
                 Ok(workspace) => workspace,
                 Err(error) => {
-                    return Err(Error::FailToSpawnTrsyncProcess(Some(format!(
+                    return Err(Error::UnexpectedError(format!(
                         "Error during workspace fetching : '{error}'"
-                    ))));
+                    )));
                 }
             };
 
-        let folder_path = match std::fs::canonicalize(
-            Path::new(&local_folder)
-                .join(&instance.address)
-                .join(workspace.label),
-        ) {
+        let folder_path = Path::new(&local_folder)
+            .join(&instance.address)
+            .join(workspace.label);
+        log::debug!("Prepare process for '{:?}'", &folder_path);
+        if let Err(error) = fs::create_dir_all(&folder_path) {
+            return Err(Error::UnexpectedError(format!(
+                "Error during folder '{:?}' creation : '{}'",
+                &folder_path, error
+            )));
+        };
+        let folder_path = match std::fs::canonicalize(&folder_path) {
             Ok(folder_path_) => folder_path_,
             Err(error) => {
-                return Err(Error::FailToSpawnTrsyncProcess(Some(format!(
-                    "Error during folder path canonicalization : '{error}'"
-                ))))
+                return Err(Error::UnexpectedError(format!(
+                    "Error during folder path '{:?}' canonicalization : '{}'",
+                    &folder_path, error
+                )))
             }
         };
         let folder_path = match folder_path.to_str() {
             Some(folder_path) => folder_path,
             None => {
                 return Err(Error::UnexpectedError(format!(
-                    "Error during folder path conversion to string (value is '{:?}')",
+                    "Error during folder path '{:?}' conversion to string",
                     folder_path
                 )));
             }
