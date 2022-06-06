@@ -174,7 +174,7 @@ impl RemoteWatcher {
                     )))?;
 
             if self.context.workspace_id != workspace_id as i32 {
-                log::info!("Remote event is not for current workspace, skip");
+                log::debug!("Remote event is not for current workspace, skip");
                 return Ok(());
             }
 

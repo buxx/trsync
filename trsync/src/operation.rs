@@ -70,7 +70,12 @@ impl OperationalHandler {
         // TODO : For local files, ignore some patterns given by config : eg. ".*", "*~"
         if self.ignore_messages.contains(&message) {
             self.ignore_messages.retain(|x| *x != *message);
-            log::debug!("Ignore message (planned ignore) : {:?}", &message);
+            log::debug!(
+                "[{}::{}] Ignore message (planned ignore) : {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &message
+            );
             return Ok(true);
         };
 
@@ -86,7 +91,6 @@ impl OperationalHandler {
     }
 
     pub fn listen(&mut self, receiver: Receiver<OperationalMessage>) {
-        // TODO : Why loop is required ?!
         loop {
             match receiver.recv_timeout(Duration::from_millis(150)) {
                 Err(_) => {
@@ -110,8 +114,6 @@ impl OperationalHandler {
                     } {
                         continue;
                     }
-
-                    log::info!("Operation : {:?}", &message);
 
                     let return_ = match &message {
                         // Local changes
@@ -156,6 +158,13 @@ impl OperationalHandler {
     }
 
     fn new_local_file(&mut self, relative_path: String) -> Result<(), Error> {
+        log::info!(
+            "[{}::{}] New local file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            relative_path
+        );
+
         // Prevent known bug : new local file is sometime an existing file
         if DatabaseOperation::new(&self.connection).relative_path_is_known(&relative_path)? {
             return self.modified_local_file(relative_path.clone());
@@ -222,6 +231,13 @@ impl OperationalHandler {
     }
 
     fn modified_local_file(&mut self, relative_path: RelativeFilePath) -> Result<(), Error> {
+        log::info!(
+            "[{}::{}] Modified local file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            relative_path
+        );
+
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
@@ -253,6 +269,13 @@ impl OperationalHandler {
     }
 
     fn deleted_local_file(&mut self, relative_path: String) -> Result<(), Error> {
+        log::info!(
+            "[{}::{}] Deleted local file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            relative_path
+        );
+
         let database_operation = DatabaseOperation::new(&self.connection);
 
         // Grab file infos
@@ -277,6 +300,14 @@ impl OperationalHandler {
         before_relative_path: String,
         after_relative_path: String,
     ) -> Result<(), Error> {
+        log::info!(
+            "[{}::{}] Renamed local file : {} -> {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            before_relative_path,
+            after_relative_path,
+        );
+
         let before_parent_relative_path = Path::new(&before_relative_path).parent();
         let after_parent_relative_path = Path::new(&after_relative_path).parent();
         let content_id = DatabaseOperation::new(&self.connection)
@@ -356,10 +387,24 @@ impl OperationalHandler {
     }
 
     fn new_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
+        log::debug!(
+            "[{}::{}] Prepare new remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            content_id
+        );
+
         // Grab file infos
         let remote_content = self.client.get_remote_content(content_id)?;
         let relative_path = self.client.build_relative_path(&remote_content)?;
         let absolute_path = Path::new(&self.context.folder_path).join(&relative_path);
+
+        log::info!(
+            "[{}::{}] New remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            relative_path,
+        );
 
         // Prepare to ignore new local file
         self.ignore_messages
@@ -415,10 +460,24 @@ impl OperationalHandler {
     fn modified_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
+        log::debug!(
+            "[{}::{}] Prepare modified remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            content_id
+        );
+
         // Grab file infos
         let remote_content = self.client.get_remote_content(content_id)?;
         let relative_path = self.client.build_relative_path(&remote_content)?;
         let absolute_path = Path::new(&self.context.folder_path).join(&relative_path);
+
+        log::info!(
+            "[{}::{}] Modified remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            relative_path,
+        );
 
         // TODO : use enum for content_type
         if remote_content.content_type == "folder" {
@@ -501,11 +560,25 @@ impl OperationalHandler {
     fn deleted_remote_file(&mut self, content_id: i32) -> Result<(), Error> {
         let database_operation = DatabaseOperation::new(&self.connection);
 
-        // Grab file infos (from local index, remote content has name changes)
+        log::debug!(
+            "[{}::{}] Prepare delete remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            content_id
+        );
 
+        // Grab file infos (from local index, remote content has name changes)
         let relative_path =
             DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos =
+            util::FileInfos::from(self.context.folder_path.clone(), relative_path.clone())?;
+
+        log::info!(
+            "[{}::{}] Deleted remote file : {}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            &relative_path,
+        );
 
         // Prepare to ignore deleted local file
         self.ignore_messages

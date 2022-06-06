@@ -6,6 +6,7 @@ use crate::util;
 
 #[derive(Clone)]
 pub struct Context {
+    pub instance_name: String,
     pub base_address: String,
     pub username: String,
     pub password: String,
@@ -29,6 +30,7 @@ impl Context {
         let base_address = format!("{}://{}/api/", protocol, address);
         let database_path = util::path_to_string(&Path::new(&folder_path).join(".trsync.db"))?;
         Ok(Self {
+            instance_name: address,
             base_address,
             username,
             password,

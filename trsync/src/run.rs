@@ -15,12 +15,21 @@ use std::sync::Arc;
 
 pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> {
     // Digest input folder to watch
-    log::info!("Prepare to sync {:?}", &context.folder_path);
+    log::info!(
+        "[{}::{}] Prepare to sync {:?}",
+        context.instance_name,
+        context.workspace_id,
+        &context.folder_path
+    );
     fs::create_dir_all(&context.folder_path)?;
     let exit_after_sync = context.exit_after_sync;
 
     // Initialize database if needed
-    log::info!("Initialize index");
+    log::info!(
+        "[{}::{}] Initialize index",
+        context.instance_name,
+        context.workspace_id,
+    );
     Database::new(context.database_path.clone()).with_new_connection(|connection| {
         DatabaseOperation::new(&connection).create_tables()?;
         Ok(())
@@ -37,13 +46,21 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
         // Blocks until remote api successfully responded
         ensure_availability(&context)?;
 
-        log::info!("Start synchronization");
+        log::info!(
+            "[{}::{}] Start synchronization",
+            context.instance_name,
+            context.workspace_id,
+        );
         // First, start local sync to know local changes since last start
         let local_sync_handle = start_local_sync(&context, &operational_sender);
         // Second, start remote sync to know remote changes since last run
         let remote_sync_handle = start_remote_sync(&context, &operational_sender);
 
-        log::info!("Start watchers");
+        log::info!(
+            "[{}::{}] Start watchers",
+            context.instance_name,
+            context.workspace_id,
+        );
         // Start local watcher
         let local_watch_handle =
             start_local_watch(&context, &operational_sender, &stop_signal, &restart_signal)?;
@@ -52,7 +69,11 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
             start_remote_watch(&context, &operational_sender, &stop_signal, &restart_signal)?;
 
         // Wait end of local and remote sync
-        log::info!("Wait synchronizations to finish their jobs");
+        log::info!(
+            "[{}::{}] Wait synchronizations to finish their jobs",
+            context.instance_name,
+            context.workspace_id,
+        );
         let local_sync_result = local_sync_handle
             .join()
             .expect("Fail to join local sync handler");
@@ -61,10 +82,20 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
             .expect("Fail to join remote sync handler");
 
         if let Err(error) = &local_sync_result {
-            log::error!("Local sync failed: {:?}", error);
+            log::error!(
+                "[{}::{}] Local sync failed: {:?}",
+                context.instance_name,
+                context.workspace_id,
+                error,
+            );
         }
         if let Err(error) = &remote_sync_result {
-            log::error!("Remote sync failed: {:?}", error);
+            log::error!(
+                "[{}::{}] Remote sync failed: {:?}",
+                context.instance_name,
+                context.workspace_id,
+                error,
+            );
         }
         if local_sync_result.is_err() || remote_sync_result.is_err() {
             return Err(Error::StartupError(format!(
@@ -73,12 +104,20 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
         }
 
         if exit_after_sync {
-            log::info!("Synchronization finished");
+            log::info!(
+                "[{}::{}] Synchronization finished",
+                context.instance_name,
+                context.workspace_id,
+            );
             operational_sender
                 .send(OperationalMessage::Exit)
                 .expect("Fail to send exit message");
         } else {
-            log::info!("Synchronization finished, start changes resolver");
+            log::info!(
+                "[{}::{}] Synchronization finished, start changes resolver",
+                context.instance_name,
+                context.workspace_id,
+            );
         }
 
         // Operational
