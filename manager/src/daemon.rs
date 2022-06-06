@@ -49,7 +49,7 @@ impl Daemon {
             return Ok(());
         }
 
-        let processes_to_start = self.get_processes_to_start();
+        let processes_to_start = self.get_processes_to_start()?;
         let processes_to_stop = self.get_processes_to_stop();
 
         log::info!("'{}' process to start", processes_to_start.len());
@@ -71,11 +71,11 @@ impl Daemon {
         Ok(())
     }
 
-    fn get_processes_to_start(&self) -> Vec<TrsyncUid> {
+    fn get_processes_to_start(&self) -> Result<Vec<TrsyncUid>, Error> {
         let mut processes_to_start = vec![];
 
         for instance in self.config.instances.iter() {
-            let client = Client::new(instance.clone());
+            let client = Client::new(instance.clone())?;
             for workspace_id in &instance.workspaces_ids {
                 match client.get_workspace(*workspace_id) {
                     Ok(workspace) => {
@@ -92,7 +92,7 @@ impl Daemon {
             }
         }
 
-        processes_to_start
+        Ok(processes_to_start)
     }
 
     fn get_processes_to_stop(&self) -> Vec<TrsyncUid> {
@@ -128,7 +128,7 @@ impl Daemon {
             .find(|instance| instance.address == trsync_uid.instance_address())
             .expect("Start process imply its instance exists");
         let workspace =
-            match Client::new(instance.clone()).get_workspace(*trsync_uid.workspace_id()) {
+            match Client::new(instance.clone())?.get_workspace(*trsync_uid.workspace_id()) {
                 Ok(workspace) => workspace,
                 Err(error) => {
                     return Err(Error::FailToSpawnTrsyncProcess(Some(format!(
@@ -149,14 +149,22 @@ impl Daemon {
                 ))))
             }
         };
+        let folder_path = match folder_path.to_str() {
+            Some(folder_path) => folder_path,
+            None => {
+                return Err(Error::UnexpectedError(format!(
+                    "Error during folder path conversion to string (value is '{:?}')",
+                    folder_path
+                )));
+            }
+        };
 
         let trsync_context = match trsync::context::Context::new(
             !instance.unsecure,
             instance.address.clone(),
             instance.username.clone(),
             instance.password.clone(),
-            // TODO
-            folder_path.to_str().unwrap().to_string(),
+            folder_path.to_string(),
             workspace.workspace_id as i32,
             false,
         ) {

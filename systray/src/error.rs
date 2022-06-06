@@ -1,5 +1,6 @@
 #[derive(Debug)]
 pub enum Error {
+    UnexpectedError(String),
     UnableToFindHomeUser,
     ReadConfigError(String),
     ManagerError(trsync_manager::error::Error),

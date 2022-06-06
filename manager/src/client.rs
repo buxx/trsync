@@ -1,7 +1,7 @@
 use reqwest::Method;
 
 use crate::{
-    error::ClientError,
+    error::{ClientError, Error},
     model::{Instance, Workspace},
 };
 
@@ -13,14 +13,13 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(instance: Instance) -> Self {
-        Self {
+    pub fn new(instance: Instance) -> Result<Self, Error> {
+        Ok(Self {
             instance,
             client: reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
-                .build()
-                .unwrap(),
-        }
+                .build()?,
+        })
     }
 
     pub fn get_workspace(&self, workspace_id: u32) -> Result<Workspace, ClientError> {

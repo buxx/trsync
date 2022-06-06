@@ -19,7 +19,7 @@ pub fn run_tray(
     let password_setter_token_ = password_setter_token.to_string();
     match tray.add_menu_item("Configurer", move || {
         log::info!("Run {}", configure_bin_path);
-        Command::new("cmd")
+        match Command::new("cmd")
             .arg("/c")
             .arg(&configure_bin_path)
             .arg(format!("--password-setter-port={}", password_setter_port))
@@ -28,7 +28,10 @@ pub fn run_tray(
                 password_setter_token_
             ))
             .spawn()
-            .unwrap();
+        {
+            Err(error) => return log::error!("Unable to start configure window : '{:?}'", error),
+            _ => {}
+        };
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
         _ => {}
@@ -36,11 +39,13 @@ pub fn run_tray(
 
     let (tx, rx) = mpsc::channel();
 
-    tray.add_menu_item("Quitter", move || {
+    match tray.add_menu_item("Quitter", move || {
         tx.send(Message::Quit)
             .expect("This channel must not been closed");
-    })
-    .unwrap();
+    }) {
+        Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
+        _ => {}
+    };
 
     loop {
         match rx.recv() {

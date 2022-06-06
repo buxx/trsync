@@ -24,9 +24,9 @@ pub enum ClientError {
     UnexpectedResponse(String),
 }
 
-impl From<reqwest::Error> for ClientError {
+impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Self::RequestError(format!("Error happen when make request : {:?}", error))
+        Self::UnexpectedError(format!("Error happen when make request : {:?}", error))
     }
 }
 
@@ -53,6 +53,12 @@ impl Display for ClientError {
                 write!(f, "Unexpected http response: '{}'", message)
             }
         }
+    }
+}
+
+impl From<reqwest::Error> for ClientError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::RequestError(format!("Error happen when make request : {:?}", error))
     }
 }
 

@@ -39,15 +39,24 @@ fn run() -> Result<(), Error> {
     trsync_manager::reload::ReloadWatcher::new(config.clone(), main_channel_sender.clone())
         .start()?;
     let manager_child = std::thread::spawn(move || {
-        // TODO : manage error at manager start
-        trsync_manager::daemon::Daemon::new(config, main_channel_receiver)
-            .run()
-            .unwrap();
+        match trsync_manager::daemon::Daemon::new(config, main_channel_receiver).run() {
+            Err(error) => {
+                log::error!("Unable to start manager : '{:?}'", error);
+            }
+            _ => {}
+        };
     });
 
     // Start password http receiver
     log::info!("Raw password disabled, prepare to start password receiver");
-    let password_port = utils::get_available_port().unwrap();
+    let password_port = match utils::get_available_port() {
+        Some(port) => port,
+        None => {
+            return Err(Error::UnexpectedError(
+                "Unable to find available port".to_string(),
+            ))
+        }
+    };
     let password_token = Uuid::new_v4().to_string();
     password::start_password_receiver_server(password_port, &password_token);
     log::info!("Password receiver started on port: '{}'", &password_port);
@@ -82,12 +91,23 @@ fn run() -> Result<(), Error> {
     }
 
     log::info!("Stop manager");
-    // TODO : manage error cases
     main_channel_sender
         .send(trsync_manager::message::DaemonControlMessage::Stop)
-        .unwrap();
-    // TODO : manage error cases
-    manager_child.join().unwrap();
+        .or_else(|e| {
+            Err(Error::UnexpectedError(format!(
+                "Unable to ask manager to stop : '{}'",
+                e
+            )))
+        })?;
+    match manager_child.join() {
+        Err(error) => {
+            return Err(Error::UnexpectedError(format!(
+                "Unable to join manager thread : '{:?}'",
+                error
+            )))
+        }
+        _ => {}
+    };
     log::info!("Finished");
 
     Ok(())
