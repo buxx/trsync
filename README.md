@@ -82,6 +82,10 @@ Then start `trsync_manager` binary.
 
 ### systray
 
+The `libappindicator`package is required. Example for debian-like:
+
+    apt-get install libappindicator3-1
+
 You need [trsync-manager-configure](https://github.com/buxx/trsync-manager-configure) bin on your system.
 
 You need a configuration file like at previous "manager" section.
