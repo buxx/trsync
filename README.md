@@ -28,7 +28,7 @@ Task bar icon program permitting to start a graphical configuration window to fi
 
 The configuration windows program is available to [buxx/trsync-manager-configure](https://github.com/buxx/trsync-manager-configure)
 
-## Install from source
+## Build from source
 
 Please install following dependencies, on linux :
 
