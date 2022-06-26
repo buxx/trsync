@@ -4,16 +4,21 @@ use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
 use crate::error::Error;
 use crate::local::{start_local_sync, start_local_watch};
-use crate::operation::start_operation;
 use crate::operation::OperationalMessage;
+use crate::operation::{start_operation, Job};
 use crate::remote::{start_remote_sync, start_remote_watch};
+use crossbeam_channel::Sender as CrossbeamSender;
 use log;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
-pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> {
+pub fn run(
+    context: Context,
+    stop_signal: Arc<AtomicBool>,
+    activity_sender: Option<CrossbeamSender<Job>>,
+) -> Result<(), Error> {
     // Digest input folder to watch
     log::info!(
         "[{}::{}] Prepare to sync {:?}",
@@ -126,6 +131,7 @@ pub fn run(context: Context, stop_signal: Arc<AtomicBool>) -> Result<(), Error> 
             operational_receiver,
             &stop_signal,
             &restart_signal,
+            &activity_sender,
         );
 
         local_watch_handle

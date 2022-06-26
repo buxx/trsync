@@ -11,6 +11,7 @@ use std::{
     time::Duration,
 };
 
+use crossbeam_channel::Sender;
 use rusqlite::Connection;
 
 use crate::{
@@ -21,6 +22,26 @@ use crate::{
     types::{ContentId, ContentType, RelativeFilePath},
     util,
 };
+
+#[derive(PartialEq, Eq, Hash)]
+pub struct JobIdentifier {
+    pub instance_name: String,
+    pub workspace_id: i32,
+}
+
+impl JobIdentifier {
+    pub fn new(instance_name: String, workspace_id: i32) -> Self {
+        Self {
+            instance_name,
+            workspace_id,
+        }
+    }
+}
+
+pub enum Job {
+    Begin(JobIdentifier),
+    End(JobIdentifier),
+}
 
 #[derive(Debug, PartialEq)]
 pub enum OperationalMessage {
@@ -47,6 +68,7 @@ pub struct OperationalHandler {
     ignore_messages: Vec<OperationalMessage>,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
+    activity_sender: Option<Sender<Job>>,
 }
 
 impl OperationalHandler {
@@ -55,6 +77,7 @@ impl OperationalHandler {
         connection: Connection,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
+        activity_sender: Option<Sender<Job>>,
     ) -> Result<Self, Error> {
         Ok(Self {
             context: context.clone(),
@@ -63,6 +86,7 @@ impl OperationalHandler {
             ignore_messages: vec![],
             stop_signal,
             restart_signal,
+            activity_sender,
         })
     }
 
@@ -123,6 +147,21 @@ impl OperationalHandler {
                         continue;
                     }
 
+                    // Indicate start working
+                    if let Some(activity_sender) = &self.activity_sender {
+                        if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
+                            self.context.instance_name.clone(),
+                            self.context.workspace_id,
+                        ))) {
+                            log::error!(
+                                "[{}::{}] Error when sending activity begin : {:?}",
+                                self.context.instance_name,
+                                self.context.workspace_id,
+                                error
+                            );
+                        }
+                    }
+
                     let return_ = match &message {
                         // Local changes
                         OperationalMessage::NewLocalFile(relative_path) => {
@@ -153,6 +192,21 @@ impl OperationalHandler {
                         }
                         OperationalMessage::Exit => return (),
                     };
+
+                    // Indicate finished working
+                    if let Some(activity_sender) = &self.activity_sender {
+                        if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
+                            self.context.instance_name.clone(),
+                            self.context.workspace_id,
+                        ))) {
+                            log::error!(
+                                "[{}::{}] Error when sending activity end : {:?}",
+                                self.context.instance_name,
+                                self.context.workspace_id,
+                                error
+                            );
+                        }
+                    }
 
                     match return_ {
                         Err(err) => {
@@ -664,10 +718,12 @@ pub fn start_operation(
     operational_receiver: Receiver<OperationalMessage>,
     stop_signal: &Arc<AtomicBool>,
     restart_signal: &Arc<AtomicBool>,
+    activity_sender: &Option<Sender<Job>>,
 ) -> JoinHandle<Result<(), Error>> {
     let operational_context = context.clone();
     let operational_stop_signal = stop_signal.clone();
     let operational_restart_signal = restart_signal.clone();
+    let operational_activity_sender = activity_sender.clone();
 
     thread::spawn(move || {
         Database::new(operational_context.database_path.clone()).with_new_connection(|connection| {
@@ -676,6 +732,7 @@ pub fn start_operation(
                 connection,
                 operational_stop_signal,
                 operational_restart_signal,
+                operational_activity_sender,
             )?
             .listen(operational_receiver);
             Ok(())

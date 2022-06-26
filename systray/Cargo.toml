@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 trsync_manager = {path = "../manager"}
+trsync = {path = "../trsync"}
 env_logger = "0.9.0"
 log = "0.4.13"
 tray-item = "0.7.0"
@@ -17,6 +18,7 @@ whoami = "1.2.1"
 
 [target.'cfg(unix)'.dependencies]
 gtk = "0.15.4"
+glib = "0.15.11"
 
 [target.'cfg(windows)'.build-dependencies]
 windres = "*"

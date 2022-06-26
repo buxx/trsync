@@ -1,9 +1,15 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 use error::Error;
-use std::process::exit;
+use std::{
+    process::exit,
+    sync::{Arc, Mutex},
+};
+use trsync::operation::Job;
 use trsync_manager;
 use uuid::Uuid;
+
+use crate::state::ActivityMonitor;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -13,12 +19,15 @@ mod windows;
 
 mod config;
 mod error;
+mod icon;
 mod password;
+mod state;
 mod utils;
 
 fn run() -> Result<(), Error> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
+    let activity_state = Arc::new(Mutex::new(state::ActivityState::new()));
     let config = match config::Config::from_env() {
         Ok(config_) => config_,
         Err(error) => {
@@ -35,16 +44,39 @@ fn run() -> Result<(), Error> {
         Sender<trsync_manager::message::DaemonControlMessage>,
         Receiver<trsync_manager::message::DaemonControlMessage>,
     ) = unbounded();
-    let config = trsync_manager::config::Config::from_env(false)?;
-    trsync_manager::reload::ReloadWatcher::new(config.clone(), main_channel_sender.clone())
+    let (activity_sender, activity_receiver): (Sender<Job>, Receiver<Job>) = unbounded();
+    let manager_config = trsync_manager::config::Config::from_env(false)?;
+
+    // Start manager
+    // FIXME : How it is stopped ?
+    trsync_manager::reload::ReloadWatcher::new(manager_config.clone(), main_channel_sender.clone())
         .start()?;
     let manager_child = std::thread::spawn(move || {
-        match trsync_manager::daemon::Daemon::new(config, main_channel_receiver).run() {
+        match trsync_manager::daemon::Daemon::new(
+            manager_config,
+            main_channel_receiver,
+            activity_sender,
+        )
+        .run()
+        {
             Err(error) => {
                 log::error!("Unable to start manager : '{:?}'", error);
             }
             _ => {}
         };
+    });
+
+    // Start activity monitor
+    // FIXME : How it is stopped ?
+    let activity_monitor_config = config.clone();
+    let activity_monitor_state = activity_state.clone();
+    let activity_monitor_child = std::thread::spawn(move || {
+        ActivityMonitor::new(
+            activity_monitor_config,
+            activity_receiver.clone(),
+            activity_monitor_state,
+        )
+        .run()
     });
 
     // Start password http receiver
@@ -64,10 +96,14 @@ fn run() -> Result<(), Error> {
     log::info!("Start systray");
     #[cfg(target_os = "linux")]
     {
+        let tray_config = config.clone();
+        let tray_activity_state = activity_state.clone();
         match linux::run_tray(
+            tray_config,
             trsync_manager_configure_bin_path.clone(),
             password_port,
             &password_token,
+            tray_activity_state,
         ) {
             Err(error) => {
                 log::error!("{}", error)
@@ -82,6 +118,7 @@ fn run() -> Result<(), Error> {
             trsync_manager_configure_bin_path.clone(),
             password_port,
             &password_token,
+            activity_state,
         ) {
             Err(error) => {
                 log::error!("{}", error)
@@ -108,6 +145,9 @@ fn run() -> Result<(), Error> {
         }
         _ => {}
     };
+
+    // FIXME Close properly
+    activity_monitor_child.join().unwrap();
     log::info!("Finished");
 
     Ok(())

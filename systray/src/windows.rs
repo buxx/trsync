@@ -43,7 +43,7 @@ pub fn run_tray(
         tx.send(Message::Quit)
             .expect("This channel must not been closed");
     }) {
-        Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
+        Err(error) => return Err(format!("Unable to send quit message : '{:?}'", error)),
         _ => {}
     };
 

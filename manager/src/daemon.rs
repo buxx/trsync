@@ -1,9 +1,10 @@
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
 use trsync;
+use trsync::operation::Job;
 
 use crate::{
     client::Client, config::Config, error::Error, message::DaemonControlMessage, types::*,
@@ -13,14 +14,20 @@ pub struct Daemon {
     config: Config,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
     main_channel_receiver: Receiver<DaemonControlMessage>,
+    activity_sender: Sender<Job>,
 }
 
 impl Daemon {
-    pub fn new(config: Config, main_channel_receiver: Receiver<DaemonControlMessage>) -> Self {
+    pub fn new(
+        config: Config,
+        main_channel_receiver: Receiver<DaemonControlMessage>,
+        activity_sender: Sender<Job>,
+    ) -> Self {
         Self {
             config,
             processes: HashMap::new(),
             main_channel_receiver,
+            activity_sender,
         }
     }
 
@@ -186,7 +193,14 @@ impl Daemon {
 
         let stop_signal = Arc::new(AtomicBool::new(false));
         let thread_stop_signal = stop_signal.clone();
-        thread::spawn(move || trsync::run::run(trsync_context, thread_stop_signal));
+        let thread_activity_sender = self.activity_sender.clone();
+        thread::spawn(move || {
+            trsync::run::run(
+                trsync_context,
+                thread_stop_signal,
+                Some(thread_activity_sender),
+            )
+        });
         self.processes.insert(trsync_uid, stop_signal);
         Ok(())
     }
