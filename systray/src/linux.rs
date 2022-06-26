@@ -68,7 +68,11 @@ pub fn run_tray(
                 Icon::Working1 => Icon::Working2,
                 Icon::Working2 => Icon::Working3,
                 Icon::Working3 => Icon::Working4,
-                Icon::Working4 => Icon::Working1,
+                Icon::Working4 => Icon::Working5,
+                Icon::Working5 => Icon::Working6,
+                Icon::Working6 => Icon::Working7,
+                Icon::Working7 => Icon::Working8,
+                Icon::Working8 => Icon::Working1,
             },
         };
         if activity_icon != current_icon {
