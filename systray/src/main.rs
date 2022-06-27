@@ -3,7 +3,7 @@ use env_logger::Env;
 use error::Error;
 use std::{
     process::exit,
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicBool, Arc, Mutex},
 };
 use trsync::operation::Job;
 use trsync_manager;
@@ -27,6 +27,7 @@ mod utils;
 fn run() -> Result<(), Error> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
+    let stop_signal = Arc::new(AtomicBool::new(false));
     let activity_state = Arc::new(Mutex::new(state::ActivityState::new()));
     let config = match config::Config::from_env() {
         Ok(config_) => config_,
@@ -68,13 +69,13 @@ fn run() -> Result<(), Error> {
 
     // Start activity monitor
     // FIXME : How it is stopped ?
-    let activity_monitor_config = config.clone();
+    let activity_monitor_stop_signal = stop_signal.clone();
     let activity_monitor_state = activity_state.clone();
     let activity_monitor_child = std::thread::spawn(move || {
         ActivityMonitor::new(
-            activity_monitor_config,
             activity_receiver.clone(),
             activity_monitor_state,
+            activity_monitor_stop_signal,
         )
         .run()
     });
@@ -94,6 +95,7 @@ fn run() -> Result<(), Error> {
     log::info!("Password receiver started on port: '{}'", &password_port);
 
     log::info!("Start systray");
+    let tray_stop_signal = stop_signal.clone();
     #[cfg(target_os = "linux")]
     {
         let tray_config = config.clone();
@@ -104,6 +106,7 @@ fn run() -> Result<(), Error> {
             password_port,
             &password_token,
             tray_activity_state,
+            tray_stop_signal,
         ) {
             Err(error) => {
                 log::error!("{}", error)
@@ -114,6 +117,7 @@ fn run() -> Result<(), Error> {
 
     #[cfg(target_os = "windows")]
     {
+        // FIXME stop signal too
         match windows::run_tray(
             trsync_manager_configure_bin_path.clone(),
             password_port,

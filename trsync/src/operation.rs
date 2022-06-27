@@ -4,7 +4,7 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::Receiver,
+        mpsc::{Receiver, RecvTimeoutError},
         Arc,
     },
     thread::{self, JoinHandle},
@@ -117,7 +117,7 @@ impl OperationalHandler {
     pub fn listen(&mut self, receiver: Receiver<OperationalMessage>) {
         loop {
             match receiver.recv_timeout(Duration::from_millis(150)) {
-                Err(_) => {
+                Err(RecvTimeoutError::Timeout) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
                         log::info!(
                             "[{}::{}] Finished operational (on stop signal)",
@@ -134,6 +134,14 @@ impl OperationalHandler {
                         );
                         break;
                     }
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    log::error!(
+                        "[{}::{}] Finished operational (on channel closed)",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                    );
+                    break;
                 }
                 Ok(message) => {
                     if match self.ignore_message(&message) {

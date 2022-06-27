@@ -1,6 +1,9 @@
 use std::{
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -19,6 +22,7 @@ pub fn run_tray(
     password_setter_port: u16,
     password_setter_token: &str,
     activity_state: Arc<Mutex<ActivityState>>,
+    stop_signal: Arc<AtomicBool>,
 ) -> Result<(), String> {
     match gtk::init() {
         Err(error) => return Err(format!("Unable to initialize gtk : '{}'", error)),
@@ -53,14 +57,21 @@ pub fn run_tray(
         _ => {}
     };
 
-    match tray.add_menu_item("Quitter", || {
+    let menu_stop_signal = stop_signal.clone();
+    match tray.add_menu_item("Quitter", move || {
+        menu_stop_signal.store(true, Ordering::Relaxed);
         gtk::main_quit();
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
         _ => {}
     };
 
+    let glib_stop_signal = stop_signal.clone();
     glib::timeout_add_local(Duration::from_millis(250), move || {
+        if glib_stop_signal.load(Ordering::Relaxed) {
+            return glib::Continue(false);
+        }
+
         let activity_icon = match activity_state.lock().unwrap().activity() {
             Activity::Idle => Icon::Idle,
             Activity::Working => match current_icon {

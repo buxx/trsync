@@ -5,8 +5,8 @@ use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
+use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, UNIX_EPOCH};
@@ -52,7 +52,7 @@ impl LocalWatcher {
                     }
                     _ => {}
                 },
-                Err(_) => {
+                Err(RecvTimeoutError::Timeout) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
                         log::info!("Finished local listening (on stop signal)");
                         break;
@@ -61,6 +61,10 @@ impl LocalWatcher {
                         log::info!("Finished local listening (on restart signal)");
                         break;
                     }
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    log::error!("Finished local listening (on channel closed)");
+                    break;
                 }
             }
         }

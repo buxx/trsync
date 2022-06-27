@@ -1,11 +1,13 @@
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, RecvTimeoutError};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
 };
 use trsync::operation::{Job, JobIdentifier};
-
-use crate::config::Config;
 
 pub enum Activity {
     Idle,
@@ -44,31 +46,43 @@ impl ActivityState {
 }
 
 pub struct ActivityMonitor {
-    config: Config,
     receiver: Receiver<Job>,
     state: Arc<Mutex<ActivityState>>,
+    stop_signal: Arc<AtomicBool>,
 }
 
 impl ActivityMonitor {
-    pub fn new(config: Config, receiver: Receiver<Job>, state: Arc<Mutex<ActivityState>>) -> Self {
+    pub fn new(
+        receiver: Receiver<Job>,
+        state: Arc<Mutex<ActivityState>>,
+        stop_signal: Arc<AtomicBool>,
+    ) -> Self {
         Self {
-            config,
             receiver,
             state,
+            stop_signal,
         }
     }
 
     pub fn run(&self) {
         loop {
-            match self.receiver.recv() {
-                Ok(Job::Begin(job_identifier)) => {
-                    self.state.lock().unwrap().new_job(job_identifier);
+            match self.receiver.recv_timeout(Duration::from_millis(250)) {
+                Ok(message) => match message {
+                    Job::Begin(job_identifier) => {
+                        self.state.lock().unwrap().new_job(job_identifier);
+                    }
+                    Job::End(job_identifier) => {
+                        self.state.lock().unwrap().finished_job(job_identifier);
+                    }
+                },
+                Err(RecvTimeoutError::Timeout) => {
+                    if self.stop_signal.load(Ordering::Relaxed) {
+                        log::info!("Finished ActivityMonitor (on stop signal)");
+                        break;
+                    }
                 }
-                Ok(Job::End(job_identifier)) => {
-                    self.state.lock().unwrap().finished_job(job_identifier);
-                }
-                Err(error) => {
-                    log::error!("Error wen reading activity monitor channel '{}'", error);
+                Err(RecvTimeoutError::Disconnected) => {
+                    log::error!("Finished ActivityMonitor (on channel closed)");
                     break;
                 }
             }
