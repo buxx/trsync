@@ -1,7 +1,3 @@
-use std::path::PathBuf;
-
-use crate::config::Config;
-
 #[derive(PartialEq)]
 pub enum Icon {
     Idle,
@@ -31,10 +27,11 @@ impl Icon {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn value(&self) -> &str {
-        self.file_name()
+    pub fn value(&self) -> String {
+        self.file_name().replace(".png", "")
     }
 
+    #[cfg(target_os = "linux")]
     pub fn value(&self, config: &Config) -> PathBuf {
         PathBuf::from(config.icons_path.clone()).join(self.file_name())
     }
