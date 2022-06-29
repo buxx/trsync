@@ -88,4 +88,10 @@ impl ActivityMonitor {
             }
         }
     }
+
+    pub fn start(self) {
+        std::thread::spawn(move || {
+            self.run();
+        });
+    }
 }

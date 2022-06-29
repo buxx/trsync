@@ -1,7 +1,7 @@
 use crate::config::Config;
 
 #[derive(Debug)]
-pub enum DaemonControlMessage {
+pub enum DaemonMessage {
     Reload(Config),
     Stop,
 }

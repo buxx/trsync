@@ -1,20 +1,35 @@
-use std::{fs::OpenOptions, sync::mpsc::channel, thread, time::Duration};
+use std::{
+    fs::OpenOptions,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{channel, RecvTimeoutError},
+        Arc,
+    },
+    thread,
+    time::Duration,
+};
 
 use crossbeam_channel::Sender;
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 
-use crate::{config::Config, error::Error, message::DaemonControlMessage};
+use crate::{config::Config, error::Error, message::DaemonMessage};
 
 pub struct ReloadWatcher {
     config: Config,
-    main_channel_sender: Sender<DaemonControlMessage>,
+    main_channel_sender: Sender<DaemonMessage>,
+    stop_signal: Arc<AtomicBool>,
 }
 
 impl ReloadWatcher {
-    pub fn new(config: Config, main_channel_sender: Sender<DaemonControlMessage>) -> Self {
+    pub fn new(
+        config: Config,
+        main_channel_sender: Sender<DaemonMessage>,
+        stop_signal: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             config,
             main_channel_sender,
+            stop_signal,
         }
     }
 
@@ -47,6 +62,7 @@ impl ReloadWatcher {
 
         let main_channel_sender = self.main_channel_sender.clone();
         let allow_raw_passwords = self.config.allow_raw_passwords;
+        let thread_stop_signal = self.stop_signal.clone();
         thread::spawn(move || {
             let mut inotify_watcher = match watcher(inotify_sender, Duration::from_secs(1)) {
                 Ok(watcher) => watcher,
@@ -65,7 +81,7 @@ impl ReloadWatcher {
             }
 
             loop {
-                match inotify_receiver.recv() {
+                match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
                     Ok(DebouncedEvent::Write(_)) => {
                         let config = match Config::from_env(allow_raw_passwords) {
                             Ok(config_) => config_,
@@ -75,7 +91,7 @@ impl ReloadWatcher {
                                 continue;
                             }
                         };
-                        match main_channel_sender.send(DaemonControlMessage::Reload(config)) {
+                        match main_channel_sender.send(DaemonMessage::Reload(config)) {
                             Err(error) => {
                                 log::error!("Unable to send reload message : '{:?}'", error);
                                 // TODO : Notify user of error
@@ -85,10 +101,16 @@ impl ReloadWatcher {
                         };
                     }
                     Ok(_) => {}
-                    Err(error) => {
-                        log::error!("Unable to send reload message : '{:?}'", error);
-                        // TODO : Notify user of error
+                    Err(RecvTimeoutError::Timeout) => {
+                        if thread_stop_signal.load(Ordering::Relaxed) {
+                            log::error!("Stop reload watcher (on stop signal)");
+                            break;
+                        }
                         continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        log::error!("Stop reload watcher (on channel disconnected)");
+                        break;
                     }
                 }
             }

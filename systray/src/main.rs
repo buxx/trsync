@@ -3,10 +3,13 @@ use env_logger::Env;
 use error::Error;
 use std::{
     process::exit,
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 use trsync::operation::Job;
-use trsync_manager;
+use trsync_manager::{self, daemon::Daemon, message::DaemonMessage, reload::ReloadWatcher};
 use uuid::Uuid;
 
 use crate::state::ActivityMonitor;
@@ -24,61 +27,33 @@ mod password;
 mod state;
 mod utils;
 
-fn run() -> Result<(), Error> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+type DaemonMessageChannels = (Sender<DaemonMessage>, Receiver<DaemonMessage>);
+type ActivityChannels = (Sender<Job>, Receiver<Job>);
 
+fn run() -> Result<(), Error> {
+    // Some initialize
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let stop_signal = Arc::new(AtomicBool::new(false));
     let activity_state = Arc::new(Mutex::new(state::ActivityState::new()));
-    let config = match config::Config::from_env() {
-        Ok(config_) => config_,
-        Err(error) => {
-            log::error!("{:?}", error);
-            std::process::exit(1);
-        }
-    };
-
+    let config = config::Config::from_env()?;
     let trsync_manager_configure_bin_path = config.trsync_manager_configure_bin_path.clone();
 
     // Start manager
     log::info!("Start manager");
-    let (main_channel_sender, main_channel_receiver): (
-        Sender<trsync_manager::message::DaemonControlMessage>,
-        Receiver<trsync_manager::message::DaemonControlMessage>,
-    ) = unbounded();
-    let (activity_sender, activity_receiver): (Sender<Job>, Receiver<Job>) = unbounded();
+    let (main_sender, main_receiver): DaemonMessageChannels = unbounded();
+    let (activity_sender, activity_receiver): ActivityChannels = unbounded();
     let manager_config = trsync_manager::config::Config::from_env(false)?;
-
-    // Start manager
-    // FIXME : How it is stopped ?
-    trsync_manager::reload::ReloadWatcher::new(manager_config.clone(), main_channel_sender.clone())
-        .start()?;
-    let manager_child = std::thread::spawn(move || {
-        match trsync_manager::daemon::Daemon::new(
-            manager_config,
-            main_channel_receiver,
-            activity_sender,
-        )
-        .run()
-        {
-            Err(error) => {
-                log::error!("Unable to start manager : '{:?}'", error);
-            }
-            _ => {}
-        };
-    });
+    let manager_config_ = manager_config.clone();
+    let main_sender_ = main_sender.clone();
+    let stop_signal_ = stop_signal.clone();
+    ReloadWatcher::new(manager_config_, main_sender_, stop_signal_).start()?;
+    Daemon::new(manager_config, main_receiver, activity_sender).start()?;
 
     // Start activity monitor
-    // FIXME : How it is stopped ?
-    let activity_monitor_stop_signal = stop_signal.clone();
-    let activity_monitor_state = activity_state.clone();
-    let activity_monitor_child = std::thread::spawn(move || {
-        ActivityMonitor::new(
-            activity_receiver.clone(),
-            activity_monitor_state,
-            activity_monitor_stop_signal,
-        )
-        .run()
-    });
+    let activity_receiver_ = activity_receiver.clone();
+    let activity_state_ = activity_state.clone();
+    let stop_signal_ = stop_signal.clone();
+    ActivityMonitor::new(activity_receiver_, activity_state_, stop_signal_).start();
 
     // Start password http receiver
     log::info!("Raw password disabled, prepare to start password receiver");
@@ -131,27 +106,15 @@ fn run() -> Result<(), Error> {
         }
     }
 
-    log::info!("Stop manager");
-    main_channel_sender
-        .send(trsync_manager::message::DaemonControlMessage::Stop)
-        .or_else(|e| {
-            Err(Error::UnexpectedError(format!(
-                "Unable to ask manager to stop : '{}'",
-                e
-            )))
-        })?;
-    match manager_child.join() {
-        Err(error) => {
-            return Err(Error::UnexpectedError(format!(
-                "Unable to join manager thread : '{:?}'",
-                error
-            )))
-        }
-        _ => {}
-    };
-
-    // FIXME Close properly
-    activity_monitor_child.join().unwrap();
+    // When these lines are reached, tray is finished so, close application
+    log::info!("Stopping ...");
+    stop_signal.swap(true, Ordering::Relaxed);
+    main_sender.send(DaemonMessage::Stop).or_else(|e| {
+        Err(Error::UnexpectedError(format!(
+            "Unable to ask manager to stop : '{}'",
+            e
+        )))
+    })?;
     log::info!("Finished");
 
     Ok(())

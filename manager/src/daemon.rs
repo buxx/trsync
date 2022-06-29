@@ -6,27 +6,25 @@ use std::{fs, thread};
 use trsync;
 use trsync::operation::Job;
 
-use crate::{
-    client::Client, config::Config, error::Error, message::DaemonControlMessage, types::*,
-};
+use crate::{client::Client, config::Config, error::Error, message::DaemonMessage, types::*};
 
 pub struct Daemon {
     config: Config,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
-    main_channel_receiver: Receiver<DaemonControlMessage>,
+    main_receiver: Receiver<DaemonMessage>,
     activity_sender: Sender<Job>,
 }
 
 impl Daemon {
     pub fn new(
         config: Config,
-        main_channel_receiver: Receiver<DaemonControlMessage>,
+        main_receiver: Receiver<DaemonMessage>,
         activity_sender: Sender<Job>,
     ) -> Self {
         Self {
             config,
             processes: HashMap::new(),
-            main_channel_receiver,
+            main_receiver,
             activity_sender,
         }
     }
@@ -36,16 +34,25 @@ impl Daemon {
 
         loop {
             // Block until new message received
-            match self.main_channel_receiver.recv() {
-                Ok(DaemonControlMessage::Reload(new_config)) => {
+            match self.main_receiver.recv() {
+                Ok(DaemonMessage::Reload(new_config)) => {
                     self.config = new_config;
                     self.ensure_processes()?
                 }
-                Ok(DaemonControlMessage::Stop) => break,
+                Ok(DaemonMessage::Stop) => break,
                 Err(error) => return Err(Error::from(error)),
             }
         }
 
+        Ok(())
+    }
+
+    pub fn start(mut self) -> Result<(), Error> {
+        std::thread::spawn(move || {
+            if let Err(error) = self.run() {
+                log::error!("Error during manager start : {}", error)
+            }
+        });
         Ok(())
     }
 
