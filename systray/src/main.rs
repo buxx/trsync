@@ -70,11 +70,11 @@ fn run() -> Result<(), Error> {
     log::info!("Password receiver started on port: '{}'", &password_port);
 
     log::info!("Start systray");
-    let tray_stop_signal = stop_signal.clone();
     #[cfg(target_os = "linux")]
     {
         let tray_config = config.clone();
         let tray_activity_state = activity_state.clone();
+        let tray_stop_signal = stop_signal.clone();
         match linux::run_tray(
             tray_config,
             trsync_manager_configure_bin_path.clone(),
@@ -92,12 +92,13 @@ fn run() -> Result<(), Error> {
 
     #[cfg(target_os = "windows")]
     {
-        // FIXME stop signal too
+        let tray_stop_signal = stop_signal.clone();
         match windows::run_tray(
             trsync_manager_configure_bin_path.clone(),
             password_port,
             &password_token,
             activity_state,
+            tray_stop_signal,
         ) {
             Err(error) => {
                 log::error!("{}", error)
