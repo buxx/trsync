@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::thread;
 use std::time::Duration;
+use std::{fs, thread};
 
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 use crate::context::Context;
 use crate::error::{ClientError, Error};
 use crate::types::RevisionId;
-use crate::util;
+use crate::util::{self, HTML_DOCUMENT_LOCAL_EXTENSION};
 use crate::{
     remote::RemoteContent,
     types::{ContentId, ContentType},
@@ -90,6 +90,36 @@ impl Client {
                 &absolute_file_path,
                 &url
             );
+            self.client
+                .request(Method::POST, url)
+                .basic_auth(
+                    self.context.username.clone(),
+                    Some(self.context.password.clone()),
+                )
+                .json(&data)
+                .send()?
+        } else if content_type == ContentType::HtmlDocument {
+            let url = self.context.workspace_url("contents");
+            let mut data = Map::new();
+            let file_name = util::string_path_file_name(&absolute_file_path)?;
+            let file_name = file_name.replace(HTML_DOCUMENT_LOCAL_EXTENSION, "");
+            if let Some(parent_content_id) = parent_content_id {
+                data.insert("parent_id".to_string(), json!(parent_content_id));
+            };
+            data.insert("label".to_string(), json!(file_name));
+            data.insert("content_type".to_string(), json!("html-document"));
+            let html_content = fs::read_to_string(&absolute_file_path).or_else(|error| {
+                return Err(ClientError::InputFileError(format!(
+                    "Unable to read '{}' file content : '{}'",
+                    absolute_file_path, error,
+                )));
+            })?;
+            let html_part_content: String = util::extract_html_body_content(&html_content)
+                .unwrap_or_else(|error| {
+                    log::error!("Unable to extract html body content : '{}'", error);
+                    html_content.to_string()
+                });
+            data.insert("raw_content".to_string(), json!(html_part_content));
             self.client
                 .request(Method::POST, url)
                 .basic_auth(
@@ -222,33 +252,60 @@ impl Client {
             absolute_file_path
         );
 
+        // Updating a content never update its file name, so don't require any op for folders
         if content_type == ContentType::Folder {
             let content = self.get_remote_content(content_id)?;
             return Ok(content.current_revision_id);
         }
 
-        let form = match multipart::Form::new().file("files", &absolute_file_path) {
-            Ok(form) => form,
-            Err(err) => {
+        let response = if content_type == ContentType::HtmlDocument {
+            let mut data = Map::new();
+            let url = self
+                .context
+                .workspace_url(&format!("html-documents/{}", content_id));
+            let html_content = fs::read_to_string(&absolute_file_path).or_else(|error| {
                 return Err(ClientError::InputFileError(format!(
-                    "{}: {:?}",
-                    absolute_file_path, err
-                )))
-            }
-        };
-        let url = self
-            .context
-            .workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
+                    "Unable to read '{}' file content : '{}'",
+                    absolute_file_path, error,
+                )));
+            })?;
+            let html_part_content: String = util::extract_html_body_content(&html_content)
+                .unwrap_or_else(|error| {
+                    log::error!("Unable to extract html body content : '{}'", error);
+                    html_content.to_string()
+                });
+            data.insert("raw_content".to_string(), json!(html_part_content));
+            self.client
+                .request(Method::PUT, url)
+                .basic_auth(
+                    self.context.username.clone(),
+                    Some(self.context.password.clone()),
+                )
+                .json(&data)
+                .send()?
+        } else {
+            let form = match multipart::Form::new().file("files", &absolute_file_path) {
+                Ok(form) => form,
+                Err(err) => {
+                    return Err(ClientError::InputFileError(format!(
+                        "{}: {:?}",
+                        absolute_file_path, err
+                    )))
+                }
+            };
+            let url = self
+                .context
+                .workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
 
-        let response = self
-            .client
-            .request(Method::PUT, url)
-            .basic_auth(
-                self.context.username.clone(),
-                Some(self.context.password.clone()),
-            )
-            .multipart(form)
-            .send()?;
+            self.client
+                .request(Method::PUT, url)
+                .basic_auth(
+                    self.context.username.clone(),
+                    Some(self.context.password.clone()),
+                )
+                .multipart(form)
+                .send()?
+        };
         match response.status().as_u16() {
             200 | 204 => {
                 let content = self.get_remote_content(content_id)?;
@@ -485,6 +542,9 @@ impl Client {
         let url = if content_type == ContentType::Folder {
             self.context
                 .workspace_url(&format!("folders/{}", content_id))
+        } else if content_type == ContentType::HtmlDocument {
+            self.context
+                .workspace_url(&format!("html-documents/{}", content_id))
         } else {
             self.context.workspace_url(&format!("files/{}", content_id))
         };

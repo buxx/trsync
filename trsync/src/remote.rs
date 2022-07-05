@@ -238,6 +238,7 @@ pub struct RemoteContent {
     pub parent_id: Option<i32>,
     pub content_type: String,
     pub modified: String,
+    pub raw_content: Option<String>,
     pub filename: String,
     pub is_deleted: bool,
 }

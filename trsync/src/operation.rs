@@ -540,6 +540,15 @@ impl OperationalHandler {
                     )
                 }
             }
+        } else if remote_content.content_type == "html-document" {
+            let content = self.client.get_remote_content(remote_content.content_id)?;
+            log::debug!(
+                "[{}::{}] Create disk file {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &absolute_path
+            );
+            std::fs::write(absolute_path, content.raw_content.unwrap_or("".to_string()))?;
         } else {
             let mut response = self
                 .client
@@ -647,19 +656,32 @@ impl OperationalHandler {
             .push(OperationalMessage::ModifiedLocalFile(relative_path.clone()));
 
         // Write file on disk
-        let mut response = self
-            .client
-            .get_file_content_response(content_id, remote_content.filename)?;
-        // TODO : Manage case where file don't exist on disk
-        log::debug!(
-            "[{}::{}] Update disk file {:?} with content {}",
-            self.context.instance_name,
-            self.context.workspace_id,
-            &absolute_path,
-            content_id,
-        );
-        let mut out = File::create(absolute_path)?;
-        io::copy(&mut response, &mut out)?;
+        if remote_content.content_type == "html-document" {
+            log::debug!(
+                "[{}::{}] Create disk file {:?}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &absolute_path
+            );
+            std::fs::write(
+                absolute_path,
+                remote_content.raw_content.unwrap_or("".to_string()),
+            )?;
+        } else {
+            let mut response = self
+                .client
+                .get_file_content_response(content_id, remote_content.filename)?;
+            // TODO : Manage case where file don't exist on disk
+            log::debug!(
+                "[{}::{}] Update disk file {:?} with content {}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                &absolute_path,
+                content_id,
+            );
+            let mut out = File::create(absolute_path)?;
+            io::copy(&mut response, &mut out)?;
+        }
 
         // Update database
         let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
@@ -709,6 +731,7 @@ impl OperationalHandler {
             self.context.workspace_id,
             &file_infos.absolute_path
         );
+        // FIXME BS NOW : html-document
         if file_infos.is_directory {
             fs::remove_dir_all(&file_infos.absolute_path)?;
         } else {

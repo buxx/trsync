@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     io,
     path::{Component, Path, PathBuf},
     time::UNIX_EPOCH,
@@ -13,6 +14,9 @@ use crate::{
     types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
     util,
 };
+
+// This extension must match with Tracim content "filename"
+pub const HTML_DOCUMENT_LOCAL_EXTENSION: &'static str = ".document.html";
 
 pub struct FileInfos {
     pub file_name: String,
@@ -51,8 +55,16 @@ impl FileInfos {
             &absolute_path,
             &workspace_path,
         )?;
+
         let content_type = if absolute_path.is_dir() {
             ContentType::Folder
+        } else if absolute_path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap_or("")
+            .ends_with(HTML_DOCUMENT_LOCAL_EXTENSION)
+        {
+            ContentType::HtmlDocument
         } else {
             ContentType::File
         };
@@ -151,4 +163,25 @@ pub fn io_error_to_log_level(error: &io::Error) -> log::Level {
         io::ErrorKind::AlreadyExists => log::Level::Info,
         _ => log::Level::Error,
     }
+}
+
+pub fn extract_html_body_content(content: &str) -> Result<String, String> {
+    // let dom = Dom::parse(content)?;
+
+    // for node in dom.children {
+    //     match node {
+    //         html_parser::Node::Element(element) => {
+    //             if element.name == "body" {
+    //                 return Ok(element.children.join(""));
+    //             }
+    //         }
+    //         _ => {}
+    //     }
+    //         },
+    //         _ => {}
+    //     }
+    // }
+
+    // If body node not found, consider given content is body content
+    Ok(content.to_string())
 }
