@@ -80,7 +80,7 @@ fn main() -> Result<(), Error> {
 
     let context = opt.to_context(password.clone())?;
     let _stop_signal = Arc::new(AtomicBool::new(false));
-    run::run(context, _stop_signal)?;
+    run::run(context, _stop_signal, None)?;
     log::info!("Exit application");
     Ok(())
 }
