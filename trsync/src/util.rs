@@ -46,26 +46,11 @@ impl FileInfos {
             .to_string();
         let relative_path_path = Path::new(&relative_file_path);
         let path_components: Vec<Component> = relative_path_path.components().collect();
-        // TODO : to utils
-        let parent_relative_path = if path_components.len() > 1 {
-            Some(
-                absolute_path
-                    .parent()
-                    .ok_or(Error::PathManipulationError(format!(
-                        "Unable to find parent of {:?}",
-                        &absolute_path
-                    )))?
-                    .strip_prefix(workspace_path)?
-                    .to_str()
-                    .ok_or(Error::PathCastingError(format!(
-                        "Unable to convert {:?} into str",
-                        &absolute_path
-                    )))?
-                    .to_string(),
-            )
-        } else {
-            None
-        };
+        let parent_relative_path = parent_relative_path_from_path_components(
+            &path_components,
+            &absolute_path,
+            &workspace_path,
+        )?;
         let content_type = if absolute_path.is_dir() {
             ContentType::Folder
         } else {
@@ -97,6 +82,32 @@ impl FileInfos {
         } else {
             Ok(None)
         }
+    }
+}
+
+pub fn parent_relative_path_from_path_components(
+    path_components: &Vec<Component>,
+    absolute_path: &Path,
+    workspace_path: &str,
+) -> Result<Option<String>, Error> {
+    if path_components.len() > 1 {
+        Ok(Some(
+            absolute_path
+                .parent()
+                .ok_or(Error::PathManipulationError(format!(
+                    "Unable to find parent of {:?}",
+                    &absolute_path
+                )))?
+                .strip_prefix(workspace_path)?
+                .to_str()
+                .ok_or(Error::PathCastingError(format!(
+                    "Unable to convert {:?} into str",
+                    &absolute_path
+                )))?
+                .to_string(),
+        ))
+    } else {
+        Ok(None)
     }
 }
 
