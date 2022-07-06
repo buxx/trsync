@@ -116,7 +116,7 @@ impl Client {
             })?;
             let html_part_content: String =
                 util::extract_html_body(&html_content).unwrap_or_else(|error| {
-                    log::error!("Unable to extract html body content : '{}'", error);
+                    log::debug!("Unable to extract html body content : '{}'", error);
                     html_content.to_string()
                 });
             data.insert("raw_content".to_string(), json!(html_part_content));
@@ -271,7 +271,7 @@ impl Client {
             })?;
             let html_part_content: String =
                 util::extract_html_body(&html_content).unwrap_or_else(|error| {
-                    log::error!("Unable to extract html body content : '{}'", error);
+                    log::debug!("Unable to extract html body content : '{}'", error);
                     html_content.to_string()
                 });
             data.insert("raw_content".to_string(), json!(html_part_content));
