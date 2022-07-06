@@ -550,10 +550,15 @@ impl Client {
         };
         log::debug!("Update file '{}' on remote with url '{}'", content_id, &url);
 
+        let label_minus_pos = if content_type == ContentType::HtmlDocument {
+            3
+        } else {
+            2
+        };
         let label = {
             let splitted = new_file_name.split(".").collect::<Vec<&str>>();
             if splitted.len() > 1 {
-                splitted[splitted.len() - 2].to_string()
+                splitted[splitted.len() - label_minus_pos].to_string()
             } else {
                 new_file_name.clone()
             }
