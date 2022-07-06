@@ -114,8 +114,8 @@ impl Client {
                     absolute_file_path, error,
                 )));
             })?;
-            let html_part_content: String = util::extract_html_body_content(&html_content)
-                .unwrap_or_else(|error| {
+            let html_part_content: String =
+                util::extract_html_body(&html_content).unwrap_or_else(|error| {
                     log::error!("Unable to extract html body content : '{}'", error);
                     html_content.to_string()
                 });
@@ -269,8 +269,8 @@ impl Client {
                     absolute_file_path, error,
                 )));
             })?;
-            let html_part_content: String = util::extract_html_body_content(&html_content)
-                .unwrap_or_else(|error| {
+            let html_part_content: String =
+                util::extract_html_body(&html_content).unwrap_or_else(|error| {
                     log::error!("Unable to extract html body content : '{}'", error);
                     html_content.to_string()
                 });

@@ -5,6 +5,7 @@ use std::{
     time::UNIX_EPOCH,
 };
 
+use minidom::Element;
 use rusqlite::Connection;
 use std::fs;
 
@@ -165,22 +166,17 @@ pub fn io_error_to_log_level(error: &io::Error) -> log::Level {
     }
 }
 
-pub fn extract_html_body_content(content: &str) -> Result<String, String> {
-    // let dom = Dom::parse(content)?;
+pub fn extract_html_body(content: &str) -> Result<String, String> {
+    let root: Element = match content.parse() {
+        Ok(element_) => element_,
+        Err(error) => return Err(format!("Unable to read html content : '{}'", error)),
+    };
 
-    // for node in dom.children {
-    //     match node {
-    //         html_parser::Node::Element(element) => {
-    //             if element.name == "body" {
-    //                 return Ok(element.children.join(""));
-    //             }
-    //         }
-    //         _ => {}
-    //     }
-    //         },
-    //         _ => {}
-    //     }
-    // }
+    for element in root.children() {
+        if element.name() == "body" {
+            return Ok(String::from(element));
+        }
+    }
 
     // If body node not found, consider given content is body content
     Ok(content.to_string())
