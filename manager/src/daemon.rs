@@ -1,6 +1,7 @@
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
 use trsync;
@@ -30,14 +31,24 @@ impl Daemon {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
-        self.ensure_processes()?;
+        while let Err(error) = self.ensure_processes() {
+            log::error!("Startup error : '{}', retry in 30s", error);
+            std::thread::sleep(Duration::from_secs(30))
+        }
 
         loop {
             // Block until new message received
             match self.main_receiver.recv() {
                 Ok(DaemonMessage::Reload(new_config)) => {
                     self.config = new_config;
-                    self.ensure_processes()?
+                    while let Err(error) = self.ensure_processes() {
+                        if self.main_receiver.len() > 0 {
+                            log::error!("Startup error : '{}', main message received, skip", error);
+                            continue;
+                        }
+                        log::error!("Startup error : '{}', retry in 30s", error);
+                        std::thread::sleep(Duration::from_secs(30))
+                    }
                 }
                 Ok(DaemonMessage::Stop) => break,
                 Err(error) => return Err(Error::from(error)),
@@ -100,7 +111,10 @@ impl Daemon {
                         }
                     }
                     Err(error) => {
-                        log::error!("{:?}", error);
+                        return Err(Error::UnavailableNetwork(format!(
+                            "Unable to get workspace infos : '{}'",
+                            error
+                        )))
                     }
                 }
             }

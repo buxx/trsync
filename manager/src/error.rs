@@ -9,6 +9,7 @@ pub enum Error {
     ReadConfigError(String),
     FailToSpawnTrsyncProcess(Option<String>),
     UnexpectedError(String),
+    UnavailableNetwork(String),
 }
 
 impl From<RecvError> for Error {
@@ -84,6 +85,7 @@ impl Display for Error {
                 }
             }
             Error::UnexpectedError(message) => write!(f, "Unexpected error : '{}'", message),
+            Error::UnavailableNetwork(message) => write!(f, "Network error : '{}'", message),
         }
     }
 }
