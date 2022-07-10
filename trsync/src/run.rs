@@ -145,6 +145,11 @@ pub fn run(
             .expect("Fail to join operational handler")?;
 
         if stop_signal.load(Ordering::Relaxed) {
+            log::info!(
+                "[{}::{}] Stop signal received, interrupt now",
+                context.instance_name,
+                context.workspace_id,
+            );
             break;
         }
     }

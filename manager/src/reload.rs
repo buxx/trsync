@@ -16,7 +16,7 @@ use crate::{config::Config, error::Error, message::DaemonMessage};
 
 pub struct ReloadWatcher {
     config: Config,
-    main_channel_sender: Sender<DaemonMessage>,
+    main_sender: Sender<DaemonMessage>,
     stop_signal: Arc<AtomicBool>,
 }
 
@@ -28,7 +28,7 @@ impl ReloadWatcher {
     ) -> Self {
         Self {
             config,
-            main_channel_sender,
+            main_sender: main_channel_sender,
             stop_signal,
         }
     }
@@ -60,7 +60,7 @@ impl ReloadWatcher {
         }
         let (inotify_sender, inotify_receiver) = channel();
 
-        let main_channel_sender = self.main_channel_sender.clone();
+        let main_sender = self.main_sender.clone();
         let allow_raw_passwords = self.config.allow_raw_passwords;
         let thread_stop_signal = self.stop_signal.clone();
         thread::spawn(move || {
@@ -91,7 +91,7 @@ impl ReloadWatcher {
                                 continue;
                             }
                         };
-                        match main_channel_sender.send(DaemonMessage::Reload(config)) {
+                        match main_sender.send(DaemonMessage::Reload(config)) {
                             Err(error) => {
                                 log::error!("Unable to send reload message : '{:?}'", error);
                                 // TODO : Notify user of error
