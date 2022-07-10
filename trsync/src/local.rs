@@ -18,52 +18,77 @@ use crate::operation::OperationalMessage;
 use crate::util;
 
 pub struct LocalWatcher {
+    context: Context,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
     operational_sender: Sender<OperationalMessage>,
-    workspace_folder_path: PathBuf,
 }
 
 impl LocalWatcher {
     pub fn new(
+        context: Context,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
         operational_sender: Sender<OperationalMessage>,
-        workspace_folder_path: String,
     ) -> Result<Self, Error> {
         Ok(Self {
+            context,
             stop_signal,
             restart_signal,
             operational_sender,
-            workspace_folder_path: fs::canonicalize(&workspace_folder_path)?,
         })
     }
 
-    pub fn listen(&mut self, path: String) -> Result<(), Error> {
+    pub fn listen(&mut self) -> Result<(), Error> {
+        log::debug!(
+            "[{}::{}] Start listening for local changes",
+            self.context.instance_name,
+            self.context.workspace_id,
+        );
+        let workspace_folder_path = fs::canonicalize(&self.context.folder_path)?;
         let (inotify_sender, inotify_receiver) = channel();
         let mut inotify_watcher = watcher(inotify_sender, Duration::from_secs(1))?;
-        inotify_watcher.watch(path, RecursiveMode::Recursive)?;
+        let inotify_workspace_folder_path = workspace_folder_path.clone();
+        inotify_watcher.watch(inotify_workspace_folder_path, RecursiveMode::Recursive)?;
 
         loop {
             match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
-                Ok(event) => match self.digest_event(&event) {
+                Ok(event) => match self.digest_event(&event, &workspace_folder_path) {
                     Err(error) => {
-                        log::error!("Error when digest event {:?} : {:?}", &event, error)
+                        log::error!(
+                            "[{}::{}] Error when digest event {:?} : {:?}",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                            error,
+                            &event,
+                        )
                     }
                     _ => {}
                 },
                 Err(RecvTimeoutError::Timeout) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
-                        log::info!("Finished local listening (on stop signal)");
+                        log::info!(
+                            "[{}::{}] Finished local listening (on stop signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         break;
                     }
                     if self.restart_signal.load(Ordering::Relaxed) {
-                        log::info!("Finished local listening (on restart signal)");
+                        log::info!(
+                            "[{}::{}] Finished local listening (on restart signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         break;
                     }
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    log::error!("Finished local listening (on channel closed)");
+                    log::error!(
+                        "[{}::{}] Finished local listening (on channel closed)",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                    );
                     break;
                 }
             }
@@ -72,33 +97,40 @@ impl LocalWatcher {
         Ok(())
     }
 
-    pub fn digest_event(&self, event: &DebouncedEvent) -> Result<(), Error> {
-        log::debug!("Local event: {:?}", event);
+    pub fn digest_event(
+        &self,
+        event: &DebouncedEvent,
+        workspace_folder_path: &PathBuf,
+    ) -> Result<(), Error> {
+        log::debug!(
+            "[{}::{}] Local event received: {:?}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            &event,
+        );
 
         let messages: Vec<OperationalMessage> = match event {
             DebouncedEvent::Create(absolute_path) => {
                 vec![OperationalMessage::NewLocalFile(util::path_to_string(
-                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                    absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Write(absolute_path) => {
                 vec![OperationalMessage::ModifiedLocalFile(util::path_to_string(
-                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                    absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Remove(absolute_path) => {
                 vec![OperationalMessage::DeletedLocalFile(util::path_to_string(
-                    absolute_path.strip_prefix(&self.workspace_folder_path)?,
+                    absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Rename(absolute_source_path, absolute_dest_path) => {
                 vec![OperationalMessage::RenamedLocalFile(
                     util::path_to_string(
-                        absolute_source_path.strip_prefix(&self.workspace_folder_path)?,
+                        absolute_source_path.strip_prefix(&workspace_folder_path)?,
                     )?,
-                    util::path_to_string(
-                        absolute_dest_path.strip_prefix(&self.workspace_folder_path)?,
-                    )?,
+                    util::path_to_string(absolute_dest_path.strip_prefix(&workspace_folder_path)?)?,
                 )]
             }
             // Ignore these
@@ -115,6 +147,12 @@ impl LocalWatcher {
             }
         };
 
+        log::debug!(
+            "[{}::{}] PRoduced messages for event: {:?}",
+            self.context.instance_name,
+            self.context.workspace_id,
+            &messages,
+        );
         for message in messages {
             match self.operational_sender.send(message) {
                 Ok(_) => (),
@@ -155,7 +193,7 @@ impl LocalSync {
     pub fn sync(&self) -> Result<(), Error> {
         // Look at disk files and compare to db
         self.sync_from_disk();
-        // TODO : look ate db to search deleted files
+        // Look from db to search deleted files
         self.sync_from_db()?;
 
         Ok(())
@@ -303,21 +341,22 @@ pub fn start_local_watch(
     stop_signal: &Arc<AtomicBool>,
     restart_signal: &Arc<AtomicBool>,
 ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    let exit_after_sync = context.exit_after_sync;
     let local_watcher_context = context.clone();
     let local_watcher_operational_sender = operational_sender.clone();
     let local_watcher_stop_signal = stop_signal.clone();
     let local_watcher_restart_signal = restart_signal.clone();
 
     let mut local_watcher = LocalWatcher::new(
+        local_watcher_context,
         local_watcher_stop_signal,
         local_watcher_restart_signal,
         local_watcher_operational_sender,
-        local_watcher_context.folder_path.clone(),
     )?;
 
     Ok(thread::spawn(move || {
-        if !local_watcher_context.exit_after_sync {
-            local_watcher.listen(local_watcher_context.folder_path.clone())
+        if !exit_after_sync {
+            local_watcher.listen()
         } else {
             Ok(())
         }
