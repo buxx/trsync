@@ -148,7 +148,7 @@ impl LocalWatcher {
         };
 
         log::debug!(
-            "[{}::{}] PRoduced messages for event: {:?}",
+            "[{}::{}] Produced messages for event: {:?}",
             self.context.instance_name,
             self.context.workspace_id,
             &messages,
@@ -172,20 +172,20 @@ impl LocalWatcher {
 // Represent known local files. When trsync start, it use this index to compare
 // with real local files state and produce change messages.
 pub struct LocalSync {
+    context: Context,
     connection: Connection,
-    path: PathBuf,
     operational_sender: Sender<OperationalMessage>,
 }
 
 impl LocalSync {
     pub fn new(
+        context: Context,
         connection: Connection,
-        path: String,
         operational_sender: Sender<OperationalMessage>,
     ) -> Result<Self, Error> {
         Ok(Self {
+            context,
             connection,
-            path: fs::canonicalize(&path)?,
             operational_sender,
         })
     }
@@ -200,18 +200,30 @@ impl LocalSync {
     }
 
     fn sync_from_disk(&self) {
-        WalkDir::new(&self.path)
+        WalkDir::new(&self.context.folder_path)
             .into_iter()
             .filter_entry(|e| !self.ignore_entry(e))
             .for_each(|dir_entry| match &dir_entry {
                 Ok(dir_entry_) => match self.sync_disk_file(&dir_entry_) {
                     Ok(_) => {}
                     Err(error) => {
-                        log::error!("Fail to sync disk file {:?} : {:?}", dir_entry_, error);
+                        log::error!(
+                            "[{}::{}] Fail to sync disk file {:?} : {:?}",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                            dir_entry_,
+                            error
+                        );
                     }
                 },
                 Err(error) => {
-                    log::error!("Fail to walk on dir {:?} : '{}'", &dir_entry, error)
+                    log::error!(
+                        "[{}::{}] Fail to walk on dir {:?} : '{}'",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                        &dir_entry,
+                        error
+                    )
                 }
             })
     }
@@ -234,13 +246,13 @@ impl LocalSync {
     }
 
     fn sync_disk_file(&self, entry: &DirEntry) -> Result<(), Error> {
-        let relative_path = entry.path().strip_prefix(&self.path)?;
+        let relative_path = entry.path().strip_prefix(&self.context.folder_path)?;
         // TODO : prevent sync root with more clean way
         if relative_path == Path::new("") {
             return Ok(());
         }
 
-        let metadata = fs::metadata(self.path.join(relative_path))?;
+        let metadata = fs::metadata(Path::new(&self.context.folder_path).join(relative_path))?;
         let disk_last_modified_timestamp =
             metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
@@ -255,13 +267,26 @@ impl LocalSync {
             Ok(last_modified_timestamp) => {
                 // Known file (check if have been modified)
                 if disk_last_modified_timestamp != last_modified_timestamp {
+                    log::info!(
+                        "[{}::{}] File '{:?}' has been modified (disk timestamp='{}' != db timestamp='{}')",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                        relative_path,
+                        disk_last_modified_timestamp,
+                        last_modified_timestamp,
+                    );
                     match self
                         .operational_sender
                         .send(OperationalMessage::ModifiedLocalFile(util::path_to_string(
                             relative_path,
                         )?)) {
                         Err(error) => {
-                            log::error!("Fail to send operational message : {:?}", error)
+                            log::error!(
+                                "[{}::{}] Fail to send operational message : {:?}",
+                                self.context.instance_name,
+                                self.context.workspace_id,
+                                error
+                            )
                         }
                         _ => {}
                     }
@@ -275,7 +300,12 @@ impl LocalSync {
                         relative_path,
                     )?)) {
                     Err(error) => {
-                        log::error!("Fail to send operational message : {:?}", error)
+                        log::error!(
+                            "[{}::{}] Fail to send operational message : {:?}",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                            error
+                        )
                     }
                     _ => {}
                 }
@@ -294,13 +324,21 @@ impl LocalSync {
     fn sync_from_db(&self) -> Result<(), Error> {
         let relative_paths = DatabaseOperation::new(&self.connection).get_relative_paths()?;
         for relative_path in &relative_paths {
-            if !self.path.join(&relative_path).exists() {
+            if !Path::new(&self.context.folder_path)
+                .join(&relative_path)
+                .exists()
+            {
                 match self
                     .operational_sender
                     .send(OperationalMessage::DeletedLocalFile(relative_path.clone()))
                 {
                     Err(error) => {
-                        log::error!("Fail to send operational message : '{}'", error)
+                        log::error!(
+                            "[{}::{}] Fail to send operational message : '{}'",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                            error
+                        )
                     }
                     _ => {}
                 }
@@ -322,8 +360,8 @@ pub fn start_local_sync(
         Database::new(local_sync_context.database_path.clone()).with_new_connection(
             |connection| {
                 LocalSync::new(
+                    local_sync_context,
                     connection,
-                    local_sync_context.folder_path.clone(),
                     local_sync_operational_sender,
                 )?
                 .sync()?;
