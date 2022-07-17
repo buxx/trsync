@@ -43,7 +43,7 @@ pub enum Job {
     End(JobIdentifier),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OperationalMessage {
     // Local files messages
     NewLocalFile(RelativeFilePath),

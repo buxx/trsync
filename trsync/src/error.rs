@@ -2,7 +2,7 @@ use std::{fmt, io, str::Utf8Error};
 
 use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ClientError {
     InputFileError(AbsoluteFilePath),
     RequestError(String),

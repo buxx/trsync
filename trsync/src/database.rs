@@ -18,6 +18,7 @@ impl Database {
     where
         F: FnOnce(Connection) -> Result<(), Error>,
     {
+        // FIXME : need to close ?
         let connection = Connection::open(self.database_file_path.clone())?;
         f(connection)?;
         Ok(())

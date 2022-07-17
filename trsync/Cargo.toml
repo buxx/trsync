@@ -37,6 +37,13 @@ futures-util = "0.3.17"  # required to call .next() on reqwest Stream
 serde = "1.0.130"
 serde_derive = "1.0.130"
 serde_json = "1.0.67"
+# Tests ?
+mockall_double = "0.3.0"
+mockall = "0.11.1"
+
+[dev-dependencies]
+pretty_assertions = "1"
+rstest = "0.15.0"
 
 [features]
 windows = ["rusqlite/bundled"]
