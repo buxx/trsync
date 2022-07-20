@@ -37,7 +37,8 @@ impl ConflictResolver {
             self.knowledge.workspace_id(),
         );
 
-        let (operations, mut outgoing) = self.prepare();
+        let mut outgoing = vec![];
+        let (operations, original_left) = self.prepare();
         let (mut local_operations, mut remote_operations) = self.split_operations(operations);
 
         while let Some((relative_path, message)) = &local_operations.pop() {
@@ -66,6 +67,7 @@ impl ConflictResolver {
 
         // Left remote messages can be added to outgoing
         outgoing.extend(remote_operations.into_iter().map(|(_, m)| m));
+        outgoing.extend(original_left);
 
         outgoing
     }
@@ -355,6 +357,19 @@ mod tests {
             OperationalMessage::NewLocalFile("b.txt".to_string())
         ]
     )]
+    // Exit message musty be at the end
+    #[case(
+        vec![
+            OperationalMessage::NewRemoteFile(1),
+            OperationalMessage::NewRemoteFile(2),
+            OperationalMessage::Exit,
+        ], 
+        vec![
+            OperationalMessage::NewRemoteFile(1),
+            OperationalMessage::NewRemoteFile(2),
+            OperationalMessage::Exit,
+        ]
+    )]
     fn multiple_cases(#[case] input: Vec<OperationalMessage>, #[case] expected: Vec<OperationalMessage>) {
         // Given
         let mut knowledge = Box::new(MockKnowledge::new());
@@ -362,10 +377,12 @@ mod tests {
             .expect_get_local_relative_path()
             .returning(|i| {match i {
                 1 => Ok("a.txt".to_string()),
+                2 => Ok("b.txt".to_string()),
                 _ => unreachable!(),
             }});
         knowledge.expect_get_remote_relative_path().returning(|i| {match i {
             1 => Ok("a.txt".to_string()),
+            2 => Ok("b.txt".to_string()),
             _ => unreachable!(),
         }});
         let resolver = ConflictResolver {

@@ -18,3 +18,10 @@ class Workspace:
         path = tmp_path / self.name
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+
+@dataclasses.dataclass
+class Content:
+    id: int
+    revision: int
+    content: bytes

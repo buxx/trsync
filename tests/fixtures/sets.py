@@ -9,10 +9,14 @@ SETS = {
         "/file_2.txt",
         "/folder_1",
         "/folder_1/file_1.txt",
-    ]
+    ],
+    "Set2": [
+        "/file_toto.txt",
+    ],
 }
 
 FILE_CONTENTS = {
+    "/file_toto.txt": b"toto",
     "/file_2.txt": b"Hello world !",
     "/folder_1/file_1.txt": b"Hello world again !",
 }
@@ -39,6 +43,17 @@ def create_file(
     return response_json["content_id"]
 
 
+def update_file(
+    user: User, workspace: Workspace, content_id: int, name: str, content: bytes
+) -> None:
+    response = requests.put(
+        f"http://{TRACIM_URL}/api/workspaces/{workspace.id}/files/{content_id}/raw/{name}",
+        files={"files": (name, content)},
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 204
+
+
 def create_folder(
     user: User,
     workspace: Workspace,
@@ -61,23 +76,29 @@ def create_folder(
 def create_set_on_remote(user: User, workspace: Workspace, set_name: str) -> None:
     content_ids = {}
     for file_path in SETS[set_name]:
-        # Create only the last part (set must be ordered correctly)
-        splitted = file_path[1:].split("/")
-        concerned_part = splitted[-1]
-        parent_id = None
+        create_remote(user, workspace, file_path, content_ids, contents=FILE_CONTENTS)
 
-        if len(splitted) > 1:
-            parent_id = content_ids["/" + "/".join(splitted[:-1])]
 
-        if concerned_part.startswith("file_"):
-            id = create_file(
-                user,
-                workspace,
-                concerned_part,
-                content=FILE_CONTENTS[file_path],
-                parent_id=parent_id,
-            )
-        elif concerned_part.startswith("folder_"):
-            id = create_folder(user, workspace, concerned_part, parent_id=parent_id)
+def create_remote(
+    user: User, workspace: Workspace, file_path: str, content_ids: dict, contents: dict
+) -> None:
+    # Create only the last part (set must be ordered correctly)
+    splitted = file_path[1:].split("/")
+    concerned_part = splitted[-1]
+    parent_id = None
 
-        content_ids[file_path] = id
+    if len(splitted) > 1:
+        parent_id = content_ids["/" + "/".join(splitted[:-1])]
+
+    if concerned_part.startswith("file_"):
+        id = create_file(
+            user,
+            workspace,
+            concerned_part,
+            content=contents[file_path],
+            parent_id=parent_id,
+        )
+    elif concerned_part.startswith("folder_"):
+        id = create_folder(user, workspace, concerned_part, parent_id=parent_id)
+
+    content_ids[file_path] = id

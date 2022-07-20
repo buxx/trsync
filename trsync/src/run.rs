@@ -1,5 +1,6 @@
 extern crate notify;
-use crate::client::ensure_availability;
+use crate::client::{ensure_availability, Client};
+use crate::conflict::{ConflictResolver, LocalIsTruth};
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
 use crate::error::Error;
@@ -109,6 +110,7 @@ pub fn run(
         }
 
         if exit_after_sync {
+            stop_signal.swap(true, Ordering::Relaxed);
             log::info!(
                 "[{}::{}] Synchronization finished",
                 context.instance_name,
@@ -117,14 +119,50 @@ pub fn run(
             operational_sender
                 .send(OperationalMessage::Exit)
                 .expect("Fail to send exit message");
-        } else {
-            log::info!(
-                "[{}::{}] Synchronization finished, start changes resolver",
-                context.instance_name,
-                context.workspace_id,
-            );
         }
 
+        log::info!(
+            "[{}::{}] Prepare conflicts resolution",
+            context.instance_name,
+            context.workspace_id,
+        );
+        // Handle possible conflict by analyzing operational messages
+        let client = Client::new(context.clone())?;
+        let context_ = context.clone();
+        let strategy = Box::new(LocalIsTruth {});
+        let operational_messages: Vec<OperationalMessage> =
+            operational_receiver.try_iter().collect();
+        log::debug!(
+            "[{}::{}] messages before conflict resolution : {:?}",
+            context.instance_name,
+            context.workspace_id,
+            &operational_messages,
+        );
+        let operational_messages =
+            ConflictResolver::new(context_, client, strategy, operational_messages).resolve();
+        log::debug!(
+            "[{}::{}] messages after conflict resolution : {:?}",
+            context.instance_name,
+            context.workspace_id,
+            &operational_messages,
+        );
+        for message in operational_messages {
+            match operational_sender.send(message) {
+                Err(error) => {
+                    return Err(Error::UnexpectedError(format!(
+                        "Fail to send message after conflict resolution : {}",
+                        error
+                    )))
+                }
+                _ => {}
+            };
+        }
+
+        log::info!(
+            "[{}::{}] Start operations",
+            context.instance_name,
+            context.workspace_id,
+        );
         // Operational
         let operational_handle = start_operation(
             &context,

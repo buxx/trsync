@@ -12,7 +12,7 @@ import pytest
 import requests
 import psutil
 
-from tests.fixtures.model import User, Workspace
+from tests.fixtures.model import Content, User, Workspace
 
 
 TRACIM_VERSION = "4.1.3"
@@ -113,6 +113,8 @@ def execute_trsync_and_wait_finished(
     args = [
         f"{Path.home()}/.cargo/bin/cargo",
         "run",
+        "--bin",
+        "trsync",
         str(folder),
         TRACIM_URL,
         str(workspace_id),
@@ -125,7 +127,7 @@ def execute_trsync_and_wait_finished(
         " ".join(args),
         stdout=stdout,
         stderr=stdout,
-        env={"PASSWORD": user.password},
+        env={"PASSWORD": user.password, "RUST_LOG": "DEBUG"},
         shell=True,
         check=True,
     )
@@ -149,6 +151,8 @@ def execute_trsync(folder: Path, workspace_id: int, user: User, stdout):
     args = [
         f"{Path.home()}/.cargo/bin/cargo",
         "run",
+        "--bin",
+        "trsync",
         str(folder),
         TRACIM_URL,
         str(workspace_id),
@@ -160,7 +164,7 @@ def execute_trsync(folder: Path, workspace_id: int, user: User, stdout):
         " ".join(args),
         stdout=stdout,
         stderr=stdout,
-        env={"PASSWORD": user.password},
+        env={"PASSWORD": user.password, "RUST_LOG": "DEBUG"},
         shell=True,
     )
 
@@ -183,7 +187,7 @@ def _get_workspace_contents(user: User, workspace: Workspace) -> typing.List[dic
     return json.loads(response.content)["items"]
 
 
-def _get_content(user: User, content_id: int) -> typing.List[dict]:
+def get_content(user: User, content_id: int) -> dict:
     response = requests.get(
         f"http://{TRACIM_URL}/api/contents/{content_id}",
         auth=(user.username, user.password),
@@ -192,12 +196,30 @@ def _get_content(user: User, content_id: int) -> typing.List[dict]:
     return json.loads(response.content)
 
 
+def get_content_bytes(user: User, content_id: int) -> bytes:
+    response = requests.get(
+        f"http://{TRACIM_URL}/api/contents/{content_id}",
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 200
+    content = json.loads(response.content)
+
+    workspace_id = content["workspace_id"]
+    filename = content["filename"]
+    response = requests.get(
+        f"http://{TRACIM_URL}/api/workspaces/{workspace_id}/files/{content_id}/raw/{filename}",
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 200
+    return response.content
+
+
 def _get_content_path(user: User, content_id: int) -> Path:
     paths = []
     current_content_id = content_id
 
     while True:
-        parent = _get_content(user, current_content_id)
+        parent = get_content(user, current_content_id)
         if parent["is_deleted"]:
             raise IndexError()
         paths.append(parent["filename"])
@@ -208,21 +230,21 @@ def _get_content_path(user: User, content_id: int) -> Path:
     return Path().joinpath(*reversed(paths))
 
 
-def get_workspace_listing(user: User, workspace: Workspace) -> typing.List[str]:
-    paths = []
+def get_workspace_listing(user: User, workspace: Workspace) -> typing.Dict[str, int]:
+    paths = {}
 
     for content in _get_workspace_contents(user, workspace):
         try:
             if parent_id := content["parent_id"]:
                 parent_path = _get_content_path(user, parent_id)
-                path = parent_path / Path(content["filename"])
+                path = (parent_path / Path(content["filename"])), content["content_id"]
             else:
-                path = Path(content["filename"])
+                path = Path(content["filename"]), content["content_id"]
         except IndexError:
             pass
-        paths.append(str("/" / path))
+        paths[str("/" / path[0])] = path[1]
 
-    return list(sorted(paths))
+    return paths
 
 
 def check_until(callback, duration=10.0):
