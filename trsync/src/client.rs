@@ -403,9 +403,9 @@ impl Client {
                 }
 
                 // If parent is a deleted folder, don't manage it
-                if folder.is_deleted {
+                if folder.is_deleted || folder.is_archived {
                     return Err(ClientError::NotRelevant(format!(
-                        "Parent content {} is deleted, ignore it",
+                        "Parent content {} is deleted or archived, ignore it",
                         content.filename
                     )));
                 }

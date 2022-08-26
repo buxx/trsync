@@ -241,6 +241,7 @@ pub struct RemoteContent {
     pub raw_content: Option<String>,
     pub filename: String,
     pub is_deleted: bool,
+    pub is_archived: bool,
 }
 
 pub struct RemoteSync {

@@ -253,8 +253,8 @@ impl LocalSync {
         }
 
         let metadata = fs::metadata(Path::new(&self.context.folder_path).join(relative_path))?;
-        let disk_last_modified_timestamp =
-            metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis() as u64;
+        let modified = metadata.modified()?;
+        let disk_last_modified_timestamp = modified.duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
         match DatabaseOperation::new(&self.connection).get_last_modified_timestamp(
             relative_path
