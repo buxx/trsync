@@ -242,6 +242,7 @@ pub struct RemoteContent {
     pub filename: String,
     pub is_deleted: bool,
     pub is_archived: bool,
+    pub sub_content_types: Vec<String>,
 }
 
 pub struct RemoteSync {

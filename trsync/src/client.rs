@@ -567,6 +567,16 @@ impl Client {
         let mut data = Map::new();
         data.insert("label".to_string(), json!(label));
         data.insert("file_name".to_string(), json!(new_file_name));
+
+        // Be compatible with Tracim which not have this https://github.com/tracim/tracim/pull/5864
+        let remote_content = self.get_remote_content(content_id)?;
+        if remote_content.content_type == ContentType::Folder.to_string() {
+            data.insert(
+                "sub_content_types".to_string(),
+                json!(remote_content.sub_content_types),
+            );
+        }
+
         let response = self
             .client
             .request(Method::PUT, url)
