@@ -92,6 +92,6 @@ You need a configuration file like at previous "manager" section.
 
 Then start `trsync_manager_systray` binary.
 
-#### ⚠ Debian 11
+#### ⚠ Debian 11 + Gnome Shell
 
-To be able to se the systray icon with Debian 11, you must install following gnome extension : https://extensions.gnome.org/extension/615/appindicator-support/
+To be able to se the systray icon with Debian 11 + Gnome Shell, you must install following gnome extension : https://extensions.gnome.org/extension/615/appindicator-support/
