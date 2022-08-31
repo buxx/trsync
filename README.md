@@ -1,65 +1,49 @@
-# trsync
+# Trsync
 
 ![trsync illustration](illustration2.png)
 
-Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared space.
-
-## State of trsync
-
-Trsync is in development. You can try it by following next sections.
+Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared spaces.
 
 ## What is in this repository
 
-### trsync
-
-This is the tool permitting to synchronize one Tracim shared space with one local folder.
-
-### manager
-
-Daemon which manage multiples trsync executions by reading a config file.
-
-### systray
-
-Task bar icon program permitting to start a graphical configuration window to fill manager config file.
+* **trsync** : This is the tool permitting to synchronize one Tracim shared space with one local folder.
+* **manager** : Daemon which manage multiples trsync executions by reading a config file.
+* **systray** : Task bar icon program permitting to start a graphical configuration window to fill manager config file.
 
 ## What is not in this repository
 
-### configure
-
-The configuration windows program is available to [buxx/trsync-manager-configure](https://github.com/buxx/trsync-manager-configure)
+* **configure** : The configuration window program is available to [buxx/trsync-manager-configure](https://github.com/buxx/trsync-manager-configure)
 
 ## Build from source
 
-Please install following dependencies, on linux :
+GNU/Linux 🐧 : Please install following dependencies, example for Debian-like :
 
-    apt-get install build-essential pkg-config libssl-dev libsqlite3-dev
+    apt-get install build-essential pkg-config libssl-dev libsqlite3-dev libpango1.0-dev libgtk-3-dev
 
-On Windows, install C++ build tools and sqlite3 dev.
+(Note `libpango1.0-dev libgtk-3-dev` are only required for `systray` binary)
 
-For systray, install :
+Windows : install C++ build tools, example with winget :
 
-    apt-get install libpango1.0-dev libgtk-3-dev
+    winget install -e --id Microsoft.VisualStudio.2022.BuildTools
 
-Rust minimal required version is 1.56.0.
+**Rust minimal required version is 1.56.0**.
 
 ### trsync
 
-Required : [Rust](https://www.rust-lang.org/tools/install)
-
-1. Clone this repository
-2. `cargo build --release --bin trsync` (`cargo build --features windows --release --bin trsync` if compiling with Windows)
+1. From root of this repository
+2. **GNU/Linux 🐧** : `cargo build --release --bin trsync`. **Windows** : `cargo build --features windows --release --bin trsync`
 3. Binary file available in `target/release`folder
 
 ### manager
 
 1. Clone this repository
-2. `cargo build --release --bin trsync_manager` (`cargo build --features windows --release --bin trsync_manager` if compiling with Windows)
+2. **GNU/Linux 🐧** : `cargo build --release --bin trsync_manager`. **Windows** : `cargo build --features windows --release --bin 
 3. Binary file available in `target/release`folder
 
 ### systray
 
 1. Clone this repository
-2. `cargo build --release --bin trsync_manager_systray` (`cargo build --features windows --release --bin trsync_manager_systray` if compiling with Windows)
+2. **GNU/Linux 🐧** : `cargo build --release --bin trsync_manager_systray`. **Windows** : `cargo build --features windows --release --bin trsync_manager_systray`
 3. Binary file available in `target/release`folder
 
 ## Usage
@@ -74,24 +58,30 @@ Example :
 
     cargo run ~/Tracim/MyProject mon.tracim.fr 42 bux
 
+User password will be asked by prompt. To use environment variable, indicate environment variable containg password name with `--env-var-pass PASSWORD` where `PASSWORD` is the environment variable name.
+
 ### manager
 
-Create file at `~/trsync.conf` from `trsync.conf.tpl` and filled with your needs.
+Create file at `~/trsync.conf` (by copying `trsync.conf.tpl`) and fill it with your needs.
+
+`trsync_manager` will try to get passwords from system secret manager with key `trsync::<instance name>` and current logged user as user. To set raw password, add `password` key with password as value in each instances sections.
 
 Then start `trsync_manager` binary.
 
 ### systray
 
-The `libappindicator`package is required. Example for debian-like:
+The `libappindicator` package is required. Example for debian-like:
 
     apt-get install libappindicator3-1
 
-You need [trsync-manager-configure](https://github.com/buxx/trsync-manager-configure) bin on your system.
+⚠ If you run Debian 11 + Gnome Shell, you must install following gnome extension : https://extensions.gnome.org/extension/615/appindicator-support/.
+
+You need [trsync-manager-configure](https://github.com/buxx/trsync-manager-configure) on your system.
 
 You need a configuration file like at previous "manager" section.
 
 Then start `trsync_manager_systray` binary.
 
-#### ⚠ Debian 11 + Gnome Shell
+## Deployment on your OS
 
-To be able to se the systray icon with Debian 11 + Gnome Shell, you must install following gnome extension : https://extensions.gnome.org/extension/615/appindicator-support/
+See [deployment doc file](doc/deployment.md)
