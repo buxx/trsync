@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 use error::Error;
