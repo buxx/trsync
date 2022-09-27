@@ -3,6 +3,7 @@ use crate::database::{Database, DatabaseOperation};
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
+use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -229,6 +230,12 @@ impl LocalSync {
     }
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
+        if entry.file_type().is_dir() {
+            // Ignore directory from local sync : changes can only be rename.
+            // And modification time is problematic :https://github.com/buxx/trsync/issues/60
+            return true;
+        }
+
         // TODO : patterns from config object
         if let Some(file_name) = entry.path().file_name() {
             if let Some(file_name_) = file_name.to_str() {
