@@ -1,7 +1,9 @@
 [workspace]
 
 members = [
+    "core",
     "trsync",
     "manager",
     "systray",
+    "configure",
 ]

@@ -1,0 +1,11 @@
+[package]
+name = "trsync_core"
+version = "0.1.0"
+authors = ["Bastien Sevajol <sevajol.bastien@gmail.com>"]
+edition = "2021"
+
+[lib]
+name = "trsync_core"
+path = "src/lib.rs"
+
+[dependencies]

@@ -1,0 +1,14 @@
+[package]
+name = "trsync_manager_configure"
+version = "0.1.0"
+authors = ["Bastien Sevajol <sevajol.bastien@gmail.com>"]
+edition = "2021"
+
+[[bin]]
+name = "trsync_manager_configure"
+path = "src/bin.rs"
+
+[dependencies]
+trsync_core = { path = "../core" }
+eframe = "0.21.3"
+rfd = "0.10"
