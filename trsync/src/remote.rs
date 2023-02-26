@@ -277,17 +277,55 @@ impl RemoteSync {
                 Ok(known_revision_id) => {
                     // File is known but have been modified ?
                     if known_revision_id != content.current_revision_id {
-                        match self
-                            .operational_sender
-                            .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
+                        // Remote change can be a move. Compare paths
+                        let local_content_relative_path = match DatabaseOperation::new(
+                            &self.connection,
+                        )
+                        .get_path_from_content_id(content.content_id)
                         {
+                            Ok(relative_path) => relative_path,
                             Err(error) => {
-                                log::error!(
+                                log::error!("Error when trying to get local relative path of content {} : {}", content.content_id, error);
+                                continue;
+                            }
+                        };
+                        let remote_content_relative_path = match self
+                            .client
+                            .build_relative_path(content)
+                        {
+                            Ok(relative_path) => relative_path,
+                            Err(error) => {
+                                log::error!("Error when trying to build remote relative path of content {} : {}", content.content_id, error);
+                                continue;
+                            }
+                        };
+
+                        if remote_content_relative_path != local_content_relative_path {
+                            match self
+                                .operational_sender
+                                .send(OperationalMessage::NewRemoteFile(content.content_id))
+                            {
+                                Err(error) => {
+                                    log::error!(
                                     "Error when send operational message from remote sync : '{}'",
                                     error
                                 )
+                                }
+                                _ => {}
                             }
-                            _ => {}
+                        } else {
+                            match self
+                                .operational_sender
+                                .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
+                            {
+                                Err(error) => {
+                                    log::error!(
+                                    "Error when send operational message from remote sync : '{}'",
+                                    error
+                                )
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }
