@@ -157,6 +157,11 @@ impl OperationalHandler {
 
                     // Indicate start working
                     if let Some(activity_sender) = &self.activity_sender {
+                        log::info!(
+                            "[{}::{}] Start job",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
                             self.context.instance_name.clone(),
                             self.context.workspace_id,
@@ -203,6 +208,11 @@ impl OperationalHandler {
 
                     // Indicate finished working
                     if let Some(activity_sender) = &self.activity_sender {
+                        log::info!(
+                            "[{}::{}] Ended job",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
                         if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
                             self.context.instance_name.clone(),
                             self.context.workspace_id,
