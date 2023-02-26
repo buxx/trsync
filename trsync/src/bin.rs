@@ -45,6 +45,9 @@ struct Opt {
 
     #[structopt(name = "--exit-after-sync", long)]
     exit_after_sync: bool,
+
+    #[structopt(name = "--prevent-delete-sync", long)]
+    prevent_delete_sync: bool,
 }
 
 impl Opt {
@@ -57,6 +60,7 @@ impl Opt {
             util::canonicalize_to_string(&self.path)?,
             self.workspace_id,
             self.exit_after_sync,
+            self.prevent_delete_sync,
         )?)
     }
 }

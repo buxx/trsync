@@ -335,6 +335,16 @@ impl LocalSync {
                 .join(&relative_path)
                 .exists()
             {
+                if self.context.prevent_delete_sync {
+                    log::info!(
+                        "[{}::{}] Ignore deleted local file {} by configuration",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                        &relative_path
+                    );
+                    continue;
+                }
+
                 match self
                     .operational_sender
                     .send(OperationalMessage::DeletedLocalFile(relative_path.clone()))

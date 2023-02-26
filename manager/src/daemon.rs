@@ -202,6 +202,7 @@ impl Daemon {
             folder_path.to_string(),
             workspace.workspace_id as i32,
             false,
+            self.config.prevent_delete_sync,
         ) {
             Ok(context_) => context_,
             Err(error) => {

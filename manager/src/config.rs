@@ -10,6 +10,7 @@ pub struct Config {
     pub local_folder: Option<String>,
     pub instances: Vec<Instance>,
     pub allow_raw_passwords: bool,
+    pub prevent_delete_sync: bool,
 }
 impl Config {
     pub fn from_env(allow_raw_passwords: bool) -> Result<Self, Error> {
@@ -49,6 +50,18 @@ impl Config {
             Err(_) => {
                 return Err(Error::ReadConfigError(
                     "Unable to read listen_timeout config from server section".to_string(),
+                ))
+            }
+        };
+        let prevent_delete_sync = match config_ini
+            .get_from(Some("server"), "prevent_delete_sync")
+            .unwrap_or("1")
+            .parse::<i32>()
+        {
+            Ok(prevent_delete_sync) => prevent_delete_sync > 0,
+            Err(_) => {
+                return Err(Error::ReadConfigError(
+                    "Unable to read prevent_delete_sync config from server section".to_string(),
                 ))
             }
         };
@@ -182,6 +195,7 @@ impl Config {
             local_folder,
             instances,
             allow_raw_passwords,
+            prevent_delete_sync,
         })
     }
 }
