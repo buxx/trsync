@@ -94,7 +94,7 @@ impl OperationalHandler {
         // TODO : For local files, ignore some patterns given by config : eg. ".*", "*~"
         if self.ignore_messages.contains(&message) {
             self.ignore_messages.retain(|x| *x != *message);
-            log::debug!(
+            log::info!(
                 "[{}::{}] Ignore message (planned ignore) : {:?}",
                 self.context.instance_name,
                 self.context.workspace_id,
