@@ -20,7 +20,9 @@ GNU/Linux 🐧 : Please install following dependencies, example for Debian-like 
 
     apt-get install build-essential pkg-config libssl-dev libsqlite3-dev libpango1.0-dev libgtk-3-dev
 
-(Note `libpango1.0-dev libgtk-3-dev` are only required for `systray` binary)
+(Note `libpango1.0-dev libgtk-3-dev` are only required for `systray` binary)  
+
+`cargo` is also required (`apt-get install cargo` or install [latest](https://www.rust-lang.org/tools/install))
 
 Windows : install C++ build tools, example with winget :
 
