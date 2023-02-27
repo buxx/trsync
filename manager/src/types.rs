@@ -1,11 +1,13 @@
+use trsync_core::instance::WorkspaceId;
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct TrsyncUid {
     instance_address: String,
-    workspace_id: u32,
+    workspace_id: WorkspaceId,
 }
 
 impl TrsyncUid {
-    pub fn new(instance_address: String, workspace_id: u32) -> Self {
+    pub fn new(instance_address: String, workspace_id: WorkspaceId) -> Self {
         Self {
             instance_address,
             workspace_id,
@@ -16,7 +18,7 @@ impl TrsyncUid {
         &self.instance_address
     }
 
-    pub fn workspace_id(&self) -> &u32 {
+    pub fn workspace_id(&self) -> &WorkspaceId {
         &self.workspace_id
     }
 }

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::path::Path;
 
+use trsync_core::instance::WorkspaceId;
+
 use crate::error::Error;
 use crate::util;
 
@@ -12,7 +14,7 @@ pub struct Context {
     pub password: String,
     pub folder_path: String,
     pub database_path: String,
-    pub workspace_id: i32,
+    pub workspace_id: WorkspaceId,
     pub exit_after_sync: bool,
     pub prevent_delete_sync: bool,
 }
@@ -24,7 +26,7 @@ impl Context {
         username: String,
         password: String,
         folder_path: String,
-        workspace_id: i32,
+        workspace_id: WorkspaceId,
         exit_after_sync: bool,
         prevent_delete_sync: bool,
     ) -> Result<Self, Error> {

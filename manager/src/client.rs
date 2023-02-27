@@ -1,9 +1,7 @@
 use reqwest::Method;
+use trsync_core::instance::{Instance, Workspace, WorkspaceId};
 
-use crate::{
-    error::{ClientError, Error},
-    model::{Instance, Workspace},
-};
+use crate::error::{ClientError, Error};
 
 const DEFAULT_CLIENT_TIMEOUT: u64 = 30;
 
@@ -22,7 +20,7 @@ impl Client {
         })
     }
 
-    pub fn get_workspace(&self, workspace_id: u32) -> Result<Workspace, ClientError> {
+    pub fn get_workspace(&self, workspace_id: WorkspaceId) -> Result<Workspace, ClientError> {
         let url = self
             .instance
             .url(Some(&format!("/workspaces/{}", workspace_id)));

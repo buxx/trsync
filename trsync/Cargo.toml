@@ -13,6 +13,7 @@ name = "trsync"
 path = "src/bin.rs"
 
 [dependencies]
+trsync_core = { path = "../core" }
 # Core
 walkdir = "2.3.2"
 chrono = "0.4.19"

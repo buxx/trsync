@@ -6,11 +6,12 @@ use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
 use trsync;
 use trsync::operation::Job;
+use trsync_core::config::ManagerConfig;
 
-use crate::{client::Client, config::Config, error::Error, message::DaemonMessage, types::*};
+use crate::{client::Client, error::Error, message::DaemonMessage, types::*};
 
 pub struct Daemon {
-    config: Config,
+    config: ManagerConfig,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
     main_receiver: Receiver<DaemonMessage>,
     activity_sender: Sender<Job>,
@@ -18,7 +19,7 @@ pub struct Daemon {
 
 impl Daemon {
     pub fn new(
-        config: Config,
+        config: ManagerConfig,
         main_receiver: Receiver<DaemonMessage>,
         activity_sender: Sender<Job>,
     ) -> Self {
@@ -200,7 +201,7 @@ impl Daemon {
             instance.username.clone(),
             instance.password.clone(),
             folder_path.to_string(),
-            workspace.workspace_id as i32,
+            workspace.workspace_id,
             false,
             self.config.prevent_delete_sync,
         ) {
