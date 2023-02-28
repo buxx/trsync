@@ -6,6 +6,7 @@ use std::{
 use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
+use trsync_core::instance::WorkspaceId;
 extern crate notify;
 
 pub mod client;
@@ -58,7 +59,7 @@ impl Opt {
             self.username.clone(),
             password.clone(),
             util::canonicalize_to_string(&self.path)?,
-            self.workspace_id,
+            WorkspaceId(self.workspace_id),
             self.exit_after_sync,
             self.prevent_delete_sync,
         )?)

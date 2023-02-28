@@ -4,6 +4,7 @@ use anyhow::Result;
 
 mod app;
 mod event;
+mod job;
 mod panel;
 mod run;
 mod state;

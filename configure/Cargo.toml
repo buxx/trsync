@@ -13,3 +13,4 @@ trsync_core = { path = "../core" }
 eframe = "0.21.3"
 rfd = "0.10"
 anyhow = "1.0.69"
+crossbeam-channel = "0.5"

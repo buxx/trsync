@@ -4,11 +4,12 @@ use crate::{
 };
 use mockall::automock;
 use rusqlite::Connection;
+use trsync_core::instance::WorkspaceId;
 
 #[automock]
 pub trait Knowledge {
     fn instance_name(&self) -> &str;
-    fn workspace_id(&self) -> i32;
+    fn workspace_id(&self) -> &WorkspaceId;
     fn get_remote_relative_path(&self, content_id: i32) -> Result<RelativeFilePath, ClientError>;
     fn get_local_relative_path(&self, content_id: i32) -> Result<RelativeFilePath, String>;
 }
@@ -29,8 +30,8 @@ impl Knowledge for ExternalKnowledge {
         &self.context.instance_name
     }
 
-    fn workspace_id(&self) -> i32 {
-        self.context.workspace_id
+    fn workspace_id(&self) -> &WorkspaceId {
+        &self.context.workspace_id
     }
 
     fn get_remote_relative_path(&self, content_id: i32) -> Result<RelativeFilePath, ClientError> {

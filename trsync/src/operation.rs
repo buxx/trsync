@@ -164,7 +164,7 @@ impl OperationalHandler {
                         );
                         if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
                             self.context.instance_name.clone(),
-                            self.context.workspace_id,
+                            self.context.workspace_id.0,
                         ))) {
                             log::error!(
                                 "[{}::{}] Error when sending activity begin : {:?}",
@@ -215,7 +215,7 @@ impl OperationalHandler {
                         );
                         if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
                             self.context.instance_name.clone(),
-                            self.context.workspace_id,
+                            self.context.workspace_id.0,
                         ))) {
                             log::error!(
                                 "[{}::{}] Error when sending activity end : {:?}",
