@@ -1,6 +1,6 @@
 use trsync_core::{config::ManagerConfig, instance::Instance};
 
-use crate::panel::Panel;
+use crate::panel::{instance::GuiInstance, Panel};
 
 pub struct State {
     pub current_panel: Panel,
@@ -18,7 +18,7 @@ impl State {
             config
                 .instances
                 .iter()
-                .map(|i| Panel::Instance(i.clone()))
+                .map(|i| Panel::Instance(GuiInstance::from_instance(i)))
                 .collect(),
         ]
         .concat();

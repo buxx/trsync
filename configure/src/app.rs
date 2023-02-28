@@ -7,12 +7,16 @@ use eframe::{
     emath::{Align, Align2},
     epaint::vec2,
 };
-use trsync_core::instance::{Instance, InstanceId, Workspace};
+use trsync_core::instance::{InstanceId, Workspace};
 
 use crate::{
     event::Event,
     job::{credentials::CredentialUpdater, workspace::WorkspacesGrabber},
-    panel::{instance::InstancePainter, root::ConfigurationPainter, Panel},
+    panel::{
+        instance::{GuiInstance, InstancePainter},
+        root::ConfigurationPainter,
+        Panel,
+    },
     state::State,
 };
 
@@ -58,6 +62,25 @@ impl App {
             event_sender,
             updating: vec![],
         }
+    }
+
+    pub fn start(&mut self) -> Result<()> {
+        for instance in &self.state.instances {
+            self.updating.push(instance.name.clone());
+
+            let event_sender = self.event_sender.clone();
+            let instance_ = GuiInstance::from_instance(instance);
+            let instance_name = instance.name.clone();
+            thread::Builder::new()
+                .name(format!("workspace_grabber"))
+                .spawn(|| WorkspacesGrabber::new(event_sender, instance_).execute())
+                .context(format!(
+                    "Start workspace grabber for '{}'",
+                    &instance_name.to_string()
+                ))?;
+        }
+
+        Ok(())
     }
 
     fn reset_instance_errors(&mut self, id: &InstanceId) {
@@ -109,7 +132,7 @@ impl App {
         for event in events {
             match event {
                 Event::GlobalConfigurationUpdated => self.save_config()?,
-                Event::InstanceCredentialsUpdated(instance) => {
+                Event::InstanceCredentialsUpdated(mut instance) => {
                     self.check_instance_credentials(instance)?
                 }
                 Event::InstanceCredentialsAccepted(instance) => {
@@ -142,7 +165,7 @@ impl App {
                 Event::InstanceWorkspacesRetrievedSuccess(id, workspaces) => {
                     // TODO : removing all matching instance id can hide parallel jobs
                     self.updating.retain(|i| i != &id);
-                    self.update_instance_workspaces(&id, &workspaces);
+                    self.update_gui_instance_workspaces(&id, &workspaces);
                 }
                 Event::InstanceWorkspacesRetrievedFailure(id, error) => {
                     self.updating.retain(|i| i != &id);
@@ -154,7 +177,7 @@ impl App {
         Ok(())
     }
 
-    fn update_instance(&mut self, instance: &Instance) {
+    fn update_instance(&mut self, instance: &GuiInstance) {
         if let Some(instance_) = self
             .state
             .instances
@@ -167,8 +190,19 @@ impl App {
         };
     }
 
-    fn update_instance_workspaces(&mut self, _id: &InstanceId, _workspaces: &Vec<Workspace>) {
-        //
+    fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &Vec<Workspace>) {
+        if let Some(gui_instance) = self
+            .state
+            .available_panels
+            .iter_mut()
+            .filter_map(|p| match p {
+                Panel::Root => None,
+                Panel::Instance(i) => Some(i),
+            })
+            .find(|i| &i.name == id)
+        {
+            gui_instance.workspaces = Some(workspaces.clone());
+        };
     }
 
     fn save_config(&self) -> Result<()> {
@@ -197,7 +231,7 @@ impl App {
         }
     }
 
-    fn check_instance_credentials(&mut self, instance: Instance) -> Result<()> {
+    fn check_instance_credentials(&mut self, instance: GuiInstance) -> Result<()> {
         self.reset_instance_errors(&instance.name);
         let mut errors = vec![];
 

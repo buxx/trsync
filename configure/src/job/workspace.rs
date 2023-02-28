@@ -1,16 +1,16 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
-use trsync_core::instance::{Instance, Workspace};
+use trsync_core::{client::Client, instance::Workspace};
 
-use crate::event::Event;
+use crate::{event::Event, panel::instance::GuiInstance};
 
 pub struct WorkspacesGrabber {
     event_sender: Sender<Event>,
-    instance: Instance,
+    instance: GuiInstance,
 }
 
 impl WorkspacesGrabber {
-    pub fn new(event_sender: Sender<Event>, instance: Instance) -> Self {
+    pub fn new(event_sender: Sender<Event>, instance: GuiInstance) -> Self {
         Self {
             event_sender,
             instance,
@@ -40,6 +40,13 @@ impl WorkspacesGrabber {
     }
 
     fn get_workspaces(&self) -> Result<Vec<Workspace>> {
-        Ok(vec![])
+        Ok(Client::new(
+            self.instance.api_url(None),
+            self.instance.username.clone(),
+            self.instance.password.clone(),
+        )
+        .context("Construct http client")?
+        .workspaces()
+        .context("Grab workspaces")?)
     }
 }

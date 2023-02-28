@@ -1,17 +1,17 @@
 use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
 
-use trsync_core::{client::Client, instance::Instance};
+use trsync_core::client::Client;
 
-use crate::event::Event;
+use crate::{event::Event, panel::instance::GuiInstance};
 
 pub struct CredentialUpdater {
     event_sender: Sender<Event>,
-    instance: Instance,
+    instance: GuiInstance,
 }
 
 impl CredentialUpdater {
-    pub fn new(event_sender: Sender<Event>, instance: Instance) -> Self {
+    pub fn new(event_sender: Sender<Event>, instance: GuiInstance) -> Self {
         Self {
             event_sender,
             instance,
@@ -43,12 +43,13 @@ impl CredentialUpdater {
 
     fn check_credentials(&self) -> Result<bool> {
         Ok(Client::new(
-            self.instance.url(None),
+            self.instance.api_url(None),
             self.instance.username.clone(),
             self.instance.password.clone(),
         )
         .context("Construct http client")?
         .check_credentials()
-        .context("Check credentials")?)
+        .context("Check credentials")?
+        .is_some())
     }
 }

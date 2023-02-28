@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use trsync_core::instance::Instance;
+use self::instance::GuiInstance;
 
 pub mod instance;
 pub mod root;
@@ -8,7 +8,7 @@ pub mod root;
 #[derive(Debug, Clone)]
 pub enum Panel {
     Root,
-    Instance(Instance),
+    Instance(GuiInstance),
 }
 
 impl Display for Panel {

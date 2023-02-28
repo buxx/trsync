@@ -13,11 +13,13 @@ pub fn run() -> Result<()> {
     // FIXME BS NOW : raw password
     let config = ManagerConfig::from_env(false)?;
     let state = State::from_config(&config);
+    let mut app = App::new(state);
+    app.start()?;
 
     if let Err(error) = eframe::run_native(
         "TrSync configuration",
         options,
-        Box::new(|_cc| Box::new(App::new(state))),
+        Box::new(|_cc| Box::new(app)),
     ) {
         bail!("Running error : {}", error)
     };

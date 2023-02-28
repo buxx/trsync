@@ -3,7 +3,7 @@ use eframe::{
     emath::Align,
     epaint::Color32,
 };
-use trsync_core::instance::Instance;
+use trsync_core::instance::{Instance, InstanceId, Workspace, WorkspaceId};
 
 use crate::event::Event;
 
@@ -20,7 +20,7 @@ impl InstancePainter {
         Self { updating, errors }
     }
 
-    pub fn draw(&mut self, ui: &mut Ui, instance: &mut Instance) -> Vec<Event> {
+    pub fn draw(&mut self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
         let mut events = vec![];
 
         ui.vertical(|ui| {
@@ -36,7 +36,7 @@ impl InstancePainter {
         events
     }
 
-    fn credentials(&self, ui: &mut Ui, instance: &mut Instance) -> Vec<Event> {
+    fn credentials(&self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
         let mut events = vec![];
 
         ui.vertical(|ui| {
@@ -75,7 +75,7 @@ impl InstancePainter {
         events
     }
 
-    fn workspaces(&self, ui: &mut Ui, _instance: &mut Instance) -> Vec<Event> {
+    fn workspaces(&self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
         if self.updating {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -85,6 +85,63 @@ impl InstancePainter {
             });
         }
 
+        if let Some(workspaces) = &instance.workspaces {
+            for workspace in workspaces {
+                ui.label(&workspace.label);
+            }
+        }
+
         vec![]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GuiInstance {
+    pub name: InstanceId,
+    pub address: String,
+    pub unsecure: bool,
+    pub username: String,
+    pub password: String,
+    pub workspaces: Option<Vec<Workspace>>,
+    pub selected_workspaces_ids: Vec<WorkspaceId>,
+}
+
+impl GuiInstance {
+    pub fn from_instance(instance: &Instance) -> Self {
+        Self::new(
+            instance.name.clone(),
+            instance.address.clone(),
+            instance.unsecure.clone(),
+            instance.username.clone(),
+            instance.password.clone(),
+            None,
+            instance.workspaces_ids.clone(),
+        )
+    }
+
+    pub fn new(
+        name: InstanceId,
+        address: String,
+        unsecure: bool,
+        username: String,
+        password: String,
+        workspaces: Option<Vec<Workspace>>,
+        selected_workspaces_ids: Vec<WorkspaceId>,
+    ) -> Self {
+        Self {
+            name,
+            address,
+            unsecure,
+            username,
+            password,
+            workspaces,
+            selected_workspaces_ids,
+        }
+    }
+
+    pub fn api_url(&self, suffix: Option<&str>) -> String {
+        let suffix = suffix.unwrap_or("");
+        let scheme = if self.unsecure { "http" } else { "https" };
+        format!("{}://{}/api{}", scheme, self.address, suffix)
     }
 }
