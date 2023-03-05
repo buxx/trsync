@@ -302,10 +302,6 @@ impl RemoteSync {
                         };
 
                         if remote_content_relative_path != local_content_relative_path {
-                            if remote_content_relative_path.contains("gource") {
-                                let a = 1;
-                            }
-
                             // If local file exist, it is a modification
                             let operational_message = if Path::new(&self._context.folder_path)
                                 .join(&remote_content_relative_path)

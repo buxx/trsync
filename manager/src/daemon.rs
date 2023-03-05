@@ -69,12 +69,6 @@ impl Daemon {
     }
 
     pub fn ensure_processes(&mut self) -> Result<(), Error> {
-        // Managing process is valid only if local folder has been configured
-        if self.config.local_folder.is_none() {
-            log::info!("Local folder is not configured, skipping process management");
-            return Ok(());
-        }
-
         let processes_to_start = self.get_processes_to_start()?;
         let processes_to_stop = self.get_processes_to_stop();
 
@@ -103,7 +97,7 @@ impl Daemon {
         for instance in self.config.instances.iter() {
             let client = Client::new(instance.clone())?;
             for workspace_id in &instance.workspaces_ids {
-                match client.get_workspace(*workspace_id) {
+                match client.get_workspace(workspace_id.clone()) {
                     Ok(workspace) => {
                         let process_uid =
                             TrsyncUid::new(instance.address.clone(), workspace.workspace_id);
@@ -130,7 +124,7 @@ impl Daemon {
 
         for instance in self.config.instances.iter() {
             for workspace_id in &instance.workspaces_ids {
-                let process_uid = TrsyncUid::new(instance.address.clone(), *workspace_id);
+                let process_uid = TrsyncUid::new(instance.address.clone(), workspace_id.clone());
                 expected_processes.push(process_uid);
             }
         }
@@ -145,11 +139,7 @@ impl Daemon {
     }
 
     fn start_process(&mut self, trsync_uid: TrsyncUid) -> Result<(), Error> {
-        let local_folder = self
-            .config
-            .local_folder
-            .clone()
-            .expect("Local folder config must be configured");
+        let local_folder = self.config.local_folder.clone();
         let instance = self
             .config
             .instances
@@ -157,7 +147,7 @@ impl Daemon {
             .find(|instance| instance.address == trsync_uid.instance_address())
             .expect("Start process imply its instance exists");
         let workspace =
-            match Client::new(instance.clone())?.get_workspace(*trsync_uid.workspace_id()) {
+            match Client::new(instance.clone())?.get_workspace(trsync_uid.workspace_id().clone()) {
                 Ok(workspace) => workspace,
                 Err(error) => {
                     return Err(Error::UnexpectedError(format!(

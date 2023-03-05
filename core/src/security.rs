@@ -1,3 +1,4 @@
+use anyhow::Result;
 extern crate keyring;
 
 use std::error::Error;
@@ -13,11 +14,7 @@ pub fn get_password(instance_address: &str, username: &str) -> Result<String, Bo
     Ok(entry.get_password()?)
 }
 
-pub fn set_password(
-    instance_address: &str,
-    username: &str,
-    password: &str,
-) -> Result<(), Box<dyn Error>> {
+pub fn set_password(instance_address: &str, username: &str, password: &str) -> Result<()> {
     let service = format!("trsync::{}", instance_address);
     let entry = keyring::Entry::new(&service, username);
     log::info!(

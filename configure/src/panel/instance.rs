@@ -1,5 +1,7 @@
+use std::cmp::Ordering;
+
 use eframe::{
-    egui::{Grid, Layout, Spinner, TextEdit, Ui},
+    egui::{Grid, Layout, ScrollArea, Spinner, TextEdit, Ui},
     emath::Align,
     epaint::Color32,
 };
@@ -7,7 +9,6 @@ use trsync_core::instance::{Instance, InstanceId, Workspace, WorkspaceId};
 
 use crate::event::Event;
 
-// FIXME : instance as attribute
 pub struct InstancePainter {
     updating: bool,
     errors: Vec<String>,
@@ -41,7 +42,7 @@ impl InstancePainter {
 
         ui.vertical(|ui| {
             Grid::new(instance.name.to_string())
-                .num_columns(3)
+                .num_columns(2)
                 .spacing([40.0, 4.0])
                 .striped(true)
                 .min_col_width(MIN_COL_WIDTH)
@@ -76,6 +77,8 @@ impl InstancePainter {
     }
 
     fn workspaces(&self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
+        let mut events = vec![];
+
         if self.updating {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -85,13 +88,37 @@ impl InstancePainter {
             });
         }
 
-        if let Some(workspaces) = &instance.workspaces {
-            for workspace in workspaces {
-                ui.label(&workspace.label);
-            }
+        if instance.workspaces.is_some() {
+            Grid::new(format!("{}_workspaces", instance.name.to_string()))
+                .num_columns(2)
+                .spacing([40.0, 4.0])
+                .striped(true)
+                .min_col_width(MIN_COL_WIDTH)
+                .show(ui, |ui| {
+                    ui.label("Espaces à synchroniser");
+                    ui.set_height(320.);
+                    ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                for (checked, _, label) in &mut instance.workspaces_ids_checkboxes {
+                                    ui.checkbox(checked, label.clone());
+                                }
+                            })
+                        });
+                    ui.end_row();
+
+                    ui.label("");
+                    ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                        if ui.button("Valider").clicked() {
+                            events
+                                .push(Event::InstanceSelectedWorkspacesValidated(instance.clone()));
+                        }
+                    });
+                });
         }
 
-        vec![]
+        events
     }
 }
 
@@ -104,6 +131,7 @@ pub struct GuiInstance {
     pub password: String,
     pub workspaces: Option<Vec<Workspace>>,
     pub selected_workspaces_ids: Vec<WorkspaceId>,
+    pub workspaces_ids_checkboxes: Vec<(bool, WorkspaceId, String)>,
 }
 
 impl GuiInstance {
@@ -136,7 +164,24 @@ impl GuiInstance {
             password,
             workspaces,
             selected_workspaces_ids,
+            workspaces_ids_checkboxes: vec![],
         }
+    }
+
+    pub fn rebuild_workspaces_ids_checkboxes(&mut self) {
+        self.workspaces_ids_checkboxes = vec![];
+        if let Some(workspaces) = &self.workspaces {
+            for workspace in workspaces {
+                self.workspaces_ids_checkboxes.push((
+                    self.selected_workspaces_ids
+                        .contains(&workspace.workspace_id),
+                    workspace.workspace_id.clone(),
+                    workspace.label.clone(),
+                ));
+            }
+        }
+        self.workspaces_ids_checkboxes
+            .sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Greater));
     }
 
     pub fn api_url(&self, suffix: Option<&str>) -> String {

@@ -1,8 +1,9 @@
 use std::{fmt::Display, io};
 
 use crossbeam_channel::RecvError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
     ChannelError(RecvError),
     UnableToFindHomeUser,

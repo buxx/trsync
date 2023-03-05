@@ -6,7 +6,6 @@ use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub trsync_manager_configure_bin_path: String,
     #[cfg(target_os = "linux")]
     pub icons_path: String,
 }
@@ -38,16 +37,6 @@ impl Config {
     }
 
     pub fn from_ini(config_ini: Ini) -> Result<Self, Error> {
-        let trsync_manager_configure_bin_path =
-            match config_ini.get_from(Some("server"), "trsync_manager_configure_bin_path") {
-                Some(value) => value,
-                None => return Err(Error::ReadConfigError(
-                    "Unable to read trsync_manager_configure_bin_path config from server section"
-                        .to_string(),
-                )),
-            }
-            .to_string();
-
         #[cfg(target_os = "linux")]
         {
             let icons_path = match config_ini.get_from(Some("server"), "icons_path") {
@@ -59,15 +48,12 @@ impl Config {
                 }
             };
             Ok(Self {
-                trsync_manager_configure_bin_path,
                 icons_path: icons_path.to_str().unwrap().to_string(),
             })
         }
         #[cfg(target_os = "windows")]
         {
-            Ok(Self {
-                trsync_manager_configure_bin_path,
-            })
+            Ok(Self {})
         }
     }
 }

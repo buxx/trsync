@@ -7,7 +7,10 @@ use eframe::{
     emath::{Align, Align2},
     epaint::vec2,
 };
-use trsync_core::instance::{InstanceId, Workspace};
+use trsync_core::{
+    instance::{InstanceId, Workspace},
+    security::set_password,
+};
 
 use crate::{
     event::Event,
@@ -132,11 +135,12 @@ impl App {
         for event in events {
             match event {
                 Event::GlobalConfigurationUpdated => self.save_config()?,
-                Event::InstanceCredentialsUpdated(mut instance) => {
+                Event::InstanceCredentialsUpdated(instance) => {
                     self.check_instance_credentials(instance)?
                 }
                 Event::InstanceCredentialsAccepted(instance) => {
                     self.update_instance(&instance);
+                    self.save_credentials(&instance)?;
                     self.save_config()?;
 
                     let event_sender = self.event_sender.clone();
@@ -171,6 +175,10 @@ impl App {
                     self.updating.retain(|i| i != &id);
                     self.add_instance_errors(id, error);
                 }
+                Event::InstanceSelectedWorkspacesValidated(instance) => {
+                    self.update_instance_selected_workspaces(&instance);
+                    self.save_config()?;
+                }
             }
         }
 
@@ -190,6 +198,19 @@ impl App {
         };
     }
 
+    fn save_credentials(&self, instance: &GuiInstance) -> Result<()> {
+        set_password(
+            &instance.name.to_string(),
+            &whoami::username(),
+            &instance.password,
+        )
+        .context(format!(
+            "Save password in keyring system for '{}'",
+            &instance.name.to_string()
+        ))?;
+        Ok(())
+    }
+
     fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &Vec<Workspace>) {
         if let Some(gui_instance) = self
             .state
@@ -202,6 +223,31 @@ impl App {
             .find(|i| &i.name == id)
         {
             gui_instance.workspaces = Some(workspaces.clone());
+            gui_instance.rebuild_workspaces_ids_checkboxes();
+        };
+    }
+
+    fn update_instance_selected_workspaces(&mut self, instance: &GuiInstance) {
+        if let Some(instance_) = self
+            .state
+            .instances
+            .iter_mut()
+            .find(|i| i.name == instance.name)
+        {
+            instance_.workspaces_ids = instance
+                .workspaces_ids_checkboxes
+                .clone()
+                .iter()
+                .filter_map(
+                    |(checked, id, _)| {
+                        if *checked {
+                            Some(id.clone())
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .collect();
         };
     }
 

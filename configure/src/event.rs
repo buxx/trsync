@@ -11,4 +11,5 @@ pub enum Event {
     InstanceCredentialsFailed(GuiInstance, String),
     InstanceWorkspacesRetrievedSuccess(InstanceId, Vec<Workspace>),
     InstanceWorkspacesRetrievedFailure(InstanceId, String),
+    InstanceSelectedWorkspacesValidated(GuiInstance),
 }

@@ -1,7 +1,7 @@
-use crate::config::Config;
+use trsync_core::config::ManagerConfig;
 
 #[derive(Debug)]
 pub enum DaemonMessage {
-    Reload(Config),
+    Reload(ManagerConfig),
     Stop,
 }

@@ -10,7 +10,6 @@ pub fn run() -> Result<()> {
         initial_window_size: Some(vec2(800.0, 600.0)),
         ..Default::default()
     };
-    // FIXME BS NOW : raw password
     let config = ManagerConfig::from_env(false)?;
     let state = State::from_config(&config);
     let mut app = App::new(state);

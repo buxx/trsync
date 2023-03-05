@@ -1,21 +1,19 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use crate::config::Config;
+use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 use trsync::operation::Job;
+use trsync_core::config::ManagerConfig;
 
 mod client;
-mod config;
 mod daemon;
 mod error;
 mod message;
-mod model;
 mod reload;
-mod security;
 mod types;
 
-fn main_() -> Result<(), error::Error> {
+fn main_() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let (main_channel_sender, main_channel_receiver): (
@@ -25,13 +23,16 @@ fn main_() -> Result<(), error::Error> {
     let stop_signal = Arc::new(AtomicBool::new(false));
 
     log::info!("Read config");
-    let config = Config::from_env(true)?;
+    let config = ManagerConfig::from_env(true)?;
 
     log::info!("Build and run reload watcher");
     let config_ = config.clone();
     let main_channel_sender_ = main_channel_sender.clone();
     let stop_signal_ = stop_signal.clone();
-    reload::ReloadWatcher::new(config_, main_channel_sender_, stop_signal_).start()?;
+    // FIXME BS NOW : remove reload watcher
+    reload::ReloadWatcher::new(config_, main_channel_sender_, stop_signal_)
+        .start()
+        .expect("FIXME");
 
     log::info!("Start daemon");
     let config_ = config.clone();

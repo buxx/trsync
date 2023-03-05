@@ -28,7 +28,6 @@ This file must contains :
 [server]
 instances =
 local_folder = /home/<username>/Tracim
-trsync_manager_configure_bin_path = /usr/bin/trsync-manager-configure
 icons_path = </home/<username>/.local/share/icons if install for one or some user only, /usr/share/icons if install for all users>
 ```
 

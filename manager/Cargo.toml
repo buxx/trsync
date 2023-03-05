@@ -25,3 +25,5 @@ reqwest = { version = "0.11.4", features = ["blocking", "json"] }
 notify = "4.0.17"
 crossbeam-channel = "0.5"
 whoami = "1.2.1"
+anyhow = "1.0.69"
+thiserror = "1.0"

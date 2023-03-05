@@ -1,11 +1,12 @@
 use std::{
-    process::Command,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     time::Duration,
 };
+
+use trsync_manager_configure::run::run as run_configure;
 
 use gtk;
 use tray_item::TrayItem;
@@ -18,9 +19,6 @@ use crate::{
 
 pub fn run_tray(
     config: Config,
-    configure_bin_path: String,
-    password_setter_port: u16,
-    password_setter_token: &str,
     activity_state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -37,20 +35,10 @@ pub fn run_tray(
         },
         None => return Err(format!("Unable to get icon value")),
     };
-
-    let password_setter_token_ = password_setter_token.to_string();
     match tray.add_menu_item("Configurer", move || {
-        log::info!("Run {}", configure_bin_path);
-        match Command::new(&configure_bin_path)
-            .arg(format!("--password-setter-port={}", password_setter_port))
-            .arg(format!(
-                "--password-setter-token={}",
-                password_setter_token_
-            ))
-            .spawn()
-        {
-            Err(error) => return log::error!("Unable to start configure window : '{:?}'", error),
-            _ => {}
+        log::info!("Run configure window");
+        if let Err(error) = run_configure() {
+            return log::error!("Unable to run configure window : '{}'", error);
         };
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),

@@ -11,18 +11,19 @@ use std::{
 
 use crossbeam_channel::Sender;
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use trsync_core::config::ManagerConfig;
 
-use crate::{config::Config, error::Error, message::DaemonMessage};
+use crate::{error::Error, message::DaemonMessage};
 
 pub struct ReloadWatcher {
-    config: Config,
+    config: ManagerConfig,
     main_sender: Sender<DaemonMessage>,
     stop_signal: Arc<AtomicBool>,
 }
 
 impl ReloadWatcher {
     pub fn new(
-        config: Config,
+        config: ManagerConfig,
         main_channel_sender: Sender<DaemonMessage>,
         stop_signal: Arc<AtomicBool>,
     ) -> Self {
@@ -83,7 +84,7 @@ impl ReloadWatcher {
             loop {
                 match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
                     Ok(DebouncedEvent::Write(_)) => {
-                        let config = match Config::from_env(allow_raw_passwords) {
+                        let config = match ManagerConfig::from_env(allow_raw_passwords) {
                             Ok(config_) => config_,
                             Err(error) => {
                                 // TODO : Notify user of error

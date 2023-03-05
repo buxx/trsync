@@ -3,7 +3,6 @@ use crate::database::{Database, DatabaseOperation};
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
-use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;

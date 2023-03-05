@@ -1,8 +1,14 @@
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error("Unexpected error : '{0}'")]
     UnexpectedError(String),
+    #[error("Unable to determine use home path")]
     UnableToFindHomeUser,
+    #[error("Read config error : '{0}'")]
     ReadConfigError(String),
+    #[error("Manager error error : '{0}'")]
     ManagerError(trsync_manager::error::Error),
 }
 
