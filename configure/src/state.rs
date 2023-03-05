@@ -1,4 +1,7 @@
-use trsync_core::{config::ManagerConfig, instance::Instance};
+use trsync_core::{
+    config::ManagerConfig,
+    instance::{Instance, InstanceId},
+};
 
 use crate::panel::{instance::GuiInstance, Panel};
 
@@ -20,6 +23,7 @@ impl State {
                 .iter()
                 .map(|i| Panel::Instance(GuiInstance::from_instance(i)))
                 .collect(),
+            vec![Panel::AddInstance(GuiInstance::default())],
         ]
         .concat();
 
@@ -41,5 +45,17 @@ impl State {
             allow_raw_passwords: false,
             prevent_delete_sync: self.prevent_startup_remote_delete,
         }
+    }
+
+    pub fn remove_instance(&mut self, instance_id: &InstanceId) {
+        self.available_panels.retain(|p| match p {
+            Panel::Instance(instance) => &instance.name != instance_id,
+            _ => true,
+        });
+
+        self.instances
+            .retain(|instance| &instance.name != instance_id);
+
+        self.current_panel = Panel::Root;
     }
 }

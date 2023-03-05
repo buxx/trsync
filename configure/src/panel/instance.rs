@@ -68,6 +68,9 @@ impl InstancePainter {
                         if ui.button("Valider").clicked() {
                             events.push(Event::InstanceCredentialsUpdated(instance.clone()));
                         }
+                        if ui.button("Supprimer").clicked() {
+                            events.push(Event::DeleteInstanceWanted(instance.name.clone()));
+                        }
                     });
                     ui.end_row();
                 });
@@ -132,6 +135,21 @@ pub struct GuiInstance {
     pub workspaces: Option<Vec<Workspace>>,
     pub selected_workspaces_ids: Vec<WorkspaceId>,
     pub workspaces_ids_checkboxes: Vec<(bool, WorkspaceId, String)>,
+}
+
+impl Default for GuiInstance {
+    fn default() -> Self {
+        Self {
+            name: InstanceId("".to_string()),
+            address: Default::default(),
+            unsecure: Default::default(),
+            username: Default::default(),
+            password: Default::default(),
+            workspaces: Default::default(),
+            selected_workspaces_ids: Default::default(),
+            workspaces_ids_checkboxes: Default::default(),
+        }
+    }
 }
 
 impl GuiInstance {

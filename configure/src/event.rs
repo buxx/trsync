@@ -6,10 +6,12 @@ use crate::panel::instance::GuiInstance;
 pub enum Event {
     GlobalConfigurationUpdated,
     InstanceCredentialsUpdated(GuiInstance),
+    ValidateNewInstance(GuiInstance),
     InstanceCredentialsAccepted(GuiInstance),
     InstanceCredentialsRefused(GuiInstance),
     InstanceCredentialsFailed(GuiInstance, String),
     InstanceWorkspacesRetrievedSuccess(InstanceId, Vec<Workspace>),
     InstanceWorkspacesRetrievedFailure(InstanceId, String),
     InstanceSelectedWorkspacesValidated(GuiInstance),
+    DeleteInstanceWanted(InstanceId),
 }

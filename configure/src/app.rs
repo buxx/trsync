@@ -16,6 +16,7 @@ use crate::{
     event::Event,
     job::{credentials::CredentialUpdater, workspace::WorkspacesGrabber},
     panel::{
+        add::AddInstancePainter,
         instance::{GuiInstance, InstancePainter},
         root::ConfigurationPainter,
         Panel,
@@ -27,11 +28,12 @@ const PIXELS_PER_POINT: f32 = 1.25;
 
 pub struct App {
     state: State,
-    error_window: Option<String>,
+    windowed_error: Option<String>,
     instance_errors: Vec<(InstanceId, String)>,
     event_receiver: Receiver<Event>,
     event_sender: Sender<Event>,
     updating: Vec<InstanceId>,
+    delete_instance: Option<InstanceId>,
 }
 
 impl eframe::App for App {
@@ -39,7 +41,7 @@ impl eframe::App for App {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
         let mut events: Vec<Event> = self.event_receiver.try_iter().collect();
 
-        if self.error_window.is_none() {
+        if self.windowed_error.is_none() {
             CentralPanel::default().show(ctx, |ui| {
                 events.extend(self.header(ui));
                 ui.separator();
@@ -48,9 +50,14 @@ impl eframe::App for App {
         }
 
         if let Err(error) = self.react(events) {
-            self.error_window = Some(format!("{:#}", error))
+            self.windowed_error = Some(format!("{:#}", error))
         };
+
         self.error_window(ctx);
+
+        if let Err(error) = self.deletion_window(ctx) {
+            self.windowed_error = Some(format!("{:#}", error))
+        };
     }
 }
 
@@ -59,11 +66,12 @@ impl App {
         let (event_sender, event_receiver) = unbounded();
         Self {
             state,
-            error_window: None,
+            windowed_error: None,
             instance_errors: vec![],
             event_receiver,
             event_sender,
             updating: vec![],
+            delete_instance: None,
         }
     }
 
@@ -125,6 +133,16 @@ impl App {
                         .collect();
                     InstancePainter::new(updating, errors).draw(ui, instance)
                 }
+                Panel::AddInstance(instance) => {
+                    let updating = self.updating.contains(&instance.name);
+                    let errors = self
+                        .instance_errors
+                        .iter()
+                        .filter(|(id_, _)| id_ == &instance.name)
+                        .map(|(_, error)| error.clone())
+                        .collect();
+                    AddInstancePainter::new(updating, errors).draw(ui, instance)
+                }
             });
         });
 
@@ -138,8 +156,14 @@ impl App {
                 Event::InstanceCredentialsUpdated(instance) => {
                     self.check_instance_credentials(instance)?
                 }
-                Event::InstanceCredentialsAccepted(instance) => {
-                    self.update_instance(&instance);
+                Event::InstanceCredentialsAccepted(mut instance) => {
+                    if instance.name.is_new() {
+                        instance = self.add_instance(&instance);
+                        self.updating.retain(|instance_id| !instance_id.is_new());
+                    } else {
+                        self.update_instance(&instance);
+                    }
+
                     self.save_credentials(&instance)?;
                     self.save_config()?;
 
@@ -179,6 +203,12 @@ impl App {
                     self.update_instance_selected_workspaces(&instance);
                     self.save_config()?;
                 }
+                Event::ValidateNewInstance(instance) => {
+                    self.check_instance_credentials(instance)?
+                }
+                Event::DeleteInstanceWanted(instance_id) => {
+                    self.delete_instance = Some(instance_id)
+                }
             }
         }
 
@@ -196,6 +226,36 @@ impl App {
             instance_.username = instance.username.clone();
             instance_.password = instance.password.clone();
         };
+    }
+
+    fn add_instance(&mut self, instance: &GuiInstance) -> GuiInstance {
+        let mut instance_ = instance.clone();
+        instance_.name = InstanceId(instance.address.clone());
+
+        // Add a panel for this new instance
+        self.state.available_panels.insert(
+            self.state.available_panels.len() - 1,
+            Panel::Instance(instance_.clone()),
+        );
+
+        // Clear new instance form by modifying panel instance object
+        if let Some(gui_instance) = self
+            .state
+            .available_panels
+            .iter_mut()
+            .filter_map(|p| match p {
+                Panel::AddInstance(i) => Some(i),
+                _ => None,
+            })
+            .collect::<Vec<&mut GuiInstance>>()
+            .first_mut()
+        {
+            gui_instance.address = "".to_string();
+            gui_instance.username = "".to_string();
+            gui_instance.password = "".to_string();
+        }
+
+        instance_
     }
 
     fn save_credentials(&self, instance: &GuiInstance) -> Result<()> {
@@ -217,8 +277,8 @@ impl App {
             .available_panels
             .iter_mut()
             .filter_map(|p| match p {
-                Panel::Root => None,
                 Panel::Instance(i) => Some(i),
+                _ => None,
             })
             .find(|i| &i.name == id)
         {
@@ -259,7 +319,7 @@ impl App {
     fn error_window(&mut self, ctx: &EguiContext) {
         let mut close = false;
 
-        if let Some(error) = &self.error_window {
+        if let Some(error) = &self.windowed_error {
             Window::new("⚠ Une erreur est survenue ⚠")
                 .collapsible(false)
                 .resizable(false)
@@ -273,8 +333,37 @@ impl App {
         }
 
         if close {
-            self.error_window = None;
+            self.windowed_error = None;
         }
+    }
+
+    fn deletion_window(&mut self, ctx: &EguiContext) -> Result<()> {
+        let mut close = false;
+        let mut confirm = false;
+
+        if let Some(instance_id) = &self.delete_instance {
+            Window::new(&format!("Supprimer {} ?", instance_id))
+                .collapsible(false)
+                .resizable(false)
+                .anchor(Align2::CENTER_CENTER, vec2(0., 0.))
+                .show(ctx, |ui| {
+                    ui.label(format!("Voulez-vous réellement supprimer {} ?\nLes données sur votre disque dur ne seront pas supprimés.", instance_id));
+                    ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                        confirm = ui.button("Supprimer").clicked();
+                        close = ui.button("Annuler").clicked();
+                    })
+                });
+
+            if confirm {
+                self.state.remove_instance(instance_id);
+                self.save_config()?;
+            }
+        }
+
+        if close || confirm {
+            self.delete_instance = None;
+        }
+        Ok(())
     }
 
     fn check_instance_credentials(&mut self, instance: GuiInstance) -> Result<()> {

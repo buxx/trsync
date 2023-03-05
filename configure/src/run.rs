@@ -7,7 +7,7 @@ use crate::{app::App, state::State};
 
 pub fn run() -> Result<()> {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(vec2(800.0, 600.0)),
+        initial_window_size: Some(vec2(710.0, 600.0)),
         ..Default::default()
     };
     let config = ManagerConfig::from_env(false)?;

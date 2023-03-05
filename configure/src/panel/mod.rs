@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use self::instance::GuiInstance;
 
+pub mod add;
 pub mod instance;
 pub mod root;
 
@@ -9,6 +10,7 @@ pub mod root;
 pub enum Panel {
     Root,
     Instance(GuiInstance),
+    AddInstance(GuiInstance),
 }
 
 impl Display for Panel {
@@ -16,6 +18,7 @@ impl Display for Panel {
         match self {
             Panel::Root => f.write_str("Configuration"),
             Panel::Instance(instance) => f.write_str(&instance.name.to_string()),
+            Panel::AddInstance(_) => f.write_str("Ajouter"),
         }
     }
 }
