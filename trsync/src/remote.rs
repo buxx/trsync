@@ -3,6 +3,7 @@ use crate::error::Error;
 use async_std::task;
 use bytes::Bytes;
 use std::{
+    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::Sender,
@@ -301,10 +302,21 @@ impl RemoteSync {
                         };
 
                         if remote_content_relative_path != local_content_relative_path {
-                            match self
-                                .operational_sender
-                                .send(OperationalMessage::NewRemoteFile(content.content_id))
+                            if remote_content_relative_path.contains("gource") {
+                                let a = 1;
+                            }
+
+                            // If local file exist, it is a modification
+                            let operational_message = if Path::new(&self._context.folder_path)
+                                .join(&remote_content_relative_path)
+                                .exists()
                             {
+                                OperationalMessage::ModifiedRemoteFile(content.content_id)
+                            } else {
+                                OperationalMessage::NewRemoteFile(content.content_id)
+                            };
+
+                            match self.operational_sender.send(operational_message) {
                                 Err(error) => {
                                     log::error!(
                                     "Error when send operational message from remote sync : '{}'",

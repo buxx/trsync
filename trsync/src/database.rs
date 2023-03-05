@@ -35,18 +35,23 @@ impl<'d> DatabaseOperation<'d> {
     }
 
     pub fn create_tables(&self) -> Result<(), rusqlite::Error> {
-        self.connection
-            .execute(
-                "CREATE TABLE IF NOT EXISTS file (
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS file (
                 relative_path TEXT PRIMARY KEY,
                 last_modified_timestamp INTEGER NOT NULL,
                 content_id INTEGER NOT NULL,
                 revision_id INTEGER NOT NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_local_relative_path ON local (relative_path);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_local_remote_content_id ON local (remote_content_id);",
-                [],
-            )?;
+            );",
+            [],
+        )?;
+        self.connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_local_relative_path ON file (relative_path)",
+            [],
+        )?;
+        self.connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_local_content_id ON file (content_id)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -139,6 +144,12 @@ impl<'d> DatabaseOperation<'d> {
                                 rusqlite::ErrorCode::ConstraintViolation => {
                                     if message == &Some("UNIQUE constraint failed: file.relative_path".to_string()) {
                                         log::debug!("File with path {:?} already exists", relative_path);
+                                    } else if message == &Some("UNIQUE constraint failed: file.content_id".to_string()) {
+                                        log::debug!("File with content_id {:?} already exists, update its path", relative_path);
+                                        self.connection.execute(
+                                            "UPDATE file SET relative_path=?1, last_modified_timestamp=?2, revision_id=?3 WHERE content_id = ?4",
+                                            params![relative_path, last_modified_timestamp, revision_id, content_id],
+                                        )?;
                                     } else {
                                         return Err(error)
                                     }

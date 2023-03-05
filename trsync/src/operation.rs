@@ -598,103 +598,125 @@ impl OperationalHandler {
 
         // Grab file infos
         let remote_content = self.client.get_remote_content(content_id)?;
-        let relative_path = self.client.build_relative_path(&remote_content)?;
-        let absolute_path = Path::new(&self.context.folder_path).join(&relative_path);
+        let remote_relative_path = self.client.build_relative_path(&remote_content)?;
+        let mut local_relative_path =
+            DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
+        let mut local_absolute_path =
+            Path::new(&self.context.folder_path).join(&local_relative_path);
 
         log::info!(
             "[{}::{}] Modified remote file : {}",
             self.context.instance_name,
             self.context.workspace_id,
-            relative_path,
+            &remote_relative_path,
         );
 
         // TODO : use enum for content_type
         if remote_content.content_type == "folder" {
             // TODO : manage case where file doesn't exist (in db and on disk)
-            let relative_path =
-                DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-            let old_absolute_path = Path::new(&self.context.folder_path).join(relative_path);
-            let new_absolute_path = old_absolute_path
-                .parent()
-                .ok_or(Error::PathManipulationError(format!(
-                    "Unable to get parent folder of {:?}",
-                    old_absolute_path
-                )))?
-                .join(remote_content.filename);
+            let old_local_absolute_path =
+                Path::new(&self.context.folder_path).join(&local_relative_path);
+            let new_local_absolute_path =
+                Path::new(&self.context.folder_path).join(&remote_relative_path);
 
             log::info!(
                 "[{}::{}] Rename disk folder {:?} into {:?}",
                 self.context.instance_name,
                 self.context.workspace_id,
-                &old_absolute_path,
-                &new_absolute_path
+                &old_local_absolute_path,
+                &new_local_absolute_path
             );
-            fs::rename(old_absolute_path, &new_absolute_path)?;
+
+            if let Some(path) = Path::new(&new_local_absolute_path).parent() {
+                fs::create_dir_all(path)?;
+            }
+
             // Prepare to ignore modified local file
-            let new_relative_path =
-                util::path_to_string(new_absolute_path.strip_prefix(&self.context.folder_path)?)?;
+            let new_local_relative_path = remote_relative_path.clone();
             self.ignore_messages
-                .push(OperationalMessage::ModifiedLocalFile(new_relative_path));
+                .push(OperationalMessage::RenamedLocalFile(
+                    local_relative_path,
+                    new_local_relative_path.clone(),
+                ));
+            fs::rename(old_local_absolute_path, &new_local_absolute_path)?;
+            DatabaseOperation::new(&self.connection)
+                .update_relative_path(content_id, new_local_relative_path.clone())?;
             return Ok(());
         }
 
-        // Manage renamed case
-        let current_relative_path =
-            DatabaseOperation::new(&self.connection).get_path_from_content_id(content_id)?;
-        let file_infos =
-            util::FileInfos::from(self.context.folder_path.clone(), current_relative_path)?;
-        if remote_content.filename != file_infos.file_name {
-            log::debug!(
-                "[{}::{}] Rename {} into {:?}",
-                self.context.instance_name,
-                self.context.workspace_id,
-                file_infos.absolute_path,
-                &absolute_path
-            );
-            match fs::rename(file_infos.absolute_path, &absolute_path) {
-                Ok(_) => {
-                    DatabaseOperation::new(&self.connection)
-                        .update_relative_path(content_id, relative_path.clone())?
-                    // TODO : manage local event rename by ignoring renamed event
-                }
-                Err(error) => return Err(Error::UnexpectedError(format!("{:?}", error))),
+        // Move/Rename case
+        if remote_relative_path != local_relative_path {
+            let new_local_relative_path = remote_relative_path.clone();
+            let old_local_absolute_path =
+                Path::new(&self.context.folder_path).join(&local_relative_path);
+            self.ignore_messages
+                .push(OperationalMessage::DeletedLocalFile(
+                    local_relative_path.clone(),
+                ));
+            let new_local_absolute_path =
+                Path::new(&self.context.folder_path).join(&new_local_relative_path);
+
+            // Delete old file
+            if let Err(error) = fs::remove_file(&old_local_absolute_path) {
+                log::warn!(
+                    "[{}::{}] Error when removing old local file '{}' (because moved) : {}",
+                    self.context.instance_name,
+                    self.context.workspace_id,
+                    &old_local_absolute_path.display(),
+                    error,
+                )
             }
+
+            DatabaseOperation::new(&self.connection)
+                .update_relative_path(content_id, new_local_relative_path.clone())?;
+
+            // And let next code to make the update
+            local_relative_path = new_local_relative_path;
+            local_absolute_path = new_local_absolute_path;
         }
 
         // Prepare to ignore modified local file
-        self.ignore_messages
-            .push(OperationalMessage::ModifiedLocalFile(relative_path.clone()));
+        if local_absolute_path.exists() {
+            self.ignore_messages
+                .push(OperationalMessage::ModifiedLocalFile(
+                    local_relative_path.clone(),
+                ));
+        } else {
+            self.ignore_messages.push(OperationalMessage::NewLocalFile(
+                local_relative_path.clone(),
+            ));
+        }
 
         // Write file on disk
         if remote_content.content_type == "html-document" {
             log::debug!(
-                "[{}::{}] Create disk file {:?}",
+                "[{}::{}] Write file {:?}",
                 self.context.instance_name,
                 self.context.workspace_id,
-                &absolute_path
+                &local_absolute_path
             );
             std::fs::write(
-                absolute_path,
+                local_absolute_path,
                 remote_content.raw_content.unwrap_or("".to_string()),
             )?;
         } else {
             let mut response = self
                 .client
                 .get_file_content_response(content_id, remote_content.filename)?;
-            // TODO : Manage case where file don't exist on disk
             log::debug!(
-                "[{}::{}] Update disk file {:?} with content {}",
+                "[{}::{}] Update disk file {} with content {}",
                 self.context.instance_name,
                 self.context.workspace_id,
-                &absolute_path,
+                &local_absolute_path.display(),
                 content_id,
             );
-            let mut out = File::create(absolute_path)?;
+            let mut out = File::create(local_absolute_path)?;
             io::copy(&mut response, &mut out)?;
         }
 
         // Update database
-        let file_infos = util::FileInfos::from(self.context.folder_path.clone(), relative_path)?;
+        let file_infos =
+            util::FileInfos::from(self.context.folder_path.clone(), local_relative_path)?;
         database_operation.update_last_modified_timestamp(
             file_infos.relative_path.clone(),
             file_infos.last_modified_timestamp,
