@@ -8,9 +8,10 @@ use eframe::{
     epaint::vec2,
 };
 use trsync_core::{
-    instance::{InstanceId, Workspace},
+    instance::{Instance, InstanceId, Workspace},
     security::set_password,
 };
+use trsync_manager::message::DaemonMessage;
 
 use crate::{
     event::Event,
@@ -28,6 +29,7 @@ const PIXELS_PER_POINT: f32 = 1.25;
 
 pub struct App {
     state: State,
+    main_sender: Sender<DaemonMessage>,
     windowed_error: Option<String>,
     instance_errors: Vec<(InstanceId, String)>,
     event_receiver: Receiver<Event>,
@@ -41,7 +43,7 @@ impl eframe::App for App {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
         let mut events: Vec<Event> = self.event_receiver.try_iter().collect();
 
-        if self.windowed_error.is_none() {
+        if self.windowed_error.is_none() && self.delete_instance.is_none() {
             CentralPanel::default().show(ctx, |ui| {
                 events.extend(self.header(ui));
                 ui.separator();
@@ -62,10 +64,11 @@ impl eframe::App for App {
 }
 
 impl App {
-    pub fn new(state: State) -> Self {
+    pub fn new(state: State, main_sender: Sender<DaemonMessage>) -> Self {
         let (event_sender, event_receiver) = unbounded();
         Self {
             state,
+            main_sender,
             windowed_error: None,
             instance_errors: vec![],
             event_receiver,
@@ -80,7 +83,7 @@ impl App {
             self.updating.push(instance.name.clone());
 
             let event_sender = self.event_sender.clone();
-            let instance_ = GuiInstance::from_instance(instance);
+            let instance_: GuiInstance = instance.into();
             let instance_name = instance.name.clone();
             thread::Builder::new()
                 .name(format!("workspace_grabber"))
@@ -160,6 +163,7 @@ impl App {
                     if instance.name.is_new() {
                         instance = self.add_instance(&instance);
                         self.updating.retain(|instance_id| !instance_id.is_new());
+                        self.clear_add_instance_panel();
                     } else {
                         self.update_instance(&instance);
                     }
@@ -255,6 +259,9 @@ impl App {
             gui_instance.password = "".to_string();
         }
 
+        // Add instance to instances list
+        self.state.instances.push(instance_.clone().into());
+
         instance_
     }
 
@@ -272,6 +279,15 @@ impl App {
     }
 
     fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &Vec<Workspace>) {
+        let selected_workspaces = self
+            .state
+            .instances
+            .iter()
+            .filter(|i| &i.name == id)
+            .collect::<Vec<&Instance>>()
+            .first()
+            .and_then(|i| Some(i.workspaces_ids.clone()))
+            .unwrap_or(vec![]);
         if let Some(gui_instance) = self
             .state
             .available_panels
@@ -283,36 +299,42 @@ impl App {
             .find(|i| &i.name == id)
         {
             gui_instance.workspaces = Some(workspaces.clone());
-            gui_instance.rebuild_workspaces_ids_checkboxes();
+            gui_instance.rebuild_workspaces_ids_checkboxes(&selected_workspaces);
         };
     }
 
     fn update_instance_selected_workspaces(&mut self, instance: &GuiInstance) {
+        let selected_workspace_ids = instance.selected_workspace_ids();
+
         if let Some(instance_) = self
             .state
             .instances
             .iter_mut()
             .find(|i| i.name == instance.name)
         {
-            instance_.workspaces_ids = instance
-                .workspaces_ids_checkboxes
-                .clone()
-                .iter()
-                .filter_map(
-                    |(checked, id, _)| {
-                        if *checked {
-                            Some(id.clone())
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect();
+            instance_.workspaces_ids = selected_workspace_ids.clone();
+        };
+
+        if let Some(instance_) = self
+            .state
+            .available_panels
+            .iter_mut()
+            .filter_map(|p| match p {
+                Panel::Instance(i) => Some(i),
+                _ => None,
+            })
+            .find(|i| i.name == instance.name)
+        {
+            instance_.rebuild_workspaces_ids_checkboxes(&selected_workspace_ids);
         };
     }
 
-    fn save_config(&self) -> Result<()> {
-        self.state.to_config().write()?;
+    fn save_config(&mut self) -> Result<()> {
+        let config = self.state.to_config();
+        config.write()?;
+        if let Err(error) = self.main_sender.send(DaemonMessage::Reload(config)) {
+            self.windowed_error = Some(error.to_string())
+        };
         Ok(())
     }
 
@@ -401,5 +423,16 @@ impl App {
 
         self.updating.push(instance_name.clone());
         Ok(())
+    }
+
+    pub fn clear_add_instance_panel(&mut self) {
+        if let Some(gui_instance) = match &mut self.state.current_panel {
+            Panel::AddInstance(instance) => Some(instance),
+            _ => None,
+        } {
+            gui_instance.address.clear();
+            gui_instance.username.clear();
+            gui_instance.password.clear();
+        }
     }
 }

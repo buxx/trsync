@@ -6,6 +6,8 @@ use std::{
     time::Duration,
 };
 
+use crossbeam_channel::Sender;
+use trsync_manager::message::DaemonMessage;
 use trsync_manager_configure::run::run as run_configure;
 
 use gtk;
@@ -19,6 +21,7 @@ use crate::{
 
 pub fn run_tray(
     config: Config,
+    main_sender: Sender<DaemonMessage>,
     activity_state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -26,6 +29,9 @@ pub fn run_tray(
         Err(error) => return Err(format!("Unable to initialize gtk : '{}'", error)),
         _ => {}
     };
+
+    let main_sender_configure = main_sender.clone();
+    let main_sender_quit = main_sender.clone();
 
     let mut current_icon = Icon::Idle;
     let mut tray = match current_icon.value(&config).to_str() {
@@ -37,7 +43,8 @@ pub fn run_tray(
     };
     match tray.add_menu_item("Configurer", move || {
         log::info!("Run configure window");
-        if let Err(error) = run_configure() {
+        let main_sender_ = main_sender_configure.clone();
+        if let Err(error) = run_configure(main_sender_) {
             return log::error!("Unable to run configure window : '{}'", error);
         };
     }) {
@@ -46,7 +53,9 @@ pub fn run_tray(
     };
 
     let menu_stop_signal = stop_signal.clone();
+    let main_sender_ = main_sender_quit.clone();
     match tray.add_menu_item("Quitter", move || {
+        main_sender_.send(DaemonMessage::Stop).unwrap_or(());
         menu_stop_signal.store(true, Ordering::Relaxed);
         gtk::main_quit();
     }) {

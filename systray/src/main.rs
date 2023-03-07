@@ -13,7 +13,7 @@ use std::{
 };
 use trsync::operation::Job;
 use trsync_core::config::ManagerConfig;
-use trsync_manager::{self, daemon::Daemon, message::DaemonMessage, reload::ReloadWatcher};
+use trsync_manager::{self, daemon::Daemon, message::DaemonMessage};
 
 use crate::state::ActivityMonitor;
 
@@ -43,10 +43,6 @@ fn run() -> Result<()> {
     let (main_sender, main_receiver): DaemonMessageChannels = unbounded();
     let (activity_sender, activity_receiver): ActivityChannels = unbounded();
     let manager_config = ManagerConfig::from_env(false)?;
-    let manager_config_ = manager_config.clone();
-    let main_sender_ = main_sender.clone();
-    let stop_signal_ = stop_signal.clone();
-    ReloadWatcher::new(manager_config_, main_sender_, stop_signal_).start()?;
     Daemon::new(manager_config, main_receiver, activity_sender).start()?;
 
     // Start activity monitor
@@ -61,7 +57,13 @@ fn run() -> Result<()> {
         let tray_config = config.clone();
         let tray_activity_state = activity_state.clone();
         let tray_stop_signal = stop_signal.clone();
-        match linux::run_tray(tray_config, tray_activity_state, tray_stop_signal) {
+        let main_sender_ = main_sender.clone();
+        match linux::run_tray(
+            tray_config,
+            main_sender_,
+            tray_activity_state,
+            tray_stop_signal,
+        ) {
             Err(error) => {
                 log::error!("{}", error)
             }
@@ -72,12 +74,8 @@ fn run() -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         let tray_stop_signal = stop_signal.clone();
-        match windows::run_tray(
-            password_port,
-            &password_token,
-            activity_state,
-            tray_stop_signal,
-        ) {
+        let main_sender_ = main_sender.clone();
+        match windows::run_tray(main_sender_, activity_state, tray_stop_signal) {
             Err(error) => {
                 log::error!("{}", error)
             }

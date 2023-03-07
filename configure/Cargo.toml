@@ -8,12 +8,9 @@ edition = "2021"
 name = "trsync_manager_configure"
 path = "src/lib.rs"
 
-[[bin]]
-name = "trsync_manager_configure"
-path = "src/bin.rs"
-
 [dependencies]
 trsync_core = { path = "../core" }
+trsync_manager = { path = "../manager" }
 eframe = "0.21.3"
 rfd = "0.10"
 anyhow = "1.0.69"

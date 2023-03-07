@@ -6,9 +6,6 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     ChannelError(RecvError),
-    UnableToFindHomeUser,
-    ReadConfigError(String),
-    FailToSpawnTrsyncProcess(Option<String>),
     UnexpectedError(String),
     UnavailableNetwork(String),
 }
@@ -69,21 +66,6 @@ impl Display for Error {
         match self {
             Error::ChannelError(message) => {
                 write!(f, "Channel communication error : '{}'", message)
-            }
-            Error::UnableToFindHomeUser => write!(f, "Unable to find user home path"),
-            Error::ReadConfigError(message) => {
-                write!(f, "Error when reading config : '{}'", message)
-            }
-            Error::FailToSpawnTrsyncProcess(message) => {
-                if let Some(message_) = message {
-                    write!(
-                        f,
-                        "Error when trying to spawn trsync process : '{}'",
-                        message_
-                    )
-                } else {
-                    write!(f, "Error when trying to spawn trsync process")
-                }
             }
             Error::UnexpectedError(message) => write!(f, "Unexpected error : '{}'", message),
             Error::UnavailableNetwork(message) => write!(f, "Network error : '{}'", message),

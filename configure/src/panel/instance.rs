@@ -133,7 +133,6 @@ pub struct GuiInstance {
     pub username: String,
     pub password: String,
     pub workspaces: Option<Vec<Workspace>>,
-    pub selected_workspaces_ids: Vec<WorkspaceId>,
     pub workspaces_ids_checkboxes: Vec<(bool, WorkspaceId, String)>,
 }
 
@@ -146,25 +145,12 @@ impl Default for GuiInstance {
             username: Default::default(),
             password: Default::default(),
             workspaces: Default::default(),
-            selected_workspaces_ids: Default::default(),
             workspaces_ids_checkboxes: Default::default(),
         }
     }
 }
 
 impl GuiInstance {
-    pub fn from_instance(instance: &Instance) -> Self {
-        Self::new(
-            instance.name.clone(),
-            instance.address.clone(),
-            instance.unsecure.clone(),
-            instance.username.clone(),
-            instance.password.clone(),
-            None,
-            instance.workspaces_ids.clone(),
-        )
-    }
-
     pub fn new(
         name: InstanceId,
         address: String,
@@ -174,25 +160,25 @@ impl GuiInstance {
         workspaces: Option<Vec<Workspace>>,
         selected_workspaces_ids: Vec<WorkspaceId>,
     ) -> Self {
-        Self {
+        let mut self_ = Self {
             name,
             address,
             unsecure,
             username,
             password,
             workspaces,
-            selected_workspaces_ids,
             workspaces_ids_checkboxes: vec![],
-        }
+        };
+        self_.rebuild_workspaces_ids_checkboxes(&selected_workspaces_ids);
+        self_
     }
 
-    pub fn rebuild_workspaces_ids_checkboxes(&mut self) {
+    pub fn rebuild_workspaces_ids_checkboxes(&mut self, selected_workspaces: &Vec<WorkspaceId>) {
         self.workspaces_ids_checkboxes = vec![];
         if let Some(workspaces) = &self.workspaces {
             for workspace in workspaces {
                 self.workspaces_ids_checkboxes.push((
-                    self.selected_workspaces_ids
-                        .contains(&workspace.workspace_id),
+                    selected_workspaces.contains(&workspace.workspace_id),
                     workspace.workspace_id.clone(),
                     workspace.label.clone(),
                 ));
@@ -206,5 +192,48 @@ impl GuiInstance {
         let suffix = suffix.unwrap_or("");
         let scheme = if self.unsecure { "http" } else { "https" };
         format!("{}://{}/api{}", scheme, self.address, suffix)
+    }
+
+    pub fn selected_workspace_ids(&self) -> Vec<WorkspaceId> {
+        self.workspaces_ids_checkboxes
+            .clone()
+            .iter()
+            .filter_map(
+                |(checked, id, _)| {
+                    if *checked {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect()
+    }
+}
+
+impl From<&Instance> for GuiInstance {
+    fn from(instance: &Instance) -> Self {
+        Self::new(
+            instance.name.clone(),
+            instance.address.clone(),
+            instance.unsecure.clone(),
+            instance.username.clone(),
+            instance.password.clone(),
+            None,
+            instance.workspaces_ids.clone(),
+        )
+    }
+}
+
+impl Into<Instance> for GuiInstance {
+    fn into(self) -> Instance {
+        Instance {
+            name: self.name.clone(),
+            address: self.address.clone(),
+            unsecure: false,
+            username: self.username.clone(),
+            password: self.password.clone(),
+            workspaces_ids: self.selected_workspace_ids(),
+        }
     }
 }

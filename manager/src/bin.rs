@@ -1,5 +1,3 @@
-use std::sync::{atomic::AtomicBool, Arc};
-
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
@@ -10,29 +8,20 @@ mod client;
 mod daemon;
 mod error;
 mod message;
-mod reload;
 mod types;
 
 fn main_() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let (main_channel_sender, main_channel_receiver): (
+    // As standalone server (no systray), we never send daemon messages
+    // TODO : listen to SIG_HUP signal to send reload daemon message
+    let (_, main_channel_receiver): (
         Sender<message::DaemonMessage>,
         Receiver<message::DaemonMessage>,
     ) = unbounded();
-    let stop_signal = Arc::new(AtomicBool::new(false));
 
     log::info!("Read config");
     let config = ManagerConfig::from_env(true)?;
-
-    log::info!("Build and run reload watcher");
-    let config_ = config.clone();
-    let main_channel_sender_ = main_channel_sender.clone();
-    let stop_signal_ = stop_signal.clone();
-    // FIXME BS NOW : remove reload watcher
-    reload::ReloadWatcher::new(config_, main_channel_sender_, stop_signal_)
-        .start()
-        .expect("FIXME");
 
     log::info!("Start daemon");
     let config_ = config.clone();

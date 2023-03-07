@@ -15,6 +15,7 @@ enum Message {
 }
 
 pub fn run_tray(
+    main_sender: Sender<DaemonMessage>,
     activity_state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -26,7 +27,8 @@ pub fn run_tray(
     let mut current_icon = Icon::Idle;
     match tray.add_menu_item("Configurer", move || {
         log::info!("Run configure window");
-        if let Err(error) = run_configure() {
+        let main_sender_ = main_sender.clone();
+        if let Err(error) = run_configure(main_sender_) {
             return log::error!("Unable to run configure window : '{}'", error);
         };
     }) {

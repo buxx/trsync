@@ -21,7 +21,7 @@ impl State {
             config
                 .instances
                 .iter()
-                .map(|i| Panel::Instance(GuiInstance::from_instance(i)))
+                .map(|i| Panel::Instance(i.into()))
                 .collect(),
             vec![Panel::AddInstance(GuiInstance::default())],
         ]

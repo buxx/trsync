@@ -10,6 +10,12 @@ impl Display for InstanceId {
     }
 }
 
+impl InstanceId {
+    pub fn is_new(&self) -> bool {
+        self.0 == ""
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct WorkspaceId(pub i32);
 
