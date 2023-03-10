@@ -8,11 +8,8 @@ Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) sh
 
 * **trsync** : This is the tool permitting to synchronize one Tracim shared space with one local folder.
 * **manager** : Daemon which manage multiples trsync executions by reading a config file.
+* **configure** : The configuration window for manager config file
 * **systray** : Task bar icon program permitting to start a graphical configuration window to fill manager config file.
-
-## What is not in this repository
-
-* **configure** : The configuration window program is available to [buxx/trsync-manager-configure](https://github.com/buxx/trsync-manager-configure)
 
 ## Build from source
 
