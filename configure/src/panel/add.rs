@@ -8,19 +8,24 @@ use crate::event::Event;
 
 use super::instance::GuiInstance;
 
-pub struct AddInstancePainter {
+pub struct AddInstancePainter<'a> {
     updating: bool,
     errors: Vec<String>,
+    instance: &'a mut GuiInstance,
 }
 
 const MIN_COL_WIDTH: f32 = 250.;
 
-impl AddInstancePainter {
-    pub fn new(updating: bool, errors: Vec<String>) -> Self {
-        Self { updating, errors }
+impl<'a> AddInstancePainter<'a> {
+    pub fn new(updating: bool, errors: Vec<String>, instance: &'a mut GuiInstance) -> Self {
+        Self {
+            updating,
+            errors,
+            instance,
+        }
     }
 
-    pub fn draw(&mut self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
+    pub fn draw(&mut self, ui: &mut Ui) -> Vec<Event> {
         let mut events = vec![];
 
         ui.vertical(|ui| {
@@ -28,34 +33,34 @@ impl AddInstancePainter {
                 ui.colored_label(Color32::RED, error);
             }
 
-            events.extend(self.credentials(ui, instance));
+            events.extend(self.credentials(ui));
         });
 
         events
     }
 
-    fn credentials(&self, ui: &mut Ui, instance: &mut GuiInstance) -> Vec<Event> {
+    fn credentials(&mut self, ui: &mut Ui) -> Vec<Event> {
         let mut events = vec![];
 
         ui.vertical(|ui| {
-            Grid::new(instance.name.to_string())
+            Grid::new(self.instance.name.to_string())
                 .num_columns(2)
                 .spacing([40.0, 4.0])
                 .striped(true)
                 .min_col_width(MIN_COL_WIDTH)
                 .show(ui, |ui| {
                     let address_label = ui.label("Adresse (ex. mon.tracim.fr)");
-                    ui.text_edit_singleline(&mut instance.address)
+                    ui.text_edit_singleline(&mut self.instance.address)
                         .labelled_by(address_label.id);
                     ui.end_row();
 
                     let username_label = ui.label("Identifiant (username ou email)");
-                    ui.text_edit_singleline(&mut instance.username)
+                    ui.text_edit_singleline(&mut self.instance.username)
                         .labelled_by(username_label.id);
                     ui.end_row();
 
                     let password_label = ui.label("Mot de passe");
-                    ui.add(TextEdit::singleline(&mut instance.password).password(true))
+                    ui.add(TextEdit::singleline(&mut self.instance.password).password(true))
                         .labelled_by(password_label.id);
                     ui.end_row();
 
@@ -63,7 +68,7 @@ impl AddInstancePainter {
 
                     ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
                         if ui.button("Ajouter").clicked() {
-                            events.push(Event::ValidateNewInstance(instance.clone()));
+                            events.push(Event::ValidateNewInstance(self.instance.clone()));
                         }
                     });
                     ui.end_row();

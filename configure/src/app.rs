@@ -134,7 +134,7 @@ impl App {
                         .filter(|(id_, _)| id_ == &instance.name)
                         .map(|(_, error)| error.clone())
                         .collect();
-                    InstancePainter::new(updating, errors).draw(ui, instance)
+                    InstancePainter::new(updating, errors, instance).draw(ui)
                 }
                 Panel::AddInstance(instance) => {
                     let updating = self.updating.contains(&instance.name);
@@ -144,7 +144,7 @@ impl App {
                         .filter(|(id_, _)| id_ == &instance.name)
                         .map(|(_, error)| error.clone())
                         .collect();
-                    AddInstancePainter::new(updating, errors).draw(ui, instance)
+                    AddInstancePainter::new(updating, errors, instance).draw(ui)
                 }
             });
         });
