@@ -50,6 +50,7 @@ impl RemoteEvent {
 }
 
 pub struct RemoteWatcher {
+    connection: Connection,
     context: Context,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
@@ -62,12 +63,14 @@ pub struct RemoteWatcher {
 // pull of content list and comparison with cache. Future is to use TLM
 impl RemoteWatcher {
     pub fn new(
+        connection: Connection,
         context: Context,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
         operational_sender: Sender<OperationalMessage>,
     ) -> Self {
         Self {
+            connection,
             context,
             stop_signal,
             restart_signal,
@@ -162,7 +165,7 @@ impl RemoteWatcher {
                     .as_i64()
                     .ok_or(Error::UnexpectedError(format!(
                         "Remote event content content_id appear to not be integer"
-                    )))?;
+                    )))? as i32;
             let workspace_id =
                 remote_event.fields["workspace"]
                     .as_object()
@@ -174,53 +177,63 @@ impl RemoteWatcher {
                         "Remote event workspace workspace_id appear to not be integer"
                     )))?;
 
-            if self.context.workspace_id.0 != workspace_id as i32 {
-                log::debug!("Remote event is not for current workspace, skip");
-                return Ok(());
-            }
+            if let Some(message) = {
+                if self.context.workspace_id.0 != workspace_id as i32 {
+                    // If content exist locally that means content has change its workspace id
+                    if DatabaseOperation::new(&self.connection).content_id_is_known(content_id)? {
+                        Some(OperationalMessage::DeletedRemoteFile(content_id))
+                    } else {
+                        log::debug!("Remote event is not for current workspace, skip");
+                        None
+                    }
+                } else {
+                    log::info!(
+                        "remote event : {:} ({})",
+                        &remote_event.event_type.as_str(),
+                        content_id,
+                    );
+                    let event_type = remote_event.event_type.as_str();
+                    let message = match event_type {
+                        "content.modified.html-document"
+                        | "content.modified.file"
+                        | "content.modified.folder" => {
+                            OperationalMessage::ModifiedRemoteFile(content_id)
+                        }
+                        "content.created.html-document"
+                        | "content.created.file"
+                        | "content.created.folder" => OperationalMessage::NewRemoteFile(content_id),
+                        "content.deleted.html-document"
+                        | "content.deleted.file"
+                        | "content.deleted.folder" => {
+                            OperationalMessage::DeletedRemoteFile(content_id)
+                        }
+                        "content.undeleted.html-document"
+                        | "content.undeleted.file"
+                        | "content.undeleted.folder" => {
+                            OperationalMessage::NewRemoteFile(content_id)
+                        }
+                        _ => {
+                            return Err(Error::UnexpectedError(format!(
+                                "Not managed event type : '{}'",
+                                event_type
+                            )))
+                        }
+                    };
 
-            log::info!(
-                "remote event : {:} ({})",
-                &remote_event.event_type.as_str(),
-                content_id,
-            );
-            let event_type = remote_event.event_type.as_str();
-            let message = match event_type {
-                "content.modified.html-document"
-                | "content.modified.file"
-                | "content.modified.folder" => {
-                    OperationalMessage::ModifiedRemoteFile(content_id as i32)
+                    Some(message)
                 }
-                "content.created.html-document"
-                | "content.created.file"
-                | "content.created.folder" => OperationalMessage::NewRemoteFile(content_id as i32),
-                "content.deleted.html-document"
-                | "content.deleted.file"
-                | "content.deleted.folder" => {
-                    OperationalMessage::DeletedRemoteFile(content_id as i32)
-                }
-                "content.undeleted.html-document"
-                | "content.undeleted.file"
-                | "content.undeleted.folder" => {
-                    OperationalMessage::NewRemoteFile(content_id as i32)
-                }
-                _ => {
-                    return Err(Error::UnexpectedError(format!(
-                        "Not managed event type : '{}'",
-                        event_type
-                    )))
-                }
-            };
-            match self.operational_sender.send(message) {
-                Ok(_) => (),
-                // TODO : stop trsync ?
-                Err(err) => {
-                    log::error!(
-                        "Error when send operational message from remote watcher : '{}'",
-                        err
-                    )
-                }
-            };
+            } {
+                match self.operational_sender.send(message) {
+                    Ok(_) => (),
+                    // TODO : stop trsync ?
+                    Err(err) => {
+                        log::error!(
+                            "Error when send operational message from remote watcher : '{}'",
+                            err
+                        )
+                    }
+                };
+            }
         } else {
             log::debug!(
                 "Ignore remote event : '{}'",
@@ -416,16 +429,21 @@ pub fn start_remote_watch(
     let remote_watcher_restart_signal = restart_signal.clone();
     let remote_watcher_operational_sender = operational_sender.clone();
 
-    let mut remote_watcher = RemoteWatcher::new(
-        remote_watcher_context,
-        remote_watcher_stop_signal,
-        remote_watcher_restart_signal,
-        remote_watcher_operational_sender,
-    );
-
     Ok(thread::spawn(move || {
         if !exit_after_sync {
-            remote_watcher.listen()
+            Database::new(remote_watcher_context.database_path.clone()).with_new_connection(
+                |connection| {
+                    let mut remote_watcher = RemoteWatcher::new(
+                        connection,
+                        remote_watcher_context,
+                        remote_watcher_stop_signal,
+                        remote_watcher_restart_signal,
+                        remote_watcher_operational_sender,
+                    );
+                    Ok(remote_watcher.listen()?)
+                },
+            )?;
+            Ok(())
         } else {
             Ok(())
         }
