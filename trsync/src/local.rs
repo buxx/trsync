@@ -229,7 +229,8 @@ impl LocalSync {
     }
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
-        if entry.file_type().is_dir() {
+        let is_root = self.context.folder_path == entry.path().display().to_string();
+        if !is_root && entry.file_type().is_dir() {
             // Ignore directory from local sync : changes can only be rename.
             // And modification time is problematic :https://github.com/buxx/trsync/issues/60
             return true;
