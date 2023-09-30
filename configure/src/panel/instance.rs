@@ -97,7 +97,7 @@ impl<'a> InstancePainter<'a> {
         }
 
         if self.instance.workspaces.is_some() {
-            Grid::new(format!("{}_workspaces", self.instance.name.to_string()))
+            Grid::new(format!("{}_workspaces", self.instance.name))
                 .num_columns(2)
                 .spacing([40.0, 4.0])
                 .striped(true)
@@ -187,7 +187,7 @@ impl GuiInstance {
             for workspace in workspaces {
                 self.workspaces_ids_checkboxes.push((
                     selected_workspaces.contains(&workspace.workspace_id),
-                    workspace.workspace_id.clone(),
+                    workspace.workspace_id,
                     workspace.label.clone(),
                 ));
             }
@@ -209,7 +209,7 @@ impl GuiInstance {
             .filter_map(
                 |(checked, id, _)| {
                     if *checked {
-                        Some(id.clone())
+                        Some(*id)
                     } else {
                         None
                     }
@@ -224,7 +224,7 @@ impl From<&Instance> for GuiInstance {
         Self::new(
             instance.name.clone(),
             instance.address.clone(),
-            instance.unsecure.clone(),
+            instance.unsecure,
             instance.username.clone(),
             instance.password.clone(),
             None,
@@ -233,15 +233,15 @@ impl From<&Instance> for GuiInstance {
     }
 }
 
-impl Into<Instance> for GuiInstance {
-    fn into(self) -> Instance {
+impl From<GuiInstance> for Instance {
+    fn from(val: GuiInstance) -> Self {
         Instance {
-            name: self.name.clone(),
-            address: self.address.clone(),
+            name: val.name.clone(),
+            address: val.address.clone(),
             unsecure: false,
-            username: self.username.clone(),
-            password: self.password.clone(),
-            workspaces_ids: self.selected_workspace_ids(),
+            username: val.username.clone(),
+            password: val.password.clone(),
+            workspaces_ids: val.selected_workspace_ids(),
         }
     }
 }

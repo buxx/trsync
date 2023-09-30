@@ -40,13 +40,13 @@ impl WorkspacesGrabber {
     }
 
     fn get_workspaces(&self) -> Result<Vec<Workspace>> {
-        Ok(Client::new(
+        Client::new(
             self.instance.api_url(None),
             self.instance.username.clone(),
             self.instance.password.clone(),
         )
         .context("Construct http client")?
         .workspaces()
-        .context("Grab workspaces")?)
+        .context("Grab workspaces")
     }
 }

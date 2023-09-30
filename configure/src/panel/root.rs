@@ -2,7 +2,7 @@ use eframe::egui::{Grid, Ui};
 
 use crate::{event::Event, state::State, utils::label_with_help};
 
-const CONFIGURATION_GRID_ID: &'static str = "configuration";
+const CONFIGURATION_GRID_ID: &str = "configuration";
 
 pub struct ConfigurationPainter;
 

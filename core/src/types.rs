@@ -5,7 +5,7 @@ pub type RevisionId = i32;
 pub type LastModifiedTimestamp = i64;
 pub type EventType = String;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug, Copy)]
 pub enum ContentType {
     File,
     Folder,
@@ -27,6 +27,13 @@ impl ContentType {
             ContentType::File => "file".to_string(),
             ContentType::Folder => "folder".to_string(),
             ContentType::HtmlDocument => "html-document".to_string(),
+        }
+    }
+
+    pub fn fillable(&self) -> bool {
+        match self {
+            ContentType::File | ContentType::HtmlDocument => true,
+            ContentType::Folder => false,
         }
     }
 }

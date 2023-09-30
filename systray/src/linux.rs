@@ -10,7 +10,7 @@ use crossbeam_channel::Sender;
 use trsync_manager::message::DaemonMessage;
 use trsync_manager_configure::run::run as run_configure;
 
-use gtk;
+
 use tray_item::TrayItem;
 
 use crate::{
@@ -39,14 +39,14 @@ pub fn run_tray(
             Ok(tray_) => tray_,
             Err(error) => return Err(format!("Unable to create tray item : '{}'", error)),
         },
-        None => return Err(format!("Unable to get icon value")),
+        None => return Err("Unable to get icon value".to_string()),
     };
     match tray.add_menu_item("Configurer", move || {
         log::info!("Run configure window");
         let main_sender_ = main_sender_configure.clone();
         if let Err(error) = run_configure(main_sender_) {
-            return log::error!("Unable to run configure window : '{}'", error);
-        };
+            log::error!("Unable to run configure window : '{}'", error)
+        }
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
         _ => {}

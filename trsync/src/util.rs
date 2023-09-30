@@ -2,18 +2,17 @@ use std::{
     ffi::OsStr,
     io,
     path::{Component, Path, PathBuf},
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
 
+use anyhow::Result as AnyHowResult;
 use minidom::Element;
 use rusqlite::Connection;
 use std::fs;
 
-use crate::{
-    database::DatabaseOperation,
-    error::Error,
-    types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
-    util,
+use crate::{database::DatabaseOperation, error::Error, util};
+use trsync_core::types::{
+    AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath,
 };
 
 // This extension must match with Tracim content "filename"
@@ -96,6 +95,12 @@ impl FileInfos {
             Ok(None)
         }
     }
+}
+
+pub fn last_modified_timestamp(path: &PathBuf) -> AnyHowResult<Duration> {
+    let metadata = path.metadata()?;
+    let modified = metadata.modified()?;
+    Ok(modified.duration_since(UNIX_EPOCH)?)
 }
 
 pub fn parent_relative_path_from_path_components(

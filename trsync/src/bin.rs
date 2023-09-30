@@ -20,7 +20,6 @@ pub mod message;
 pub mod operation;
 pub mod remote;
 pub mod run;
-pub mod types;
 pub mod util;
 
 #[derive(StructOpt, Debug)]

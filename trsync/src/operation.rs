@@ -19,9 +19,10 @@ use crate::{
     context::Context,
     database::{Database, DatabaseOperation},
     error::{ClientError, Error},
-    types::{ContentId, ContentType, RelativeFilePath},
     util,
 };
+
+use trsync_core::types::{ContentId, ContentType, RelativeFilePath};
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct JobIdentifier {

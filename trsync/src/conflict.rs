@@ -1,10 +1,11 @@
+use trsync_core::types::RelativeFilePath;
+
 use crate::{
     client::Client,
     context::Context,
     error::ClientError,
     knowledge::{ExternalKnowledge, Knowledge},
     operation::OperationalMessage,
-    types::RelativeFilePath,
 };
 
 pub struct ConflictResolver {

@@ -7,15 +7,12 @@ use reqwest::Method;
 
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use trsync_core::types::{ContentId, ContentType, RevisionId};
 
 use crate::context::Context;
 use crate::error::{ClientError, Error};
-use crate::types::RevisionId;
+use crate::remote::RemoteContent;
 use crate::util::{self, HTML_DOCUMENT_LOCAL_EXTENSION};
-use crate::{
-    remote::RemoteContent,
-    types::{ContentId, ContentType},
-};
 
 const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
 const DEFAULT_CLIENT_TIMEOUT: u64 = 3600 * 2;

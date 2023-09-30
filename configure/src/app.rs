@@ -86,7 +86,7 @@ impl App {
             let instance_: GuiInstance = instance.into();
             let instance_name = instance.name.clone();
             thread::Builder::new()
-                .name(format!("workspace_grabber"))
+                .name("workspace_grabber".to_string())
                 .spawn(|| WorkspacesGrabber::new(event_sender, instance_).execute())
                 .context(format!(
                     "Start workspace grabber for '{}'",
@@ -174,7 +174,7 @@ impl App {
                     let event_sender = self.event_sender.clone();
                     let instance_name = instance.name.clone();
                     thread::Builder::new()
-                        .name(format!("workspace_grabber"))
+                        .name("workspace_grabber".to_string())
                         .spawn(|| WorkspacesGrabber::new(event_sender, instance).execute())
                         .context(format!(
                             "Start workspace grabber for '{}'",
@@ -285,8 +285,7 @@ impl App {
             .iter()
             .filter(|i| &i.name == id)
             .collect::<Vec<&Instance>>()
-            .first()
-            .and_then(|i| Some(i.workspaces_ids.clone()))
+            .first().map(|i| i.workspaces_ids.clone())
             .unwrap_or(vec![]);
         if let Some(gui_instance) = self
             .state
@@ -414,7 +413,7 @@ impl App {
         let event_sender = self.event_sender.clone();
         let instance_name = instance.name.clone();
         thread::Builder::new()
-            .name(format!("credential_updater"))
+            .name("credential_updater".to_string())
             .spawn(|| CredentialUpdater::new(event_sender, instance).execute())
             .context(format!(
                 "Start credential updater for '{}'",

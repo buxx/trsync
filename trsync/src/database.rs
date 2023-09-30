@@ -1,9 +1,7 @@
 use rusqlite::{params, Connection};
 
-use crate::{
-    error::Error,
-    types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId},
-};
+use crate::error::Error;
+use trsync_core::types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId};
 
 pub struct Database {
     database_file_path: String,

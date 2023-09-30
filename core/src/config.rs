@@ -51,20 +51,14 @@ impl ManagerConfig {
         let prevent_delete_sync = strbool(server.get("prevent_delete_sync").unwrap_or("1"));
         let local_folder = server
             .get("local_folder")
-            .and_then(|v| Some(v.to_string()))
-            .unwrap_or_else(|| {
-                if cfg!(target_os = "windows") {
-                    user_home_folder_path.join("Tracim").display().to_string()
-                } else {
-                    user_home_folder_path.join("Tracim").display().to_string()
-                }
-            })
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| user_home_folder_path.join("Tracim").display().to_string())
             .to_string();
-        let icons_path = server.get("icons_path").and_then(|v| Some(v.to_string()));
+        let icons_path = server.get("icons_path").map(|v| v.to_string());
         let instances_ids: Vec<InstanceId> = server
             .get("instances")
             .unwrap_or("")
-            .split(",")
+            .split(',')
             .filter(|v| !v.trim().is_empty())
             .map(|v| InstanceId(v.to_string()))
             .collect();
@@ -93,12 +87,11 @@ impl ManagerConfig {
             let (workspaces_ids, errors): (Vec<_>, Vec<_>) = instance_config
                 .get("workspaces_ids")
                 .unwrap_or("")
-                .split(",")
-                .into_iter()
+                .split(',')
                 .filter(|v| !v.trim().is_empty())
                 .map(|v| v.parse::<i32>())
                 .partition(Result::is_ok);
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 return Result::Err(Error::msg(format!(
                     "Some workspaces ids are invalid in '{}' section",
                     &section_name
@@ -110,7 +103,7 @@ impl ManagerConfig {
                     Ok(v) => Some(v),
                     Err(_) => None,
                 })
-                .map(|v| WorkspaceId(v))
+                .map(WorkspaceId)
                 .collect();
 
             // try to get password from keyring

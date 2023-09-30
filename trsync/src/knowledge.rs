@@ -1,10 +1,8 @@
-use crate::{
-    client::Client, context::Context, database::DatabaseOperation, error::ClientError,
-    types::RelativeFilePath,
-};
+use crate::{client::Client, context::Context, database::DatabaseOperation, error::ClientError};
 use mockall::automock;
 use rusqlite::Connection;
 use trsync_core::instance::WorkspaceId;
+use trsync_core::types::RelativeFilePath;
 
 #[automock]
 pub trait Knowledge {

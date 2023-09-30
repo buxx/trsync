@@ -1,7 +1,8 @@
 use std::{fmt, io, str::Utf8Error};
 
-use crate::types::{AbsoluteFilePath, ContentId, RevisionId};
+use trsync_core::types::{AbsoluteFilePath, ContentId, RevisionId};
 
+// FIXME BS NOW : a remplacer par ce qu'il y a dans core
 #[derive(Debug, Clone)]
 pub enum ClientError {
     InputFileError(AbsoluteFilePath),

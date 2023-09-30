@@ -12,6 +12,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+use trsync_core::types::{ContentId, RemoteEventType, RevisionId};
 
 use futures_util::StreamExt;
 use serde_derive::{Deserialize, Serialize};
@@ -26,7 +27,6 @@ use crate::{
     context::Context,
     database::DatabaseOperation,
     operation::OperationalMessage,
-    types::{ContentId, RemoteEventType, RevisionId},
 };
 
 const LAST_ACTIVITY_TIMEOUT: u64 = 60;

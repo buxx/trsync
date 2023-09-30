@@ -86,12 +86,10 @@ fn run() -> Result<()> {
     // When these lines are reached, tray is finished so, close application
     log::info!("Stopping ...");
     stop_signal.swap(true, Ordering::Relaxed);
-    main_sender.send(DaemonMessage::Stop).or_else(|e| {
-        Err(Error::UnexpectedError(format!(
+    main_sender.send(DaemonMessage::Stop).map_err(|e| Error::UnexpectedError(format!(
             "Unable to ask manager to stop : '{}'",
             e
-        )))
-    })?;
+        )))?;
     log::info!("Finished");
 
     Ok(())

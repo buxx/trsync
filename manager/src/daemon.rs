@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
-use trsync;
+
 use trsync::operation::Job;
 use trsync_core::config::ManagerConfig;
 
@@ -43,7 +43,7 @@ impl Daemon {
                 Ok(DaemonMessage::Reload(new_config)) => {
                     self.config = new_config;
                     while let Err(error) = self.ensure_processes() {
-                        if self.main_receiver.len() > 0 {
+                        if !self.main_receiver.is_empty() {
                             log::error!("Startup error : '{}', main message received, skip", error);
                             continue;
                         }
@@ -97,7 +97,7 @@ impl Daemon {
         for instance in self.config.instances.iter() {
             let client = Client::new(instance.clone())?;
             for workspace_id in &instance.workspaces_ids {
-                match client.get_workspace(workspace_id.clone()) {
+                match client.get_workspace(*workspace_id) {
                     Ok(workspace) => {
                         let process_uid =
                             TrsyncUid::new(instance.address.clone(), workspace.workspace_id);
@@ -124,7 +124,7 @@ impl Daemon {
 
         for instance in self.config.instances.iter() {
             for workspace_id in &instance.workspaces_ids {
-                let process_uid = TrsyncUid::new(instance.address.clone(), workspace_id.clone());
+                let process_uid = TrsyncUid::new(instance.address.clone(), *workspace_id);
                 expected_processes.push(process_uid);
             }
         }
@@ -147,7 +147,7 @@ impl Daemon {
             .find(|instance| instance.address == trsync_uid.instance_address())
             .expect("Start process imply its instance exists");
         let workspace =
-            match Client::new(instance.clone())?.get_workspace(trsync_uid.workspace_id().clone()) {
+            match Client::new(instance.clone())?.get_workspace(*trsync_uid.workspace_id()) {
                 Ok(workspace) => workspace,
                 Err(error) => {
                     return Err(Error::UnexpectedError(format!(
