@@ -4,13 +4,14 @@ use anyhow::{Context, Result};
 
 use trsync_core::{
     client::TracimClient,
-    instance::{ContentFileName, ContentId},
+    instance::{ContentFileName, ContentId, DiskTimestamp},
     types::ContentType,
 };
 
 use crate::{
     operation2::executor::Executor,
     state::{modification::StateModification, State},
+    util::last_modified_timestamp,
 };
 
 pub struct CreatedOnRemoteExecutor {
@@ -91,6 +92,12 @@ impl Executor for CreatedOnRemoteExecutor {
         let content = tracim
             .get_content(content_id)
             .context(format!("Get just created content {}", content_id))?;
-        Ok(StateModification::Add(content))
+        let disk_timestamp = last_modified_timestamp(&absolute_path)
+            .context(format!("Get disk timestamp of {}", absolute_path.display()))?;
+        Ok(StateModification::Add(
+            content,
+            self.path.clone(),
+            DiskTimestamp(disk_timestamp.as_millis() as u64),
+        ))
     }
 }

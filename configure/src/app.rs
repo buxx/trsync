@@ -285,7 +285,8 @@ impl App {
             .iter()
             .filter(|i| &i.name == id)
             .collect::<Vec<&Instance>>()
-            .first().map(|i| i.workspaces_ids.clone())
+            .first()
+            .map(|i| i.workspaces_ids.clone())
             .unwrap_or(vec![]);
         if let Some(gui_instance) = self
             .state

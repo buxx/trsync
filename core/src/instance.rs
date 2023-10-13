@@ -77,7 +77,7 @@ impl Display for ContentFileName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub struct DiskTimestamp(pub u128);
+pub struct DiskTimestamp(pub u64);
 
 impl Display for DiskTimestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

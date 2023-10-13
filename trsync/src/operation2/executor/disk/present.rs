@@ -1,11 +1,16 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use trsync_core::{client::TracimClient, instance::ContentId, types::ContentType};
+use trsync_core::{
+    client::TracimClient,
+    instance::{ContentId, DiskTimestamp},
+    types::ContentType,
+};
 
 use crate::{
     operation2::executor::Executor,
     state::{modification::StateModification, State},
+    util::last_modified_timestamp,
 };
 
 pub struct PresentOnDiskExecutor {
@@ -42,7 +47,7 @@ impl Executor for PresentOnDiskExecutor {
         } else {
             PathBuf::from(content.file_name().to_string())
         };
-        let absolute_path = self.workspace_folder.join(content_path);
+        let absolute_path = self.workspace_folder.join(&content_path);
 
         match content.type_() {
             ContentType::Folder => fs::create_dir_all(&absolute_path)
@@ -59,6 +64,12 @@ impl Executor for PresentOnDiskExecutor {
             ContentType::HtmlDocument => todo!(),
         }
 
-        Ok(StateModification::Add(content))
+        let disk_timestamp = last_modified_timestamp(&absolute_path)
+            .context(format!("Get disk timestamp of {}", absolute_path.display()))?;
+        Ok(StateModification::Add(
+            content,
+            content_path,
+            DiskTimestamp(disk_timestamp.as_millis() as u64),
+        ))
     }
 }

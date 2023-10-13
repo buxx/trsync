@@ -1,3 +1,1 @@
-pub struct LocalStateInitializer {
-    
-}
+pub struct LocalStateInitializer {}

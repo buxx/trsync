@@ -2,12 +2,12 @@ use std::{fmt::Display, iter::FromIterator, path::PathBuf};
 
 use trsync_core::content::Content;
 
-pub struct ContentPath<'a> {
-    parts: Vec<&'a Content>,
+pub struct ContentPath {
+    parts: Vec<Content>,
 }
 
-impl<'a> ContentPath<'a> {
-    pub fn new(parts: Vec<&'a Content>) -> Self {
+impl ContentPath {
+    pub fn new(parts: Vec<Content>) -> Self {
         Self { parts }
     }
 
@@ -20,13 +20,13 @@ impl<'a> ContentPath<'a> {
     }
 }
 
-impl<'a> Into<PathBuf> for ContentPath<'a> {
+impl Into<PathBuf> for ContentPath {
     fn into(self) -> PathBuf {
         self.to_path_buf()
     }
 }
 
-impl<'a> Display for ContentPath<'a> {
+impl Display for ContentPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_path_buf().display().to_string())
     }

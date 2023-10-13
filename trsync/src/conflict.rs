@@ -281,9 +281,9 @@ impl ResolveStrategy for LocalIsTruth {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::knowledge::MockKnowledge;
     use rstest::*;
-    use super::*;
 
     #[rstest]
     // Empty
@@ -303,7 +303,7 @@ mod tests {
         vec![
             OperationalMessage::ModifiedLocalFile("a.txt".to_string()),
             OperationalMessage::DeletedRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::NewLocalFile("a.txt".to_string())
         ]
@@ -313,7 +313,7 @@ mod tests {
         vec![
             OperationalMessage::NewLocalFile("a.txt".to_string()),
             OperationalMessage::NewRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::ModifiedLocalFile("a.txt".to_string())
         ]
@@ -323,7 +323,7 @@ mod tests {
         vec![
             OperationalMessage::NewLocalFile("a.txt".to_string()),
             OperationalMessage::DeletedRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::NewLocalFile("a.txt".to_string())
         ]
@@ -333,7 +333,7 @@ mod tests {
         vec![
             OperationalMessage::RenamedLocalFile("a.txt".to_string(), "b.txt".to_string()),
             OperationalMessage::ModifiedRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::RenamedLocalFile("a.txt".to_string(), "b.txt".to_string())
         ]
@@ -343,7 +343,7 @@ mod tests {
         vec![
             OperationalMessage::RenamedLocalFile("a.txt".to_string(), "b.txt".to_string()),
             OperationalMessage::NewRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::RenamedLocalFile("a.txt".to_string(), "b.txt".to_string())
         ]
@@ -353,7 +353,7 @@ mod tests {
         vec![
             OperationalMessage::RenamedLocalFile("a.txt".to_string(), "b.txt".to_string()),
             OperationalMessage::DeletedRemoteFile(1),
-        ], 
+        ],
         vec![
             OperationalMessage::NewLocalFile("b.txt".to_string())
         ]
@@ -364,28 +364,33 @@ mod tests {
             OperationalMessage::NewRemoteFile(1),
             OperationalMessage::NewRemoteFile(2),
             OperationalMessage::Exit,
-        ], 
+        ],
         vec![
             OperationalMessage::NewRemoteFile(1),
             OperationalMessage::NewRemoteFile(2),
             OperationalMessage::Exit,
         ]
     )]
-    fn multiple_cases(#[case] input: Vec<OperationalMessage>, #[case] expected: Vec<OperationalMessage>) {
+    fn multiple_cases(
+        #[case] input: Vec<OperationalMessage>,
+        #[case] expected: Vec<OperationalMessage>,
+    ) {
         // Given
         let mut knowledge = Box::new(MockKnowledge::new());
         knowledge
             .expect_get_local_relative_path()
-            .returning(|i| {match i {
+            .returning(|i| match i {
                 1 => Ok("a.txt".to_string()),
                 2 => Ok("b.txt".to_string()),
                 _ => unreachable!(),
-            }});
-        knowledge.expect_get_remote_relative_path().returning(|i| {match i {
-            1 => Ok("a.txt".to_string()),
-            2 => Ok("b.txt".to_string()),
-            _ => unreachable!(),
-        }});
+            });
+        knowledge
+            .expect_get_remote_relative_path()
+            .returning(|i| match i {
+                1 => Ok("a.txt".to_string()),
+                2 => Ok("b.txt".to_string()),
+                _ => unreachable!(),
+            });
         let resolver = ConflictResolver {
             knowledge,
             strategy: Box::new(LocalIsTruth {}),

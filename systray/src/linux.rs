@@ -10,7 +10,6 @@ use crossbeam_channel::Sender;
 use trsync_manager::message::DaemonMessage;
 use trsync_manager_configure::run::run as run_configure;
 
-
 use tray_item::TrayItem;
 
 use crate::{

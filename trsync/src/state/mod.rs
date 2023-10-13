@@ -11,12 +11,13 @@ use crate::path::ContentPath;
 
 use self::modification::StateModification;
 
+pub mod disk;
 pub mod memory;
 pub mod modification;
 
 pub trait State {
     fn known(&self, id: ContentId) -> Result<bool>;
-    fn get(&self, id: ContentId) -> Result<Option<&Content>>;
+    fn get(&self, id: ContentId) -> Result<Option<Content>>;
     fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>>;
     // Path must be build on demand because parent hierarchy can change
     fn path(&self, id: ContentId) -> Result<ContentPath>;
@@ -35,10 +36,15 @@ pub trait State {
     //     }
     // }
     /// Return iterable of `&Contents` ordered by `ContentType::Folder` first
-    fn contents(&self) -> Result<Vec<&Content>>;
-    fn children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>>;
+    fn contents(&self) -> Result<Vec<Content>>;
+    fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>>;
     fn forgot(&mut self, content_id: ContentId) -> Result<()>;
-    fn add(&mut self, content: Content) -> Result<()>;
+    fn add(
+        &mut self,
+        content: Content,
+        relative_path: PathBuf,
+        timestamp: DiskTimestamp,
+    ) -> Result<()>;
     fn rename(
         &mut self,
         content_id: ContentId,
@@ -59,9 +65,9 @@ pub trait State {
             StateModification::Forgot(content_id) => self
                 .forgot_with_children(content_id)
                 .context(format!("Forgot (with children) content {}", content_id))?,
-            StateModification::Add(content) => {
+            StateModification::Add(content, relative_path, timestamp) => {
                 let content_id = content.id();
-                self.add(content)
+                self.add(content, relative_path, timestamp)
                     .context(format!("Add content {}", content_id))?
             }
             StateModification::Update(
@@ -90,7 +96,7 @@ pub trait State {
 
     fn forgot_with_children(&mut self, content_id: ContentId) -> Result<()> {
         for child_id in self
-            .children_ids(content_id)
+            .direct_children_ids(content_id)
             .context(format!("Get children of {}", content_id))?
         {
             self.forgot_with_children(child_id)

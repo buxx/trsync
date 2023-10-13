@@ -46,7 +46,7 @@ impl ModifiedOnRemoteExecutor {
     fn last_modified(&self, state: &Box<dyn State>) -> Result<DiskTimestamp> {
         let absolute_path = self.absolute_path(state)?;
         let since_epoch = last_modified_timestamp(&absolute_path)?;
-        Ok(DiskTimestamp(since_epoch.as_millis()))
+        Ok(DiskTimestamp(since_epoch.as_millis() as u64))
     }
 }
 

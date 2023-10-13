@@ -56,7 +56,7 @@ pub fn build_memory_state(
             let absolute_path = tmpdir.join(content_path.to_path_buf());
             let timestamp = last_modified_timestamp(&absolute_path).unwrap();
             contents.insert(content.id(), content.clone());
-            timestamps.insert(content.id(), DiskTimestamp(timestamp.as_millis()));
+            timestamps.insert(content.id(), DiskTimestamp(timestamp.as_millis() as u64));
         }
         return Box::new(MemoryState::new(contents, timestamps).unwrap());
     }

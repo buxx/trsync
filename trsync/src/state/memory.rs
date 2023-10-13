@@ -45,8 +45,8 @@ impl State for MemoryState {
         Ok(self.contents.contains_key(&id))
     }
 
-    fn get(&self, id: ContentId) -> Result<Option<&Content>> {
-        Ok(self.contents.get(&id))
+    fn get(&self, id: ContentId) -> Result<Option<Content>> {
+        Ok(self.contents.get(&id).cloned())
     }
 
     fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>> {
@@ -69,7 +69,7 @@ impl State for MemoryState {
             .contents
             .get(&id)
             .context(format!("Search content {} in state", id))?;
-        let mut parts = vec![content];
+        let mut parts = vec![content.clone()];
 
         let mut current = content;
         while let Some(parent_id) = current.parent_id() {
@@ -77,7 +77,7 @@ impl State for MemoryState {
                 .contents
                 .get(&parent_id)
                 .context(format!("Search content {} in state", id))?;
-            parts.insert(0, parent);
+            parts.insert(0, parent.clone());
             current = parent;
         }
 
@@ -85,9 +85,9 @@ impl State for MemoryState {
     }
 
     // FIXME BS NOW : Iter
-    fn contents(&self) -> Result<Vec<&Content>> {
+    fn contents(&self) -> Result<Vec<Content>> {
         // TODO : Risky for memory overload
-        let mut contents = self.contents.values().collect::<Vec<&Content>>();
+        let mut contents = self.contents.values().cloned().collect::<Vec<Content>>();
         contents.sort_by(|a, b| match (a.type_(), b.type_()) {
             (ContentType::Folder, ContentType::Folder) => Ordering::Equal,
             (_, ContentType::Folder) => Ordering::Greater,
@@ -98,7 +98,7 @@ impl State for MemoryState {
     }
 
     // FIXME BS NOW : Iter
-    fn children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>> {
+    fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>> {
         Ok(self
             .contents
             .values()
@@ -114,8 +114,10 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn add(&mut self, content: Content) -> Result<()> {
+    fn add(&mut self, content: Content, _: PathBuf, timestamp: DiskTimestamp) -> Result<()> {
+        self.timestamps.insert(content.id(), timestamp);
         self.contents.insert(content.id(), content);
+
         Ok(())
     }
 

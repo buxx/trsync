@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use trsync_core::{
     content::Content,
     instance::{ContentFileName, ContentId, DiskTimestamp, RevisionId},
@@ -5,7 +7,7 @@ use trsync_core::{
 
 pub enum StateModification {
     Forgot(ContentId),
-    Add(Content),
+    Add(Content, PathBuf, DiskTimestamp),
     Update(
         ContentId,
         ContentFileName,

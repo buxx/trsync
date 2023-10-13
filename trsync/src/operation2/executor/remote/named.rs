@@ -91,7 +91,7 @@ impl NamedOnRemoteExecutor {
     fn last_modified(&self) -> Result<DiskTimestamp> {
         let absolute_path = self.after_absolute_path()?;
         let since_epoch = last_modified_timestamp(&absolute_path)?;
-        Ok(DiskTimestamp(since_epoch.as_millis()))
+        Ok(DiskTimestamp(since_epoch.as_millis() as u64))
     }
 }
 

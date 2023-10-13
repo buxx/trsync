@@ -206,15 +206,7 @@ impl GuiInstance {
         self.workspaces_ids_checkboxes
             .clone()
             .iter()
-            .filter_map(
-                |(checked, id, _)| {
-                    if *checked {
-                        Some(*id)
-                    } else {
-                        None
-                    }
-                },
-            )
+            .filter_map(|(checked, id, _)| if *checked { Some(*id) } else { None })
             .collect()
     }
 }
