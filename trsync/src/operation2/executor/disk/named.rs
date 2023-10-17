@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use trsync_core::{client::TracimClient, instance::ContentId};
+use trsync_core::{client::TracimClient, content::Content, instance::ContentId};
 
 use crate::{
     operation2::executor::Executor,
@@ -32,9 +32,11 @@ impl Executor for NamedOnDiskExecutor {
             .path(self.content_id)
             .context(format!("Get local content {} path", self.content_id))?
             .to_path_buf();
-        let remote_content = tracim
-            .get_content(self.content_id)
-            .context(format!("Get remote content {}", self.content_id))?;
+        let remote_content = Content::from_remote(
+            &tracim
+                .get_content(self.content_id)
+                .context(format!("Get remote content {}", self.content_id))?,
+        )?;
         // FIXME BS NOW : How to be sure than parent is always already present ?!
         let remote_content_path: PathBuf = if let Some(parent_id) = remote_content.parent_id() {
             state

@@ -1,9 +1,12 @@
-use crate::instance::{ContentFileName, ContentId, RevisionId};
-use anyhow::{bail, Result};
+use crate::{
+    client::RemoteContent,
+    instance::{ContentFileName, ContentId, RevisionId},
+};
+use anyhow::{bail, Context, Result};
 
 use crate::types::ContentType;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Content {
     id: ContentId,
     revision_id: RevisionId,
@@ -33,6 +36,23 @@ impl Content {
             parent_id,
             type_,
         })
+    }
+
+    pub fn from_remote(value: &RemoteContent) -> Result<Self> {
+        Self::new(
+            value.content_id,
+            value.current_revision_id,
+            ContentFileName(value.filename.clone()),
+            value.parent_id.map(ContentId),
+            ContentType::from_str(&value.content_type).context(format!(
+                "Cast content type for {} from {}",
+                value.content_id, value.content_type
+            ))?,
+        )
+        .context(format!(
+            "Cast remote content {} into content",
+            value.content_id
+        ))
     }
 
     pub fn id(&self) -> ContentId {

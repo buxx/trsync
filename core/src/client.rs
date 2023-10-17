@@ -3,6 +3,7 @@ use std::{path::PathBuf, time::Duration};
 use anyhow::{bail, Context, Result};
 use mockall::automock;
 use reqwest::Method;
+use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -32,7 +33,9 @@ pub trait TracimClient {
     fn set_label(&self, content_id: ContentId, value: ContentFileName) -> Result<RevisionId>;
     fn set_parent(&self, content_id: ContentId, value: Option<ContentId>) -> Result<RevisionId>;
     fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
-    fn get_content(&self, content_id: ContentId) -> Result<Content, TracimClientError>;
+    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError>;
+    // FIXME BS NOW : Iterable
+    fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError>;
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
@@ -43,6 +46,7 @@ pub trait TracimClient {
         content_id: ContentId,
         path: &PathBuf,
     ) -> Result<(), TracimClientError>; // TODO : return new RevisionId
+    fn clone(&self) -> Box<dyn TracimClient>;
 }
 
 #[derive(Clone)]
@@ -109,4 +113,18 @@ impl Client {
 
         bail!("Response status code was '{}'", response.status())
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RemoteContent {
+    pub content_id: ContentId,
+    pub current_revision_id: RevisionId,
+    pub parent_id: Option<i32>,
+    pub content_type: String,
+    pub modified: String,
+    pub raw_content: Option<String>,
+    pub filename: String,
+    pub is_deleted: bool,
+    pub is_archived: bool,
+    pub sub_content_types: Vec<String>,
 }

@@ -9,8 +9,11 @@ use crate::util::last_modified_timestamp;
 use anyhow::Context;
 
 use mockall::predicate::{self, *};
+use rusqlite::params;
+use rusqlite::Connection;
 use testdir::testdir;
 use trsync_core::client::MockTracimClient;
+use trsync_core::client::RemoteContent;
 use trsync_core::content::Content;
 use trsync_core::instance::ContentFileName;
 use trsync_core::instance::ContentId;
@@ -186,14 +189,18 @@ impl MockTracimClientCase {
                         } else {
                             ContentType::Folder
                         };
-                        let content = Content::new(
-                            ContentId(raw_content_id),
-                            RevisionId(raw_revision_id),
-                            ContentFileName(raw_file_name.to_string()),
-                            raw_parent_id.map(ContentId),
-                            content_type,
-                        )
-                        .unwrap();
+                        let content = RemoteContent {
+                            content_id: ContentId(raw_content_id),
+                            current_revision_id: RevisionId(raw_revision_id),
+                            filename: raw_file_name.clone(),
+                            parent_id: raw_parent_id,
+                            content_type: content_type.to_string(),
+                            modified: "".to_string(),
+                            raw_content: None,
+                            is_deleted: false,
+                            is_archived: false,
+                            sub_content_types: vec![],
+                        };
 
                         Ok(content)
                     });
@@ -255,6 +262,30 @@ impl MockTracimClientCase {
             }
         }
     }
+}
+
+pub fn insert_content(
+    connection: &Connection,
+    relative_path: &str,
+    content_id: i32,
+    revision_id: i32,
+    parent_id: Option<i32>,
+    last_modified_timestamp: u64,
+) {
+    connection
+        .prepare(
+            "INSERT INTO file (relative_path, content_id, revision_id, parent_id, last_modified_timestamp) VALUES (?, ?, ?, ?, ?)"
+        ).unwrap().execute(params![
+            relative_path,
+            content_id,
+            revision_id,
+            parent_id,
+            last_modified_timestamp,
+        ]).unwrap();
+}
+
+pub fn connection(path: &PathBuf) -> Connection {
+    Connection::open(path).unwrap()
 }
 
 pub enum OperateOnDisk {

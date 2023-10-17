@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use anyhow::{Context, Result};
 use trsync_core::{
     client::TracimClient,
+    content::Content,
     instance::{ContentId, DiskTimestamp},
     types::ContentType,
 };
@@ -33,9 +34,11 @@ impl Executor for PresentOnDiskExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
     ) -> Result<StateModification> {
-        let content = tracim
-            .get_content(self.content_id)
-            .context(format!("Get content {}", self.content_id))?;
+        let content = Content::from_remote(
+            &tracim
+                .get_content(self.content_id)
+                .context(format!("Get content {}", self.content_id))?,
+        )?;
 
         // FIXME BS NOW : How to be sure than parent is always already present ?!
         let content_path: PathBuf = if let Some(parent_id) = content.parent_id() {

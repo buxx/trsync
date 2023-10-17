@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 use trsync_core::{
     client::TracimClient,
+    content::Content,
     instance::{ContentFileName, ContentId, DiskTimestamp},
     types::ContentType,
 };
@@ -89,9 +90,11 @@ impl Executor for CreatedOnRemoteExecutor {
                 ))?;
         }
 
-        let content = tracim
-            .get_content(content_id)
-            .context(format!("Get just created content {}", content_id))?;
+        let content = Content::from_remote(
+            &tracim
+                .get_content(content_id)
+                .context(format!("Get just created content {}", content_id))?,
+        )?;
         let disk_timestamp = last_modified_timestamp(&absolute_path)
             .context(format!("Get disk timestamp of {}", absolute_path.display()))?;
         Ok(StateModification::Add(

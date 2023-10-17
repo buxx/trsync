@@ -310,35 +310,10 @@ impl State for DiskState {
 mod test {
     use std::fs;
 
-    use mockall::predicate::*;
     use trsync_core::instance::ContentId;
 
     use super::*;
     use crate::tests::*;
-
-    fn connection(path: &PathBuf) -> Connection {
-        Connection::open(&path).unwrap()
-    }
-
-    fn insert_content(
-        connection: &Connection,
-        relative_path: &str,
-        content_id: i32,
-        revision_id: i32,
-        parent_id: Option<i32>,
-        last_modified_timestamp: u64,
-    ) {
-        connection
-            .prepare(
-                "INSERT INTO file (relative_path, content_id, revision_id, parent_id, last_modified_timestamp) VALUES (?, ?, ?, ?, ?)"
-            ).unwrap().execute(params![
-                relative_path,
-                content_id,
-                revision_id,
-                parent_id,
-                last_modified_timestamp,
-            ]).unwrap();
-    }
 
     #[test]
     fn test_create_tables() {

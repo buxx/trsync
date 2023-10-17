@@ -5,7 +5,7 @@ pub type RevisionId = i32;
 pub type LastModifiedTimestamp = i64;
 pub type EventType = String;
 
-#[derive(PartialEq, Clone, Debug, Copy)]
+#[derive(Eq, PartialEq, Clone, Debug, Copy)]
 pub enum ContentType {
     File,
     Folder,
