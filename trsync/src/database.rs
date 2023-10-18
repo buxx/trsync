@@ -3,6 +3,8 @@ use rusqlite::{params, Connection};
 use crate::error::Error;
 use trsync_core::types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId};
 
+pub const DB_NAME: &str = ".trsync.db";
+
 pub struct Database {
     database_file_path: String,
 }
@@ -109,11 +111,11 @@ impl<'d> DatabaseOperation<'d> {
         &self,
         content_id: ContentId,
     ) -> Result<String, rusqlite::Error> {
-        Ok(self.connection.query_row::<String, _, _>(
+        self.connection.query_row::<String, _, _>(
             "SELECT relative_path FROM file WHERE content_id = ?",
             params![content_id],
             |row| row.get(0),
-        )?)
+        )
     }
 
     pub fn insert_new_file(

@@ -20,7 +20,7 @@ impl LocalSync {
         }
     }
 
-    pub fn state(&self) -> Result<Vec<LocalChange>> {
+    pub fn changes(&self) -> Result<Vec<LocalChange>> {
         let mut changes = vec![];
         let mut disk_relative_paths = vec![];
 
@@ -103,7 +103,7 @@ impl LocalSync {
             );
             if modified
                 != self
-                    .previously_disk_timestamp(&relative_path)
+                    .previously_known_disk_timestamp(&relative_path)
                     .context(format!(
                         "Get previously disk timestamp for {}",
                         &relative_path.display()
@@ -130,7 +130,7 @@ impl LocalSync {
         }
     }
 
-    fn previously_disk_timestamp(&self, path: &PathBuf) -> Result<DiskTimestamp> {
+    fn previously_known_disk_timestamp(&self, path: &PathBuf) -> Result<DiskTimestamp> {
         match self.connection.query_row::<u64, _, _>(
             "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![path.display().to_string()],
@@ -164,13 +164,6 @@ impl LocalSync {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum LocalChange {
-    New(PathBuf),
-    Disappear(PathBuf),
-    Updated(PathBuf),
-}
-
 #[cfg(test)]
 mod test {
 
@@ -181,15 +174,14 @@ mod test {
     fn test_empty() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join(".db.sqlite3");
-        DiskState::new(connection(&db_path), tmpdir_.clone())
+        DiskState::new(connection(&tmpdir_), tmpdir_.clone())
             .create_tables()
             .unwrap();
-        let connection = connection(&db_path);
+        let connection = connection(&tmpdir_);
         let local_sync = LocalSync::new(connection, tmpdir_.clone());
 
         // When
-        let state = local_sync.state().unwrap();
+        let state = local_sync.changes().unwrap();
 
         // Then
         assert_eq!(state, vec![])
@@ -199,16 +191,15 @@ mod test {
     fn test_one_new_file() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join(".db.sqlite3");
-        DiskState::new(connection(&db_path), tmpdir_.clone())
+        DiskState::new(connection(&tmpdir_), tmpdir_.clone())
             .create_tables()
             .unwrap();
-        let connection = connection(&db_path);
+        let connection = connection(&tmpdir_);
         let local_sync = LocalSync::new(connection, tmpdir_.clone());
         apply_on_disk(&vec![OperateOnDisk::Create("a.txt".to_string())], &tmpdir_);
 
         // When
-        let state = local_sync.state().unwrap();
+        let state = local_sync.changes().unwrap();
 
         // Then
         assert_eq!(state, vec![LocalChange::New(PathBuf::from("a.txt"))])
@@ -218,19 +209,18 @@ mod test {
     fn test_one_file_but_not_modified() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join(".db.sqlite3");
-        DiskState::new(connection(&db_path), tmpdir_.clone())
+        DiskState::new(connection(&tmpdir_), tmpdir_.clone())
             .create_tables()
             .unwrap();
-        let local_sync = LocalSync::new(connection(&db_path), tmpdir_.clone());
+        let local_sync = LocalSync::new(connection(&tmpdir_), tmpdir_.clone());
         apply_on_disk(&vec![OperateOnDisk::Create("a.txt".to_string())], &tmpdir_);
         let timestamp = last_modified_timestamp(&tmpdir_.join("a.txt"))
             .unwrap()
             .as_millis() as u64;
-        insert_content(&connection(&db_path), "a.txt", 1, 1, None, timestamp);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, timestamp);
 
         // When
-        let state = local_sync.state().unwrap();
+        let state = local_sync.changes().unwrap();
 
         // Then
         assert_eq!(state, vec![])
@@ -240,16 +230,15 @@ mod test {
     fn test_one_file_changed() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join(".db.sqlite3");
-        DiskState::new(connection(&db_path), tmpdir_.clone())
+        DiskState::new(connection(&tmpdir_), tmpdir_.clone())
             .create_tables()
             .unwrap();
-        let local_sync = LocalSync::new(connection(&db_path), tmpdir_.clone());
+        let local_sync = LocalSync::new(connection(&tmpdir_), tmpdir_.clone());
         apply_on_disk(&vec![OperateOnDisk::Create("a.txt".to_string())], &tmpdir_);
-        insert_content(&connection(&db_path), "a.txt", 1, 1, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
 
         // When
-        let state = local_sync.state().unwrap();
+        let state = local_sync.changes().unwrap();
 
         // Then
         assert_eq!(state, vec![LocalChange::Updated(PathBuf::from("a.txt"))])
@@ -259,17 +248,23 @@ mod test {
     fn test_one_file_deleted() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join(".db.sqlite3");
-        DiskState::new(connection(&db_path), tmpdir_.clone())
+        DiskState::new(connection(&tmpdir_), tmpdir_.clone())
             .create_tables()
             .unwrap();
-        let local_sync = LocalSync::new(connection(&db_path), tmpdir_.clone());
-        insert_content(&connection(&db_path), "a.txt", 1, 1, None, 0);
+        let local_sync = LocalSync::new(connection(&tmpdir_), tmpdir_.clone());
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
 
         // When
-        let state = local_sync.state().unwrap();
+        let state = local_sync.changes().unwrap();
 
         // Then
         assert_eq!(state, vec![LocalChange::Disappear(PathBuf::from("a.txt"))])
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum LocalChange {
+    New(PathBuf),
+    Disappear(PathBuf),
+    Updated(PathBuf),
 }

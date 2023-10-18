@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::database::DB_NAME;
 use crate::state::memory::MemoryState;
 use crate::state::State;
 use crate::util::last_modified_timestamp;
@@ -284,8 +285,8 @@ pub fn insert_content(
         ]).unwrap();
 }
 
-pub fn connection(path: &PathBuf) -> Connection {
-    Connection::open(path).unwrap()
+pub fn connection(workspace_path: &PathBuf) -> Connection {
+    Connection::open(workspace_path.join(DB_NAME)).unwrap()
 }
 
 pub enum OperateOnDisk {

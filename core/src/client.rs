@@ -8,7 +8,6 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    content::Content,
     instance::{ContentFileName, ContentId, RevisionId, Workspace},
     types::ContentType,
     user::UserId,

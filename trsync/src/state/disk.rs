@@ -319,8 +319,7 @@ mod test {
     fn test_create_tables() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
 
         // When-Then
         state.create_tables().unwrap();
@@ -330,10 +329,9 @@ mod test {
     fn test_known() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "a.txt", 1, 1, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
 
         // When
         let know = state.known(ContentId(1)).unwrap();
@@ -345,10 +343,9 @@ mod test {
     fn test_get() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "a.txt", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
         let content = state.get(ContentId(1)).unwrap().unwrap();
@@ -363,10 +360,9 @@ mod test {
     fn test_content_id_for_path() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "a.txt", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
         let content = state
@@ -382,10 +378,9 @@ mod test {
     fn test_path() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "a.txt", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
         let path = state.path(ContentId(1)).unwrap();
@@ -398,11 +393,10 @@ mod test {
     fn test_path2() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "Folder", 1, 2, None, 0);
-        insert_content(&connection(&db_path), "a.txt", 3, 4, Some(1), 0);
+        insert_content(&connection(&tmpdir_), "Folder", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 3, 4, Some(1), 0);
 
         // When
         let path = state.path(ContentId(3)).unwrap();
@@ -415,12 +409,11 @@ mod test {
     fn test_contents() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
         fs::create_dir_all(tmpdir_.join("Folder")).unwrap();
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "Folder", 1, 2, None, 0);
-        insert_content(&connection(&db_path), "a.txt", 3, 4, Some(1), 0);
+        insert_content(&connection(&tmpdir_), "Folder", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 3, 4, Some(1), 0);
 
         // When
         let contents = state.contents().unwrap();
@@ -441,11 +434,10 @@ mod test {
     fn test_direct_children_ids() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let state = DiskState::new(connection(&db_path), tmpdir_);
+        let state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "Folder", 1, 2, None, 0);
-        insert_content(&connection(&db_path), "a.txt", 3, 4, Some(1), 0);
+        insert_content(&connection(&tmpdir_), "Folder", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 3, 4, Some(1), 0);
 
         // When
         let children_ids = state.direct_children_ids(ContentId(1)).unwrap();
@@ -458,8 +450,7 @@ mod test {
     fn test_add() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let mut state = DiskState::new(connection(&db_path), tmpdir_);
+        let mut state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
 
         // When
@@ -487,11 +478,10 @@ mod test {
     fn test_rename() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let mut state = DiskState::new(connection(&db_path), tmpdir_);
+        let mut state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "Folder", 1, 2, None, 0);
-        insert_content(&connection(&db_path), "a.txt", 2, 3, Some(1), 0);
+        insert_content(&connection(&tmpdir_), "Folder", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 2, 3, Some(1), 0);
 
         // When
         state
@@ -511,10 +501,9 @@ mod test {
     fn test_update() {
         // Given
         let tmpdir_ = tmpdir();
-        let db_path: PathBuf = tmpdir_.join("db.sqlite3");
-        let mut state = DiskState::new(connection(&db_path), tmpdir_);
+        let mut state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
         state.create_tables().unwrap();
-        insert_content(&connection(&db_path), "a.txt", 1, 2, None, 0);
+        insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
         state
