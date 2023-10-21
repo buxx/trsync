@@ -1,37 +1,122 @@
 use std::path::PathBuf;
 
-use crate::database::DB_NAME;
-use crate::{
-    state::State,
-    sync::{local::LocalSync, remote::RemoteSync},
-};
-use anyhow::{Context, Result};
-use rusqlite::Connection;
-use trsync_core::client::TracimClient;
+use self::local::LocalChange;
+use self::remote::RemoteChange;
+use anyhow::Result;
 
 pub mod local;
 pub mod remote;
 
 pub struct StartupSyncResolver {
-    workspace_path: PathBuf,
-    client: Box<dyn TracimClient>,
+    remote_changes: Vec<RemoteChange>,
+    local_changes: Vec<LocalChange>,
+    method: ResolveMethod,
 }
 
 impl StartupSyncResolver {
-    pub fn resolve(&self) -> Result<Box<dyn State>> {
-        // TODO : parallelize
-        let remote_changes = RemoteSync::new(self.connection()?, self.client.clone())
-            .changes()
-            .context("Build remote changes")?;
-        let local_changes = LocalSync::new(self.connection()?, self.workspace_path.clone())
-            .changes()
-            .context("Build local changes")?;
-        todo!()
+    pub fn new(
+        remote_changes: Vec<RemoteChange>,
+        local_changes: Vec<LocalChange>,
+        method: ResolveMethod,
+    ) -> Self {
+        Self {
+            remote_changes,
+            local_changes,
+            method,
+        }
     }
 
-    fn connection(&self) -> Result<Connection> {
-        let db_path = self.workspace_path.join(DB_NAME);
-        Connection::open(&db_path)
-            .context(format!("Open database connection on {}", db_path.display()))
+    pub fn resolve(&self) -> Result<(Vec<RemoteChange>, Vec<LocalChange>)> {
+        let local_changes_paths = self
+            .local_changes
+            .iter()
+            .map(|change| change.path())
+            .collect::<Vec<PathBuf>>();
+        // FIXME : need to check conflicts by parents path too
+        let paths_in_conflicts = self
+            .remote_changes
+            .iter()
+            .map(|change| change.path())
+            .filter(|path| local_changes_paths.contains(path))
+            .collect::<Vec<PathBuf>>();
+
+        let (keep_remote_changes, keep_local_changes) = match self.method {
+            ResolveMethod::ForceLocal => (
+                self.remote_changes
+                    .iter()
+                    .filter(|change| !paths_in_conflicts.contains(&change.path()))
+                    .cloned()
+                    .collect(),
+                self.local_changes.clone(),
+            ),
+            ResolveMethod::ForceRemote => (
+                self.remote_changes.clone(),
+                self.local_changes
+                    .iter()
+                    .filter(|change| !paths_in_conflicts.contains(&change.path()))
+                    .cloned()
+                    .collect(),
+            ),
+        };
+
+        Ok((keep_remote_changes, keep_local_changes))
+    }
+}
+
+pub enum ResolveMethod {
+    ForceLocal,
+    ForceRemote,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rstest::*;
+    use trsync_core::instance::ContentId;
+
+    #[rstest]
+    // Empty
+    #[case(
+        ResolveMethod::ForceLocal,
+        vec![],
+        vec![],
+        (vec![], vec![]),
+    )]
+    // No conflict
+    #[case(
+        ResolveMethod::ForceLocal,
+        vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))],
+        vec![LocalChange::New(PathBuf::from("b.txt"))],
+        (vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))], vec![LocalChange::New(PathBuf::from("b.txt"))]),
+    )]
+    // Direct conflict
+    #[case(
+        ResolveMethod::ForceLocal,
+        vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))],
+        vec![LocalChange::New(PathBuf::from("a.txt"))],
+        (vec![], vec![LocalChange::New(PathBuf::from("a.txt"))]),
+    )]
+    // Direct conflict
+    #[case(
+        ResolveMethod::ForceRemote,
+        vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))],
+        vec![LocalChange::New(PathBuf::from("a.txt"))],
+        (vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))], vec![]),
+    )]
+    fn test_resolve(
+        #[case] method: ResolveMethod,
+        #[case] remote_changes: Vec<RemoteChange>,
+        #[case] local_changes: Vec<LocalChange>,
+        #[case] expected: (Vec<RemoteChange>, Vec<LocalChange>),
+    ) {
+        // Given
+        let resolver = StartupSyncResolver::new(remote_changes, local_changes, method);
+
+        // When
+        let (keep_remote_changes, keep_local_changes) = resolver.resolve().unwrap();
+
+        // Then
+        assert_eq!(keep_remote_changes, expected.0);
+        assert_eq!(keep_local_changes, expected.1);
     }
 }

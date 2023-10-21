@@ -1,3 +1,6 @@
+use anyhow::{Context, Result};
+use std::path::PathBuf;
+
 use rusqlite::{params, Connection};
 
 use crate::error::Error;
@@ -255,4 +258,9 @@ impl<'d> DatabaseOperation<'d> {
         }
         Ok(content_ids)
     }
+}
+
+pub fn connection(workspace_path: PathBuf) -> Result<Connection> {
+    let db_path = workspace_path.join(DB_NAME);
+    Connection::open(&db_path).context(format!("Open database connection on {}", db_path.display()))
 }

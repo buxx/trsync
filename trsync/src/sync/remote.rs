@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -8,7 +8,10 @@ use trsync_core::{
     instance::{ContentId, RevisionId},
 };
 
-use crate::state::{memory::MemoryState, State};
+use crate::{
+    path::ContentPath,
+    state::{memory::MemoryState, State},
+};
 
 pub struct RemoteSync {
     connection: Connection,
@@ -46,6 +49,13 @@ impl RemoteSync {
         let remote_state = self.state().context("Determine remote state")?;
 
         for content in remote_state.contents()? {
+            let path = remote_state
+                .path(content.id())
+                .context(format!(
+                    "Determine path for remotely modified content {}",
+                    content.id()
+                ))?
+                .to_path_buf();
             if self.previously_known(content.id()).context(format!(
                 "Determine if content {} is previously known",
                 content.id()
@@ -56,10 +66,10 @@ impl RemoteSync {
                         content.id()
                     ))?
                 {
-                    changes.push(RemoteChange::Updated(content.id()));
+                    changes.push(RemoteChange::Updated(content.id(), path));
                 }
             } else {
-                changes.push(RemoteChange::New(content.id()));
+                changes.push(RemoteChange::New(content.id(), path));
             }
         }
 
@@ -67,11 +77,15 @@ impl RemoteSync {
             .previously_known_content_ids()
             .context("Read previously known content ids")?
         {
+            let path = self.previously_known_path(content_id).context(format!(
+                "Determine previously known path for content {}",
+                content_id
+            ))?;
             if !remote_state.known(content_id).context(format!(
                 "Check if previously known content {} is known in remote state",
                 content_id
             ))? {
-                changes.push(RemoteChange::Disappear(content_id));
+                changes.push(RemoteChange::Disappear(content_id, path));
             }
         }
 
@@ -150,13 +164,37 @@ impl RemoteSync {
 
         Ok(content_ids)
     }
+
+    fn previously_known_path(&self, id: ContentId) -> Result<PathBuf> {
+        match self.connection.query_row::<String, _, _>(
+            "SELECT relative_path FROM file WHERE content_id = ?",
+            params![id.0],
+            |row| Ok(row.get(0).unwrap()),
+        ) {
+            Ok(relative_path) => Ok(PathBuf::from(relative_path)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                bail!("No row found for content {}", id)
+            }
+            Err(error) => bail!("Read relative_path for {} from db but : {}", id, error),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum RemoteChange {
-    New(ContentId),
-    Disappear(ContentId),
-    Updated(ContentId),
+    New(ContentId, PathBuf),
+    Disappear(ContentId, PathBuf),
+    Updated(ContentId, PathBuf),
+}
+
+impl RemoteChange {
+    pub fn path(&self) -> PathBuf {
+        match self {
+            RemoteChange::New(_, path)
+            | RemoteChange::Disappear(_, path)
+            | RemoteChange::Updated(_, path) => path.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -422,7 +460,10 @@ mod test {
         let changes = remote_sync.changes().unwrap();
 
         // Then
-        assert_eq!(changes, vec![RemoteChange::New(ContentId(1))])
+        assert_eq!(
+            changes,
+            vec![RemoteChange::New(ContentId(1), PathBuf::from("a.txt"))]
+        )
     }
 
     #[test]
@@ -454,7 +495,10 @@ mod test {
         let changes = remote_sync.changes().unwrap();
 
         // Then
-        assert_eq!(changes, vec![RemoteChange::Updated(ContentId(1))])
+        assert_eq!(
+            changes,
+            vec![RemoteChange::Updated(ContentId(1), PathBuf::from("a.txt"))]
+        )
     }
 
     #[test]
@@ -476,6 +520,12 @@ mod test {
         let changes = remote_sync.changes().unwrap();
 
         // Then
-        assert_eq!(changes, vec![RemoteChange::Disappear(ContentId(1))])
+        assert_eq!(
+            changes,
+            vec![RemoteChange::Disappear(
+                ContentId(1),
+                PathBuf::from("a.txt")
+            )]
+        )
     }
 }

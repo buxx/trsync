@@ -2,6 +2,7 @@ use std::{fmt::Display, iter::FromIterator, path::PathBuf};
 
 use trsync_core::content::Content;
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ContentPath {
     parts: Vec<Content>,
 }

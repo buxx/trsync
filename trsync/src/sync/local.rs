@@ -268,3 +268,13 @@ pub enum LocalChange {
     Disappear(PathBuf),
     Updated(PathBuf),
 }
+
+impl LocalChange {
+    pub fn path(&self) -> PathBuf {
+        match self {
+            LocalChange::New(path) | LocalChange::Disappear(path) | LocalChange::Updated(path) => {
+                path.clone()
+            }
+        }
+    }
+}
