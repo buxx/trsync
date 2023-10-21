@@ -45,12 +45,6 @@ pub trait State {
         relative_path: PathBuf,
         timestamp: DiskTimestamp,
     ) -> Result<()>;
-    fn rename(
-        &mut self,
-        content_id: ContentId,
-        file_name: ContentFileName,
-        parent_id: Option<ContentId>,
-    ) -> Result<()>;
     fn update(
         &mut self,
         content_id: ContentId,
@@ -85,10 +79,6 @@ pub trait State {
                     new_timestamp,
                 )
                 .context(format!("Update content {}", content_id))?,
-            StateModification::Rename(content_id, file_name, parent_id) => {
-                self.rename(content_id, file_name, parent_id)
-                    .context(format!("Rename content {}", content_id))?;
-            }
         };
 
         Ok(())

@@ -243,35 +243,6 @@ impl State for DiskState {
         Ok(())
     }
 
-    fn rename(
-        &mut self,
-        content_id: ContentId,
-        file_name: ContentFileName,
-        parent_id: Option<ContentId>,
-    ) -> Result<()> {
-        let new_path = if let Some(parent_path) = self
-            .path(content_id)
-            .context(format!("Get content {} path", content_id))?
-            .to_path_buf()
-            .parent()
-        {
-            parent_path.join(file_name.0)
-        } else {
-            PathBuf::from(file_name.0)
-        };
-
-        self.connection.execute(
-            "UPDATE file SET relative_path = ?, parent_id = ? WHERE content_id = ?",
-            params![
-                new_path.display().to_string(),
-                parent_id.map(|i| i.0),
-                content_id.0,
-            ],
-        )?;
-
-        Ok(())
-    }
-
     fn update(
         &mut self,
         content_id: ContentId,
@@ -472,29 +443,6 @@ mod test {
         assert_eq!(content.id(), ContentId(1));
         assert_eq!(content.revision_id(), RevisionId(2));
         assert_eq!(content.parent_id(), None)
-    }
-
-    #[test]
-    fn test_rename() {
-        // Given
-        let tmpdir_ = tmpdir();
-        let mut state = DiskState::new(connection(&tmpdir_), tmpdir_.clone());
-        state.create_tables().unwrap();
-        insert_content(&connection(&tmpdir_), "Folder", 1, 2, None, 0);
-        insert_content(&connection(&tmpdir_), "a.txt", 2, 3, Some(1), 0);
-
-        // When
-        state
-            .rename(ContentId(2), ContentFileName("b.txt".to_string()), None)
-            .unwrap();
-
-        // Then
-        let path = state.path(ContentId(2)).unwrap();
-        assert_eq!(path.to_string(), "b.txt");
-        let content = state.get(ContentId(2)).unwrap().unwrap();
-        assert_eq!(content.id(), ContentId(2));
-        assert_eq!(content.revision_id(), RevisionId(3));
-        assert_eq!(content.parent_id(), None);
     }
 
     #[test]

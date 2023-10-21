@@ -1,11 +1,16 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use trsync_core::{client::TracimClient, content::Content, instance::ContentId};
+use trsync_core::{
+    client::TracimClient,
+    content::Content,
+    instance::{ContentId, DiskTimestamp},
+};
 
 use crate::{
     operation2::executor::Executor,
     state::{modification::StateModification, State},
+    util::last_modified_timestamp,
 };
 
 pub struct NamedOnDiskExecutor {
@@ -55,11 +60,21 @@ impl Executor for NamedOnDiskExecutor {
             previous_absolute_path.display(),
             new_absolute_path.display()
         ))?;
+        let disk_timestamp = DiskTimestamp(
+            last_modified_timestamp(&new_absolute_path)
+                .context(format!(
+                    "Get disk timestamp of {}",
+                    new_absolute_path.display()
+                ))?
+                .as_millis() as u64,
+        );
 
-        Ok(StateModification::Rename(
+        Ok(StateModification::Update(
             self.content_id,
             remote_content.file_name().clone(),
+            remote_content.revision_id(),
             remote_content.parent_id(),
+            disk_timestamp,
         ))
     }
 }

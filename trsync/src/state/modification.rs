@@ -15,6 +15,4 @@ pub enum StateModification {
         Option<ContentId>,
         DiskTimestamp,
     ),
-    // FIXME BS NOW : use Update ?
-    Rename(ContentId, ContentFileName, Option<ContentId>),
 }

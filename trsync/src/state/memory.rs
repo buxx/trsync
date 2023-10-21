@@ -121,24 +121,6 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn rename(
-        &mut self,
-        content_id: ContentId,
-        file_name: ContentFileName,
-        parent_id: Option<ContentId>,
-    ) -> Result<()> {
-        self.contents
-            .get_mut(&content_id)
-            .context(format!("Get content {}", content_id))?
-            .set_parent_id(parent_id);
-        self.contents
-            .get_mut(&content_id)
-            .context(format!("Get content {}", content_id))?
-            .set_file_name(file_name);
-
-        Ok(())
-    }
-
     fn update(
         &mut self,
         content_id: ContentId,
@@ -147,19 +129,16 @@ impl State for MemoryState {
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
     ) -> Result<()> {
-        self.contents
+        let mut content = self
+            .contents
             .get_mut(&content_id)
-            .context(format!("Get content {}", content_id))?
-            .set_revision_id(revision_id);
-        self.contents
-            .get_mut(&content_id)
-            .context(format!("Get content {}", content_id))?
-            .set_parent_id(parent_id);
-        self.contents
-            .get_mut(&content_id)
-            .context(format!("Get content {}", content_id))?
-            .set_file_name(file_name);
+            .context(format!("Get content {}", content_id))?;
+
+        content.set_revision_id(revision_id);
+        content.set_parent_id(parent_id);
+        content.set_file_name(file_name);
         self.timestamps.insert(content_id, timestamp);
+
         Ok(())
     }
 }

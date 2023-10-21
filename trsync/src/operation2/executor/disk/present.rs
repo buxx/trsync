@@ -56,8 +56,6 @@ impl Executor for PresentOnDiskExecutor {
             ContentType::Folder => fs::create_dir_all(&absolute_path)
                 .context(format!("Create folder {}", absolute_path.display()))?,
             ContentType::File => {
-                // FIXME BS NOW : fill for real (by giving file path to client to write into ?)
-                // FIXME BS NOW : fill file & manage if already exist as ok
                 fs::File::create(&absolute_path)
                     .context(format!("Create file {}", absolute_path.display()))?;
                 tracim
