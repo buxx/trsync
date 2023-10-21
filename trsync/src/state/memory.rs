@@ -129,7 +129,7 @@ impl State for MemoryState {
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
     ) -> Result<()> {
-        let mut content = self
+        let content = self
             .contents
             .get_mut(&content_id)
             .context(format!("Get content {}", content_id))?;
