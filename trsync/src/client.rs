@@ -2,12 +2,15 @@ use std::path::Path;
 use std::time::Duration;
 use std::{fs, thread};
 
+use anyhow::{bail, Context, Result};
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use trsync_core::types::{ContentId, ContentType, RevisionId};
+use trsync_core::client::{TracimClient, TracimClientError};
+use trsync_core::instance::{ContentFileName, ContentId, RevisionId, WorkspaceId};
+use trsync_core::types::{ContentId as RawContentId, ContentType, RevisionId as RawRevisionId};
 
 use crate::context::Context;
 use crate::error::{ClientError, Error};
@@ -30,11 +33,11 @@ pub struct Paginated<T> {
 #[derive(Debug)]
 pub enum ParentIdParameter {
     Root,
-    Some(ContentId),
+    Some(RawContentId),
 }
 
 impl ParentIdParameter {
-    pub fn from_value(value: Option<ContentId>) -> Self {
+    pub fn from_value(value: Option<RawContentId>) -> Self {
         match value {
             Some(content_id) => Self::Some(content_id),
             None => Self::Root,
@@ -68,8 +71,8 @@ impl Client {
         &self,
         absolute_file_path: String,
         content_type: ContentType,
-        parent_content_id: Option<ContentId>,
-    ) -> Result<(ContentId, RevisionId), ClientError> {
+        parent_content_id: Option<RawContentId>,
+    ) -> Result<(RawContentId, RawRevisionId), ClientError> {
         let response = if content_type == ContentType::Folder {
             let url = self.context.workspace_url("contents");
             let mut data = Map::new();
@@ -169,7 +172,7 @@ impl Client {
                         .ok_or(Error::UnexpectedError(format!(
                             "Response content object do not contains a integer content_id : {:?}",
                             data
-                        )))? as ContentId;
+                        )))? as RawContentId;
                 let revision_id = self.get_remote_content(content_id)?.current_revision_id;
                 Ok((content_id, revision_id))
             }
@@ -218,8 +221,8 @@ impl Client {
     fn find_existing(
         &self,
         absolute_file_path: String,
-        parent_id: Option<ContentId>,
-    ) -> Result<(ContentId, RevisionId), ClientError> {
+        parent_id: Option<RawContentId>,
+    ) -> Result<(RawContentId, RawRevisionId), ClientError> {
         let file_name = util::string_path_file_name(&absolute_file_path)?;
         for remote_content in
             self.get_remote_contents(Some(ParentIdParameter::from_value(parent_id)))?
@@ -241,8 +244,8 @@ impl Client {
         absolute_file_path: String,
         file_name: String,
         content_type: ContentType,
-        content_id: ContentId,
-    ) -> Result<RevisionId, ClientError> {
+        content_id: RawContentId,
+    ) -> Result<RawRevisionId, ClientError> {
         log::debug!(
             "Update remote content {} with file {}",
             content_id,
@@ -315,7 +318,7 @@ impl Client {
         }
     }
 
-    pub fn trash_content(&self, content_id: ContentId) -> Result<(), ClientError> {
+    pub fn trash_content(&self, content_id: RawContentId) -> Result<(), ClientError> {
         let response = self
             .client
             .request(
@@ -338,7 +341,10 @@ impl Client {
         }
     }
 
-    pub fn get_remote_content(&self, content_id: ContentId) -> Result<RemoteContent, ClientError> {
+    pub fn get_remote_content(
+        &self,
+        content_id: RawContentId,
+    ) -> Result<RemoteContent, ClientError> {
         let response = self
             .client
             .request(
@@ -435,7 +441,7 @@ impl Client {
 
     pub fn get_file_content_response(
         &self,
-        content_id: ContentId,
+        content_id: RawContentId,
         file_name: String,
     ) -> Result<Response, ClientError> {
         Ok(self
@@ -493,7 +499,7 @@ impl Client {
 
     pub fn move_content(
         &self,
-        content_id: ContentId,
+        content_id: RawContentId,
         new_parent_id: ParentIdParameter,
     ) -> Result<(), ClientError> {
         let url = self
@@ -532,10 +538,10 @@ impl Client {
 
     pub fn update_content_file_name(
         &self,
-        content_id: ContentId,
+        content_id: RawContentId,
         new_file_name: String,
         content_type: ContentType,
-    ) -> Result<RevisionId, ClientError> {
+    ) -> Result<RawRevisionId, ClientError> {
         let url = if content_type == ContentType::Folder {
             self.context
                 .workspace_url(&format!("folders/{}", content_id))
@@ -598,7 +604,7 @@ impl Client {
                         .ok_or(Error::UnexpectedError(format!(
                     "Response content object do not contains a integer last_revision_id : {:?}",
                     data
-                )))? as RevisionId;
+                )))? as RawRevisionId;
                 Ok(revision_id)
             }
             _ => {

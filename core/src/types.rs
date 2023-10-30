@@ -36,6 +36,22 @@ impl ContentType {
             ContentType::Folder => false,
         }
     }
+
+    pub fn url_prefix(&self) -> String {
+        match self {
+            ContentType::Folder => "folders",
+            ContentType::File => "files",
+            ContentType::HtmlDocument => "html-documents",
+        }
+        .to_string()
+    }
+
+    pub fn label_minus_pos(&self) -> usize {
+        match self {
+            ContentType::HtmlDocument => 3,
+            ContentType::File | ContentType::Folder => 2,
+        }
+    }
 }
 
 #[derive(PartialEq)]

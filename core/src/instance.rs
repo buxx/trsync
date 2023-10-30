@@ -1,6 +1,8 @@
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Display;
 
+use crate::types::ContentType;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct InstanceId(pub String);
 
@@ -69,6 +71,16 @@ impl Display for RevisionId {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct ContentFileName(pub String);
+impl ContentFileName {
+    pub fn label(&self, type_: &ContentType) -> String {
+        let splitted = self.0.split(".").collect::<Vec<&str>>();
+        if splitted.len() > 1 {
+            splitted[splitted.len() - type_.label_minus_pos()].to_string()
+        } else {
+            self.0.clone()
+        }
+    }
+}
 
 impl Display for ContentFileName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
