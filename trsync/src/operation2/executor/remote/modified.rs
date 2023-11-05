@@ -62,7 +62,7 @@ impl Executor for ModifiedOnRemoteExecutor {
 
         if content_type.fillable() {
             tracim
-                .fill_content_with_file(self.content_id, &absolute_path)
+                .fill_content_with_file(self.content_id, content_type, &absolute_path)
                 .context(format!(
                     "Fill remote file {} with {}",
                     self.content_id,

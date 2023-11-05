@@ -59,7 +59,7 @@ impl Executor for PresentOnDiskExecutor {
                 fs::File::create(&absolute_path)
                     .context(format!("Create file {}", absolute_path.display()))?;
                 tracim
-                    .fill_file_with_content(self.content_id, &absolute_path)
+                    .fill_file_with_content(self.content_id, ContentType::File, &absolute_path)
                     .context(format!("Write into file {}", absolute_path.display()))?;
             }
             ContentType::HtmlDocument => todo!(),

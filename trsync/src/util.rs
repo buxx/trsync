@@ -11,12 +11,10 @@ use rusqlite::Connection;
 use std::fs;
 
 use crate::{database::DatabaseOperation, error::Error, util};
-use trsync_core::types::{
-    AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath,
+use trsync_core::{
+    types::{AbsoluteFilePath, ContentId, ContentType, LastModifiedTimestamp, RelativeFilePath},
+    HTML_DOCUMENT_LOCAL_EXTENSION,
 };
-
-// This extension must match with Tracim content "filename"
-pub const HTML_DOCUMENT_LOCAL_EXTENSION: &'static str = ".document.html";
 
 pub struct FileInfos {
     pub file_name: String,

@@ -260,7 +260,7 @@ impl<'d> DatabaseOperation<'d> {
     }
 }
 
-pub fn connection(workspace_path: PathBuf) -> Result<Connection> {
+pub fn connection(workspace_path: &PathBuf) -> Result<Connection> {
     let db_path = workspace_path.join(DB_NAME);
     Connection::open(&db_path).context(format!("Open database connection on {}", db_path.display()))
 }

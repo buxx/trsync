@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use trsync_core::{
     client::TracimClient,
     instance::{ContentFileName, ContentId, DiskTimestamp, RevisionId},
+    types::ContentType,
 };
 
 use crate::{
@@ -88,6 +89,14 @@ impl NamedOnRemoteExecutor {
         Ok(None)
     }
 
+    fn before_content_type(&self, state: &Box<dyn State>) -> Result<ContentType> {
+        Ok(ContentType::from_path(&self.before_absolute_path(state)?))
+    }
+
+    fn after_content_type(&self, _state: &Box<dyn State>) -> Result<ContentType> {
+        Ok(ContentType::from_path(&self.after_absolute_path()?))
+    }
+
     fn last_modified(&self) -> Result<DiskTimestamp> {
         let absolute_path = self.after_absolute_path()?;
         let since_epoch = last_modified_timestamp(&absolute_path)?;
@@ -106,16 +115,22 @@ impl Executor for NamedOnRemoteExecutor {
         let before_file_name = self.before_file_name(state)?;
         let after_file_name = self.after_file_name()?;
         let after_parent = self.after_parent(state)?;
+        let before_content_type = self.before_content_type(state)?;
+        let after_content_type = self.after_content_type(state)?;
         let mut revision_id = self.before_revision_id(state)?;
+
+        if before_content_type != after_content_type {
+            todo!()
+        }
 
         if before_file_name != after_file_name {
             revision_id = tracim
-                .set_label(self.content_id, after_file_name.clone())
+                .set_label(self.content_id, after_content_type, after_file_name.clone())
                 .context(format!("Set new label on remote for {}", self.content_id))?;
         }
 
         if after_absolute_path.parent() != before_absolute_path.parent() {
-            revision_id = tracim.set_parent(self.content_id, after_parent)?;
+            revision_id = tracim.set_parent(self.content_id, after_content_type, after_parent)?;
         }
 
         let last_modified = self.last_modified().context(format!(

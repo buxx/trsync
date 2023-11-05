@@ -53,12 +53,7 @@ impl CreatedOnRemoteExecutor {
     }
 
     fn content_type(&self) -> ContentType {
-        if self.absolute_path().is_dir() {
-            ContentType::Folder
-        } else {
-            // FIXME : manage notes ?
-            ContentType::File
-        }
+        ContentType::from_path(&self.absolute_path())
     }
 }
 
@@ -82,7 +77,7 @@ impl Executor for CreatedOnRemoteExecutor {
 
         if content_type.fillable() {
             tracim
-                .fill_content_with_file(content_id, &absolute_path)
+                .fill_content_with_file(content_id, content_type, &absolute_path)
                 .context(format!(
                     "Fill remote file {} with {}",
                     content_id,

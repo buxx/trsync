@@ -60,19 +60,14 @@ impl DiskState {
         revision_id: i32,
         parent_id: Option<i32>,
     ) -> Result<Content> {
-        let path = PathBuf::from(relative_path);
+        let path = PathBuf::from(&relative_path);
         let file_name = path
             .file_name()
             .context(format!("Get file name from {}", path.display()))?
             .to_str()
             .context(format!("Decode file name from {}", path.display()))?
             .to_string();
-        let type_ = if self.workspace_path.join(path).is_dir() {
-            ContentType::Folder
-            // FIXME BS NOW : html notes
-        } else {
-            ContentType::File
-        };
+        let type_ = ContentType::from_path(&self.workspace_path.join(relative_path));
 
         Content::new(
             id,

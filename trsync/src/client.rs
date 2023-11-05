@@ -2,23 +2,20 @@ use std::path::Path;
 use std::time::Duration;
 use std::{fs, thread};
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use reqwest::blocking::{multipart, Response};
 use reqwest::Method;
 
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use trsync_core::client::{TracimClient, TracimClientError};
-use trsync_core::instance::{ContentFileName, ContentId, RevisionId, WorkspaceId};
+use trsync_core::client::CONTENT_ALREADY_EXIST_ERR_CODE;
 use trsync_core::types::{ContentId as RawContentId, ContentType, RevisionId as RawRevisionId};
+use trsync_core::HTML_DOCUMENT_LOCAL_EXTENSION;
 
-use crate::context::Context;
+use crate::context::Context as TrSyncContext;
 use crate::error::{ClientError, Error};
 use crate::remote::RemoteContent;
-use crate::util::{self, HTML_DOCUMENT_LOCAL_EXTENSION};
-
-const CONTENT_ALREADY_EXIST_ERR_CODE: u16 = 3002;
-const DEFAULT_CLIENT_TIMEOUT: u64 = 3600 * 2;
+use crate::util::{self};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Paginated<T> {
@@ -53,16 +50,16 @@ impl ParentIdParameter {
 }
 
 pub struct Client {
-    context: Context,
+    context: TrSyncContext,
     client: reqwest::blocking::Client,
 }
 
 impl Client {
-    pub fn new(context: Context) -> Result<Self, Error> {
+    pub fn new(context: TrSyncContext) -> Result<Self, Error> {
         Ok(Self {
             context,
             client: reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
+                .timeout(Duration::from_secs(3600 * 2))
                 .build()?,
         })
     }
@@ -178,7 +175,7 @@ impl Client {
             }
             400 => {
                 let error_code = match response.json::<Value>()?["code"].as_u64() {
-                    Some(code) => code as u16,
+                    Some(code) => code,
                     None => {
                         return Err(ClientError::AlreadyExistResponseAndFailToFoundIt(
                             "Fail when trying to determine response error code".to_string(),
@@ -684,7 +681,7 @@ impl Client {
     }
 }
 
-pub fn ensure_availability(context: &Context) -> Result<(), Error> {
+pub fn ensure_availability(context: &TrSyncContext) -> Result<(), Error> {
     let client = Client::new(context.clone())?;
 
     loop {

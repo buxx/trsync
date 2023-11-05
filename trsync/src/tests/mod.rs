@@ -41,11 +41,7 @@ pub fn build_memory_state(
         let revision_id = RevisionId(*raw_revision_id);
         let file_name = ContentFileName(raw_file_name.to_string());
         let parent = raw_parent_id.and_then(|raw_parent_id| Some(ContentId(raw_parent_id)));
-        let content_type = if file_name.0.ends_with(".txt") {
-            ContentType::File
-        } else {
-            ContentType::Folder
-        };
+        let content_type = content_type(&file_name.0);
         let content = Content::new(id, revision_id, file_name, parent, content_type).unwrap();
         contents.insert(id, content);
     }
@@ -101,15 +97,19 @@ pub fn apply_on_disk(operations: &Vec<OperateOnDisk>, tmpdir: &PathBuf) {
         match operation {
             OperateOnDisk::Create(file_path) => {
                 let absolute_path = tmpdir.join(file_path);
-                if file_path.ends_with(".txt") {
-                    fs::File::create(&absolute_path)
-                        .context(format!("Create file {}", &absolute_path.display()))
-                        .unwrap();
-                } else {
-                    fs::create_dir_all(&absolute_path)
-                        .context(format!("Create folder {}", &absolute_path.display()))
-                        .unwrap();
-                }
+                match content_type(&file_path) {
+                    ContentType::File => {
+                        fs::File::create(&absolute_path)
+                            .context(format!("Create file {}", &absolute_path.display()))
+                            .unwrap();
+                    }
+                    ContentType::Folder => {
+                        fs::create_dir_all(&absolute_path)
+                            .context(format!("Create folder {}", &absolute_path.display()))
+                            .unwrap();
+                    }
+                    ContentType::HtmlDocument => unreachable!(),
+                };
             }
             OperateOnDisk::Rename(raw_old_path, raw_new_path) => {
                 let absolute_old_path = tmpdir.join(raw_old_path);
@@ -151,9 +151,9 @@ pub enum MockTracimClientCase {
     GetOk((i32, i32, String, Option<i32>)),
     FillLocalOk(i32, String),
     CreateOk((String, Option<i32>, i32)),
-    FillRemoteOk(i32, String), // TODO : return new revision_id
+    FillRemoteOk(i32, String, i32),
     SetLabel(i32, String, i32),
-    SetParent(i32, Option<i32>, i32),
+    SetParent(i32, String, Option<i32>, i32),
 }
 
 impl MockTracimClientCase {
@@ -185,11 +185,7 @@ impl MockTracimClientCase {
                     .with(predicate::eq(ContentId(raw_content_id)))
                     .times(1)
                     .returning(move |_| {
-                        let content_type = if raw_file_name.ends_with(".txt") {
-                            ContentType::File
-                        } else {
-                            ContentType::Folder
-                        };
+                        let content_type = content_type(&raw_file_name);
                         let content = RemoteContent {
                             content_id: ContentId(raw_content_id),
                             current_revision_id: RevisionId(raw_revision_id),
@@ -207,24 +203,22 @@ impl MockTracimClientCase {
                     });
             }
             MockTracimClientCase::FillLocalOk(id, path) => {
+                let content_type = content_type(&path);
                 mock.expect_fill_file_with_content()
                     .with(
                         predicate::eq(ContentId(id)),
+                        predicate::eq(content_type),
                         predicate::eq(workspace_folder.join(Path::new(&path))),
                     )
                     .times(1)
-                    .returning(|_, _| Ok(()));
+                    .returning(|_, _, _| Ok(()));
             }
             MockTracimClientCase::CreateOk((
                 raw_file_name,
                 raw_parent_id,
                 raw_returned_content_id,
             )) => {
-                let content_type = if raw_file_name.ends_with(".txt") {
-                    ContentType::File
-                } else {
-                    ContentType::Folder
-                };
+                let content_type = content_type(&raw_file_name);
                 mock.expect_create_content()
                     .with(
                         predicate::eq(ContentFileName(raw_file_name)),
@@ -234,32 +228,43 @@ impl MockTracimClientCase {
                     .times(1)
                     .returning(move |_, _, _| Ok(ContentId(raw_returned_content_id)));
             }
-            MockTracimClientCase::FillRemoteOk(raw_content_id, raw_path) => {
+            MockTracimClientCase::FillRemoteOk(raw_content_id, raw_path, new_revision_id) => {
+                let content_type = content_type(&raw_path);
                 mock.expect_fill_content_with_file()
                     .with(
                         predicate::eq(ContentId(raw_content_id)),
+                        predicate::eq(content_type),
                         predicate::eq(workspace_folder.join(Path::new(&raw_path))),
                     )
                     .times(1)
-                    .returning(|_, _| Ok(()));
+                    .returning(move |_, _, _| Ok(RevisionId(new_revision_id)));
             }
             MockTracimClientCase::SetLabel(raw_content_id, raw_file_name, raw_new_revision_id) => {
+                let content_type = content_type(&raw_file_name);
                 mock.expect_set_label()
                     .with(
                         predicate::eq(ContentId(raw_content_id)),
+                        predicate::eq(content_type),
                         predicate::eq(ContentFileName(raw_file_name)),
                     )
                     .times(1)
-                    .returning(move |_, _| Ok(RevisionId(raw_new_revision_id)));
+                    .returning(move |_, _, _| Ok(RevisionId(raw_new_revision_id)));
             }
-            MockTracimClientCase::SetParent(raw_content_id, raw_parent_id, raw_new_revision_id) => {
+            MockTracimClientCase::SetParent(
+                raw_content_id,
+                raw_file_name,
+                raw_parent_id,
+                raw_new_revision_id,
+            ) => {
+                let content_type = content_type(&raw_file_name);
                 mock.expect_set_parent()
                     .with(
                         predicate::eq(ContentId(raw_content_id)),
+                        predicate::eq(content_type),
                         predicate::eq(raw_parent_id.map(ContentId)),
                     )
                     .times(1)
-                    .returning(move |_, _| Ok(RevisionId(raw_new_revision_id)));
+                    .returning(move |_, _, _| Ok(RevisionId(raw_new_revision_id)));
             }
         }
     }
@@ -292,4 +297,12 @@ pub fn connection(workspace_path: &PathBuf) -> Connection {
 pub enum OperateOnDisk {
     Create(String),
     Rename(String, String),
+}
+
+pub fn content_type(file_name: &str) -> ContentType {
+    if file_name.ends_with(".txt") {
+        ContentType::File
+    } else {
+        ContentType::Folder
+    }
 }

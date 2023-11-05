@@ -8,6 +8,7 @@ use reqwest::{
 };
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use strum_macros::Display;
 use thiserror::Error;
 
 use crate::{
@@ -16,14 +17,22 @@ use crate::{
     user::UserId,
 };
 
-const DEFAULT_CLIENT_TIMEOUT: u64 = 10;
+pub const CONTENT_ALREADY_EXIST_ERR_CODE: u64 = 3002;
+pub const DEFAULT_CLIENT_TIMEOUT: u64 = 30;
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, Display)]
 pub enum TracimClientError {
     ContentAlreadyExist,
     Unknown,
-    // Lister les erreurs en diff bien les erreurs ou on ne sais pas
-    // (erreur reseau) des erreurs metier que l'on peut soit accepter soit rattraper
+}
+
+impl TracimClientError {
+    fn from_code(error_code: u64) -> TracimClientError {
+        match error_code {
+            CONTENT_ALREADY_EXIST_ERR_CODE => TracimClientError::ContentAlreadyExist,
+            _ => TracimClientError::Unknown,
+        }
+    }
 }
 
 #[automock]
@@ -40,23 +49,28 @@ pub trait TracimClient {
         type_: ContentType,
         value: ContentFileName,
     ) -> Result<RevisionId>;
-    fn set_parent(&self, content_id: ContentId, value: Option<ContentId>) -> Result<RevisionId>;
-    fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
-    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError>;
+    fn set_parent(
+        &self,
+        content_id: ContentId,
+        type_: ContentType,
+        value: Option<ContentId>,
+    ) -> Result<RevisionId>;
+    fn trash_content(&self, content_id: ContentId) -> Result<()>;
+    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent>;
     // FIXME BS NOW : Iterable
-    fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError>;
+    fn get_contents(&self) -> Result<Vec<RemoteContent>>;
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<(), TracimClientError>;
+    ) -> Result<()>;
     fn fill_content_with_file(
         &self,
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<RevisionId, TracimClientError>; // TODO : return new RevisionId
+    ) -> Result<RevisionId>; // TODO : return new RevisionId
     fn clone(&self) -> Box<dyn TracimClient>;
 }
 
@@ -149,6 +163,22 @@ pub struct Tracim {
 }
 
 impl Tracim {
+    pub fn new(
+        base_address: String,
+        workspace_id: WorkspaceId,
+        client: reqwest::blocking::Client,
+        username: String,
+        password: String,
+    ) -> Self {
+        Self {
+            base_address,
+            workspace_id,
+            client,
+            username,
+            password,
+        }
+    }
+
     pub fn workspace_url(&self, suffix: &str) -> String {
         format!(
             "{}workspaces/{}/{}",
@@ -156,34 +186,34 @@ impl Tracim {
         )
     }
 
-    fn created_content_id(&self, response: &Response) -> Result<ContentId> {
+    fn created_content_id(&self, response: Response) -> Result<ContentId> {
         match response.status().as_u16() {
-            200 => self.response_content_id(&response),
+            200 => self.response_content_id(response),
             _ => bail!(self
-                .response_error(&response)
+                .response_error(response)
                 .context("Interpret response error")?),
         }
     }
 
-    fn created_revision_id(&self, response: &Response) -> Result<RevisionId> {
+    fn created_revision_id(&self, response: Response) -> Result<RevisionId> {
         match response.status().as_u16() {
-            200 => self.response_revision_id(&response),
+            200 => self.response_revision_id(response),
             _ => bail!(self
-                .response_error(&response)
+                .response_error(response)
                 .context("Interpret response error")?),
         }
     }
 
-    fn no_content_response(&self, response: &Response) -> Result<()> {
+    fn no_content_response(&self, response: Response) -> Result<()> {
         match response.status().as_u16() {
             204 => Ok(()),
             _ => bail!(self
-                .response_error(&response)
+                .response_error(response)
                 .context("Interpret response error")?),
         }
     }
 
-    fn response_content_id(&self, response: &Response) -> Result<ContentId> {
+    fn response_content_id(&self, response: Response) -> Result<ContentId> {
         let value = response.json::<Value>()?;
         let data = value
             .as_object()
@@ -194,7 +224,7 @@ impl Tracim {
         Ok(ContentId(raw_content_id as i32))
     }
 
-    fn response_revision_id(&self, response: &Response) -> Result<RevisionId> {
+    fn response_revision_id(&self, response: Response) -> Result<RevisionId> {
         let value = response.json::<Value>()?;
         let data = value
             .as_object()
@@ -205,15 +235,12 @@ impl Tracim {
         Ok(RevisionId(raw_revision_id as i32))
     }
 
-    fn response_error(&self, response: &Response) -> Result<TracimClientError> {
+    fn response_error(&self, response: Response) -> Result<TracimClientError> {
         let error_code = response.json::<Value>()?["code"]
             .as_u64()
             .context("Read error code from response")?;
 
-        Ok(match error_code {
-            CONTENT_ALREADY_EXIST_ERR_CODE => TracimClientError::ContentAlreadyExist,
-            _ => TracimClientError::Unknown,
-        })
+        Ok(TracimClientError::from_code(error_code))
     }
 
     fn create_folder(
@@ -239,7 +266,7 @@ impl Tracim {
             .send()
             .context("Post created folder request")?;
 
-        self.created_content_id(&response)
+        self.created_content_id(response)
             .context("Read post created folder request response")
     }
 
@@ -250,9 +277,10 @@ impl Tracim {
         data: Map<String, Value>,
     ) -> Result<RevisionId> {
         let url = format!("{}/{}", type_.url_prefix(), content_id);
+        let mut data = data.clone();
 
         // Be compatible with Tracim which not have this https://github.com/tracim/tracim/pull/5864
-        if type_ == ContentType::Folder.to_string() {
+        if type_ == ContentType::Folder {
             let remote_content = self.get_content(content_id)?;
             data.insert(
                 "sub_content_types".to_string(),
@@ -267,14 +295,14 @@ impl Tracim {
             .json(&data)
             .send()?;
 
-        self.created_revision_id(&response)
+        self.created_revision_id(response)
             .context("Read post created revision request response")
     }
 
     fn create_file(
         &self,
-        file_name: ContentFileName,
-        parent: Option<ContentId>,
+        _file_name: ContentFileName,
+        _parent: Option<ContentId>,
     ) -> Result<ContentId> {
         todo!()
     }
@@ -289,6 +317,8 @@ impl Tracim {
             .context(format!("Prepare upload form for {}", path.display()))?;
         let file_name = path
             .file_name()
+            .context(format!("Determine file name of {}", path.display()))?
+            .to_str()
             .context(format!("Determine file name of {}", path.display()))?;
         let url = self.workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
 
@@ -299,7 +329,7 @@ impl Tracim {
             .multipart(form)
             .send()?;
 
-        self.created_revision_id(&response)
+        self.created_revision_id(response)
     }
 }
 
@@ -342,7 +372,7 @@ impl TracimClient for Tracim {
         self.update_content(content_id, type_, data)
     }
 
-    fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError> {
+    fn trash_content(&self, content_id: ContentId) -> Result<()> {
         let url = self.workspace_url(&format!("contents/{}/trashed", content_id));
         let response = self
             .client
@@ -350,11 +380,11 @@ impl TracimClient for Tracim {
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .send()?;
 
-        self.no_content_response(&response)
+        self.no_content_response(response)
             .context("Read post created revision request response")
     }
 
-    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError> {
+    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent> {
         let response = self
             .client
             .request(
@@ -367,7 +397,7 @@ impl TracimClient for Tracim {
         Ok(response.json::<RemoteContent>()?)
     }
 
-    fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError> {
+    fn get_contents(&self) -> Result<Vec<RemoteContent>> {
         let url = self.workspace_url("contents");
 
         let response = self
@@ -382,11 +412,11 @@ impl TracimClient for Tracim {
                 .json::<Paginated<Vec<RemoteContent>>>()?
                 .items
                 .into_iter()
-                .filter(|c| ContentType::from_str(&c.content_type.as_str()).is_some())
+                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_some())
                 .collect::<Vec<RemoteContent>>()),
             _ => {
                 bail!(self
-                    .response_error(&response)
+                    .response_error(response)
                     .context("Interpret response error after get all remote contents")?)
             }
         }
@@ -395,9 +425,9 @@ impl TracimClient for Tracim {
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
-        type_: ContentType,
+        _type_: ContentType,
         path: &PathBuf,
-    ) -> Result<(), TracimClientError> {
+    ) -> Result<()> {
         // FIXME BS NOW: html-doc
         let mut response = self
             .client
@@ -420,7 +450,7 @@ impl TracimClient for Tracim {
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<(), TracimClientError> {
+    ) -> Result<RevisionId> {
         match type_ {
             ContentType::File => self.fill_content_file_with_file(content_id, path),
             ContentType::Folder => todo!(),
@@ -431,7 +461,7 @@ impl TracimClient for Tracim {
     fn clone(&self) -> Box<dyn TracimClient> {
         Box::new(Tracim {
             base_address: self.base_address.clone(),
-            workspace_id: self.workspace_id.clone(),
+            workspace_id: self.workspace_id,
             client: self.client.clone(),
             username: self.username.clone(),
             password: self.password.clone(),

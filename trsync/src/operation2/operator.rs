@@ -308,7 +308,7 @@ mod test {
         false,
         vec![
             MockTracimClientCase::CreateOk(("a.txt".to_string(), None, 1)),
-            MockTracimClientCase::FillRemoteOk(1, "a.txt".to_string()),
+            MockTracimClientCase::FillRemoteOk(1, "a.txt".to_string(), 2),
             MockTracimClientCase::GetOk((1, 1, "a.txt".to_string(), None)),
         ],
         vec!["a.txt"],
@@ -321,8 +321,8 @@ mod test {
         false,
         vec![
             MockTracimClientCase::CreateOk(("a.txt".to_string(), Some(1), 2)),
-            MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string()),
-            MockTracimClientCase::GetOk((2, 2, "a.txt".to_string(), Some(1))),
+            MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string(), 3),
+            MockTracimClientCase::GetOk((2, 3, "a.txt".to_string(), Some(1))),
         ],
         vec!["Folder", "Folder/a.txt"],
     )]
@@ -346,7 +346,7 @@ mod test {
         Event::Local(LocalEvent::Modified(ContentId(1))),
         false,
         vec![
-            MockTracimClientCase::FillRemoteOk(1, "a.txt".to_string()),
+            MockTracimClientCase::FillRemoteOk(1, "a.txt".to_string(), 2),
             MockTracimClientCase::GetOk((1, 2, "a.txt".to_string(), None)),
         ],
         vec!["a.txt"],
@@ -358,7 +358,7 @@ mod test {
         Event::Local(LocalEvent::Modified(ContentId(2))),
         false,
         vec![
-            MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string()),
+            MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string(), 3),
             MockTracimClientCase::GetOk((2, 3, "a.txt".to_string(), Some(1))),
         ],
         vec!["Folder", "Folder/a.txt"],
@@ -393,7 +393,7 @@ mod test {
         Event::Local(LocalEvent::Renamed(ContentId(2), PathBuf::from("Folder/a.txt"))),
         false,
         vec![
-            MockTracimClientCase::SetParent(2, Some(1), 3),
+            MockTracimClientCase::SetParent(2, "a.txt".to_string(), Some(1), 3),
         ],
         vec!["Folder", "Folder/a.txt"],
     )]
@@ -405,7 +405,7 @@ mod test {
         false,
         vec![
             MockTracimClientCase::SetLabel(2, "b.txt".to_string(), 3),
-            MockTracimClientCase::SetParent(2, Some(1), 4),
+            MockTracimClientCase::SetParent(2, "b.txt".to_string(), Some(1), 4),
         ],
         vec!["Folder", "Folder/b.txt"],
     )]

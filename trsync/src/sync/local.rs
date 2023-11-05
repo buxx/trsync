@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
-use trsync_core::instance::DiskTimestamp;
+use trsync_core::instance::{ContentId, DiskTimestamp};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::util::last_modified_timestamp;
@@ -109,7 +109,13 @@ impl LocalSync {
                         &relative_path.display()
                     ))?
             {
-                Ok(Some(LocalChange::Updated(relative_path)))
+                let content_id =
+                    self.previously_known_content_id(&relative_path)
+                        .context(format!(
+                            "Get previously content_id for {}",
+                            &relative_path.display()
+                        ))?;
+                Ok(Some(LocalChange::Updated(relative_path, content_id)))
             } else {
                 Ok(None)
             }
@@ -144,23 +150,57 @@ impl LocalSync {
         }
     }
 
+    fn previously_known_content_id(&self, path: &PathBuf) -> Result<ContentId> {
+        match self.connection.query_row::<i32, _, _>(
+            "SELECT content_id FROM file WHERE relative_path = ?",
+            params![path.display().to_string()],
+            |row| Ok(row.get(0).unwrap()),
+        ) {
+            Ok(content_id) => Ok(ContentId(content_id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                bail!("No row found for {}", path.display())
+            }
+            Err(error) => bail!("Read content_id {} from db but : {}", path.display(), error),
+        }
+    }
+
     fn changes_from_db(&self, on_disk: &[PathBuf]) -> Result<Vec<LocalChange>> {
         let mut changes = vec![];
 
-        for raw_relative_path in self
+        for row in self
             .connection
-            .prepare("SELECT relative_path FROM file")?
-            .query_map([], |row| row.get(0))?
+            .prepare("SELECT relative_path, content_id FROM file")?
+            .query_map([], |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())))?
         {
-            let raw_relative_path: String =
-                raw_relative_path.context("Read raw relative_path from db")?;
+            let (raw_relative_path, raw_content_id): (String, i32) =
+                row.context("Read raw relative_path from db")?;
             let relative_path = PathBuf::from(raw_relative_path);
             if !on_disk.contains(&relative_path) {
-                changes.push(LocalChange::Disappear(relative_path))
+                changes.push(LocalChange::Disappear(
+                    relative_path,
+                    ContentId(raw_content_id),
+                ))
             }
         }
 
         Ok(changes)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum LocalChange {
+    New(PathBuf),
+    Disappear(PathBuf, ContentId),
+    Updated(PathBuf, ContentId),
+}
+
+impl LocalChange {
+    pub fn path(&self) -> PathBuf {
+        match self {
+            LocalChange::New(path)
+            | LocalChange::Disappear(path, _)
+            | LocalChange::Updated(path, _) => path.clone(),
+        }
     }
 }
 
@@ -259,22 +299,5 @@ mod test {
 
         // Then
         assert_eq!(state, vec![LocalChange::Disappear(PathBuf::from("a.txt"))])
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum LocalChange {
-    New(PathBuf),
-    Disappear(PathBuf),
-    Updated(PathBuf),
-}
-
-impl LocalChange {
-    pub fn path(&self) -> PathBuf {
-        match self {
-            LocalChange::New(path) | LocalChange::Disappear(path) | LocalChange::Updated(path) => {
-                path.clone()
-            }
-        }
     }
 }

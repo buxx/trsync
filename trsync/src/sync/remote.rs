@@ -8,10 +8,7 @@ use trsync_core::{
     instance::{ContentId, RevisionId},
 };
 
-use crate::{
-    path::ContentPath,
-    state::{memory::MemoryState, State},
-};
+use crate::state::{memory::MemoryState, State};
 
 pub struct RemoteSync {
     connection: Connection,

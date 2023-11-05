@@ -1,6 +1,9 @@
 use std::fmt;
 use std::path::Path;
+use std::time::Duration;
 
+use anyhow::Result;
+use trsync_core::client::{Tracim, DEFAULT_CLIENT_TIMEOUT};
 use trsync_core::instance::WorkspaceId;
 
 use crate::database::DB_NAME;
@@ -52,6 +55,19 @@ impl Context {
             "{}workspaces/{}/{}",
             self.base_address, self.workspace_id, suffix
         )
+    }
+
+    pub fn client(&self) -> Result<Tracim> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
+            .build()?;
+        Ok(Tracim::new(
+            self.base_address.clone(),
+            self.workspace_id,
+            client,
+            self.username.clone(),
+            self.password.clone(),
+        ))
     }
 }
 
