@@ -31,10 +31,6 @@ impl LocalSync {
         {
             let entry_debug = format!("{:?}", &entry);
             let entry = entry.context(format!("Read disk entry {:?}", entry_debug))?;
-
-            if self.workspace_path == entry.path() {
-                continue;
-            }
             disk_relative_paths.push(
                 entry
                     .path()
@@ -43,6 +39,17 @@ impl LocalSync {
                     .expect("Manipulated path are in the workspace folder")
                     .to_path_buf(),
             );
+
+            let is_root = self.workspace_path == entry.path();
+            if !is_root && entry.file_type().is_dir() {
+                // Ignore directory from local sync : changes can only be rename.
+                // And modification time is problematic :https://github.com/buxx/trsync/issues/60
+                continue;
+            }
+
+            if self.workspace_path == entry.path() {
+                continue;
+            }
 
             if let Some(change) = self
                 .change(&entry)
@@ -62,14 +69,6 @@ impl LocalSync {
     }
 
     fn ignore_entry(&self, entry: &DirEntry) -> bool {
-        let is_root = self.workspace_path == entry.path();
-
-        if !is_root && entry.file_type().is_dir() {
-            // Ignore directory from local sync : changes can only be rename.
-            // And modification time is problematic :https://github.com/buxx/trsync/issues/60
-            return true;
-        }
-
         // TODO : patterns from config object
         if let Some(file_name) = entry.path().file_name() {
             if let Some(file_name_) = file_name.to_str() {
@@ -83,6 +82,7 @@ impl LocalSync {
             }
         }
 
+        // FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes
         false
     }
 
