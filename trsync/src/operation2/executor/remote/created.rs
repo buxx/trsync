@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use trsync_core::{
-    client::TracimClient,
+    client::{ParentIdParameter, TracimClient, TracimClientError},
     content::Content,
     instance::{ContentFileName, ContentId, DiskTimestamp},
     types::ContentType,
@@ -64,26 +64,30 @@ impl Executor for CreatedOnRemoteExecutor {
         tracim: &Box<dyn TracimClient>,
     ) -> Result<StateModification> {
         let absolute_path = self.absolute_path();
-        let file_name = self.file_name()?;
+        let file_name = ContentFileName(self.file_name()?);
         let parent = self.parent(state)?;
         let content_type = self.content_type();
 
-        let content_id = tracim
-            .create_content(ContentFileName(file_name), content_type, parent)
-            .context(format!(
-                "Create remote content from {}",
-                absolute_path.display()
-            ))?;
-
-        if content_type.fillable() {
-            tracim
-                .fill_content_with_file(content_id, content_type, &absolute_path)
-                .context(format!(
-                    "Fill remote file {} with {}",
-                    content_id,
-                    absolute_path.display(),
-                ))?;
-        }
+        let content_id =
+            match tracim.create_content(file_name.clone(), content_type, parent, &absolute_path) {
+                Ok(content_id) => content_id,
+                Err(TracimClientError::ContentAlreadyExist) => tracim
+                    .find_one(
+                        &file_name,
+                        parent.map_or(ParentIdParameter::Root, ParentIdParameter::Some),
+                    )
+                    .context(format!(
+                        "Search already existing content id for name {} ({:?})",
+                        &file_name.0, parent
+                    ))?
+                    .context(format!(
+                    "After receive ContentAlreadyExist error, content is expected for {} ({:?})",
+                    &file_name.0, parent
+                ))?,
+                Err(error) => {
+                    bail!(error)
+                }
+            };
 
         let content = Content::from_remote(
             &tracim

@@ -1,6 +1,5 @@
 use std::{io, path::PathBuf, time::Duration};
 
-use anyhow::{bail, Context, Result};
 use mockall::automock;
 use reqwest::{
     blocking::{multipart, Response},
@@ -23,14 +22,63 @@ pub const DEFAULT_CLIENT_TIMEOUT: u64 = 30;
 #[derive(Debug, Clone, Error, Display)]
 pub enum TracimClientError {
     ContentAlreadyExist,
-    Unknown,
+    ConnectionError,
+    TimeoutError,
+    Unknown(String),
+    PrepareError(String),
+    InvalidResponse(String, Value),
+    AuthenticationError,
 }
 
 impl TracimClientError {
-    fn from_code(error_code: u64) -> TracimClientError {
+    fn from_code(error_code: u64) -> Option<TracimClientError> {
         match error_code {
-            CONTENT_ALREADY_EXIST_ERR_CODE => TracimClientError::ContentAlreadyExist,
-            _ => TracimClientError::Unknown,
+            CONTENT_ALREADY_EXIST_ERR_CODE => Some(TracimClientError::ContentAlreadyExist),
+            _ => None,
+        }
+    }
+}
+
+impl From<reqwest::Error> for TracimClientError {
+    fn from(error: reqwest::Error) -> Self {
+        // FIXME BS NOW : TrSync must switch into offline mode or something
+        if error.is_connect() {
+            return Self::ConnectionError;
+        }
+
+        // FIXME BS NOW : retry ?
+        if error.is_timeout() {
+            return Self::TimeoutError;
+        }
+
+        Self::Unknown(error.to_string())
+    }
+}
+
+impl From<anyhow::Error> for TracimClientError {
+    fn from(error: anyhow::Error) -> Self {
+        TracimClientError::Unknown(format!("{:#}", error))
+    }
+}
+
+#[derive(Debug)]
+pub enum ParentIdParameter {
+    Root,
+    Some(ContentId),
+}
+
+impl ParentIdParameter {
+    pub fn from_value(value: Option<ContentId>) -> Self {
+        match value {
+            Some(content_id) => Self::Some(content_id),
+            None => Self::Root,
+        }
+    }
+
+    pub fn to_parameter_value(&self) -> i32 {
+        match self {
+            ParentIdParameter::Root => 0,
+            ParentIdParameter::Some(parent_id) => parent_id.0,
         }
     }
 }
@@ -42,35 +90,41 @@ pub trait TracimClient {
         file_name: ContentFileName,
         type_: ContentType,
         parent: Option<ContentId>,
-    ) -> Result<ContentId>;
+        path: &PathBuf,
+    ) -> Result<ContentId, TracimClientError>;
     fn set_label(
         &self,
         content_id: ContentId,
         type_: ContentType,
         value: ContentFileName,
-    ) -> Result<RevisionId>;
+    ) -> Result<RevisionId, TracimClientError>;
     fn set_parent(
         &self,
         content_id: ContentId,
         type_: ContentType,
         value: Option<ContentId>,
-    ) -> Result<RevisionId>;
-    fn trash_content(&self, content_id: ContentId) -> Result<()>;
-    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent>;
+    ) -> Result<RevisionId, TracimClientError>;
+    fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
+    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError>;
+    fn find_one(
+        &self,
+        file_name: &ContentFileName,
+        parent_id: ParentIdParameter,
+    ) -> Result<Option<ContentId>, TracimClientError>;
     // FIXME BS NOW : Iterable
-    fn get_contents(&self) -> Result<Vec<RemoteContent>>;
+    fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError>;
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<()>;
+    ) -> Result<(), TracimClientError>;
     fn fill_content_with_file(
         &self,
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<RevisionId>; // TODO : return new RevisionId
+    ) -> Result<RevisionId, TracimClientError>; // TODO : return new RevisionId
     fn clone(&self) -> Box<dyn TracimClient>;
 }
 
@@ -83,7 +137,11 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(address: String, username: String, password: String) -> Result<Self> {
+    pub fn new(
+        address: String,
+        username: String,
+        password: String,
+    ) -> Result<Self, TracimClientError> {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
             .build()?;
@@ -95,31 +153,32 @@ impl Client {
         })
     }
 
-    pub fn check_credentials(&self) -> Result<Option<UserId>> {
+    pub fn check_credentials(&self) -> Result<Option<UserId>, TracimClientError> {
         let response = self
             .client
             .request(Method::GET, format!("{}/auth/whoami", self.address))
             .basic_auth(self.username.clone(), Some(self.password.clone()))
-            .send()
-            .context(format!(
-                "Make authentication request for instance '{}'",
-                self.address
-            ))?;
+            .send()?;
 
         if response.status() == 200 {
-            let user_id = response.json::<Value>()?["user_id"]
-                .as_i64()
-                .context("Read user_id property of response")? as i32;
+            let response_value = response.json::<Value>()?;
+            let user_id =
+                response_value["user_id"]
+                    .as_i64()
+                    .ok_or(TracimClientError::InvalidResponse(
+                        "Response user_id seems not be an integer".to_string(),
+                        response_value.clone(),
+                    ))? as i32;
             return Ok(Some(UserId(user_id)));
         }
 
         Ok(None)
     }
 
-    pub fn workspaces(&self) -> Result<Vec<Workspace>> {
+    pub fn workspaces(&self) -> Result<Vec<Workspace>, TracimClientError> {
         let user_id = self
             .check_credentials()?
-            .context("Get user user_id for grab workspaces")?;
+            .ok_or(TracimClientError::AuthenticationError)?;
         let response = self
             .client
             .request(
@@ -127,16 +186,17 @@ impl Client {
                 format!("{}/users/{}/workspaces", self.address, user_id),
             )
             .basic_auth(self.username.clone(), Some(self.password.clone()))
-            .send()
-            .context(format!("Grab workspaces for instance '{}'", self.address))?;
+            .send()?;
 
         if response.status() == 200 {
-            return response
-                .json::<Vec<Workspace>>()
-                .context("Read workspaces from response");
+            return Ok(response.json::<Vec<Workspace>>()?);
         }
 
-        bail!("Response status code was '{}'", response.status())
+        // TODO : detail on error (if this code is used !)
+        Err(TracimClientError::Unknown(format!(
+            "Response status code is {}",
+            response.status()
+        )))
     }
 }
 
@@ -186,68 +246,94 @@ impl Tracim {
         )
     }
 
-    fn created_content_id(&self, response: Response) -> Result<ContentId> {
+    fn created_content_id(&self, response: Response) -> Result<ContentId, TracimClientError> {
         match response.status().as_u16() {
             200 => self.response_content_id(response),
-            _ => bail!(self
-                .response_error(response)
-                .context("Interpret response error")?),
+            _ => Err(self.response_error(response)?),
         }
     }
 
-    fn created_revision_id(&self, response: Response) -> Result<RevisionId> {
+    fn created_revision_id(&self, response: Response) -> Result<RevisionId, TracimClientError> {
         match response.status().as_u16() {
             200 => self.response_revision_id(response),
-            _ => bail!(self
-                .response_error(response)
-                .context("Interpret response error")?),
+            _ => Err(self.response_error(response)?),
         }
     }
 
-    fn no_content_response(&self, response: Response) -> Result<()> {
+    fn no_content(&self, response: Response) -> Result<(), TracimClientError> {
         match response.status().as_u16() {
             204 => Ok(()),
-            _ => bail!(self
-                .response_error(response)
-                .context("Interpret response error")?),
+            _ => Err(self.response_error(response)?),
         }
     }
 
-    fn response_content_id(&self, response: Response) -> Result<ContentId> {
+    fn no_content_response(&self, response: Response) -> Result<(), TracimClientError> {
+        match response.status().as_u16() {
+            204 => Ok(()),
+            _ => Err(self.response_error(response)?),
+        }
+    }
+
+    fn response_content_id(&self, response: Response) -> Result<ContentId, TracimClientError> {
         let value = response.json::<Value>()?;
-        let data = value
-            .as_object()
-            .context(format!("Read response object : {:?}", value))?;
-        let raw_content_id = data["content_id"]
-            .as_i64()
-            .context(format!("Read content_id from response : {:?}", data))?;
+        let data = value.as_object().ok_or(TracimClientError::InvalidResponse(
+            "Response body is not an object".to_string(),
+            value.clone(),
+        ))?;
+        let raw_content_id =
+            data["content_id"]
+                .as_i64()
+                .ok_or(TracimClientError::InvalidResponse(
+                    "Response content_id is not an integer".to_string(),
+                    data["content_id"].clone(),
+                ))?;
         Ok(ContentId(raw_content_id as i32))
     }
 
-    fn response_revision_id(&self, response: Response) -> Result<RevisionId> {
+    fn response_revision_id(&self, response: Response) -> Result<RevisionId, TracimClientError> {
         let value = response.json::<Value>()?;
-        let data = value
-            .as_object()
-            .context(format!("Read response object : {:?}", value))?;
-        let raw_revision_id = data["revision_id"]
-            .as_i64()
-            .context(format!("Read revision_id from response : {:?}", data))?;
+        let data = value.as_object().ok_or(TracimClientError::InvalidResponse(
+            "Response body is not an object".to_string(),
+            value.clone(),
+        ))?;
+        let raw_revision_id =
+            data["revision_id"]
+                .as_i64()
+                .ok_or(TracimClientError::InvalidResponse(
+                    "Response revision_id is not an integer".to_string(),
+                    data["revision_id"].clone(),
+                ))?;
         Ok(RevisionId(raw_revision_id as i32))
     }
 
-    fn response_error(&self, response: Response) -> Result<TracimClientError> {
-        let error_code = response.json::<Value>()?["code"]
-            .as_u64()
-            .context("Read error code from response")?;
+    fn response_error(&self, response: Response) -> Result<TracimClientError, TracimClientError> {
+        let content_value = response.json::<Value>()?;
+        dbg!(&content_value);
+        let error_code =
+            content_value["code"]
+                .as_u64()
+                .ok_or(TracimClientError::InvalidResponse(
+                    "Response code is not an integer".to_string(),
+                    content_value["code"].clone(),
+                ))?;
 
-        Ok(TracimClientError::from_code(error_code))
+        if let Some(error) = TracimClientError::from_code(error_code) {
+            dbg!(&error);
+            return Ok(error);
+        }
+
+        if let Some(message) = content_value["message"].as_str() {
+            return Ok(TracimClientError::Unknown(message.to_string()));
+        }
+
+        Ok(TracimClientError::Unknown("Unknown error".to_string()))
     }
 
     fn create_folder(
         &self,
         file_name: ContentFileName,
         parent: Option<ContentId>,
-    ) -> Result<ContentId> {
+    ) -> Result<ContentId, TracimClientError> {
         let url = self.workspace_url("contents");
         let mut data = Map::new();
         data.insert(
@@ -263,11 +349,9 @@ impl Tracim {
             .request(Method::POST, url)
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .json(&data)
-            .send()
-            .context("Post created folder request")?;
+            .send()?;
 
         self.created_content_id(response)
-            .context("Read post created folder request response")
     }
 
     fn update_content(
@@ -275,7 +359,7 @@ impl Tracim {
         content_id: ContentId,
         type_: ContentType,
         data: Map<String, Value>,
-    ) -> Result<RevisionId> {
+    ) -> Result<RevisionId, TracimClientError> {
         let url = format!("{}/{}", type_.url_prefix(), content_id);
         let mut data = data.clone();
 
@@ -296,30 +380,61 @@ impl Tracim {
             .send()?;
 
         self.created_revision_id(response)
-            .context("Read post created revision request response")
     }
 
     fn create_file(
         &self,
-        _file_name: ContentFileName,
-        _parent: Option<ContentId>,
-    ) -> Result<ContentId> {
-        todo!()
+        parent: Option<ContentId>,
+        path: &PathBuf,
+    ) -> Result<ContentId, TracimClientError> {
+        let mut form = multipart::Form::new();
+        if let Some(parent_id) = parent {
+            form = form.text("parent_id", parent_id.to_string());
+        };
+        let url = self.workspace_url("files");
+        form = form.file("files", path).map_err(|e| {
+            TracimClientError::PrepareError(format!(
+                "Error during preparation of form for file {} : {}",
+                path.display(),
+                e
+            ))
+        })?;
+
+        let response = self
+            .client
+            .request(Method::POST, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .multipart(form)
+            .send()?;
+
+        self.created_content_id(response)
     }
 
     fn fill_content_file_with_file(
         &self,
         content_id: ContentId,
         path: &PathBuf,
-    ) -> Result<RevisionId> {
+    ) -> Result<RevisionId, TracimClientError> {
         let form = multipart::Form::new()
-            .file("files", &path)
-            .context(format!("Prepare upload form for {}", path.display()))?;
+            .file("files", path)
+            .map_err(|error| {
+                TracimClientError::PrepareError(format!(
+                    "Error during preparation of form for file {} : {}",
+                    path.display(),
+                    error
+                ))
+            })?;
         let file_name = path
             .file_name()
-            .context(format!("Determine file name of {}", path.display()))?
+            .ok_or(TracimClientError::PrepareError(format!(
+                "Determine file name of {}",
+                path.display()
+            )))?
             .to_str()
-            .context(format!("Determine file name of {}", path.display()))?;
+            .ok_or(TracimClientError::PrepareError(format!(
+                "Determine file name of {}",
+                path.display()
+            )))?;
         let url = self.workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
 
         let response = self
@@ -329,7 +444,9 @@ impl Tracim {
             .multipart(form)
             .send()?;
 
-        self.created_revision_id(response)
+        self.no_content(response)?;
+        let content = self.get_content(content_id)?;
+        Ok(content.current_revision_id)
     }
 }
 
@@ -339,11 +456,12 @@ impl TracimClient for Tracim {
         file_name: ContentFileName,
         type_: ContentType,
         parent: Option<ContentId>,
-    ) -> Result<ContentId> {
+        path: &PathBuf,
+    ) -> Result<ContentId, TracimClientError> {
         match type_ {
             ContentType::Folder => self.create_folder(file_name, parent),
             ContentType::HtmlDocument => todo!(),
-            ContentType::File => self.create_file(file_name, parent),
+            ContentType::File => self.create_file(parent, path),
         }
     }
 
@@ -352,7 +470,7 @@ impl TracimClient for Tracim {
         content_id: ContentId,
         type_: ContentType,
         value: ContentFileName,
-    ) -> Result<RevisionId> {
+    ) -> Result<RevisionId, TracimClientError> {
         let label = value.label(&type_);
         let mut data = Map::new();
         data.insert("label".to_string(), json!(label));
@@ -366,13 +484,13 @@ impl TracimClient for Tracim {
         content_id: ContentId,
         type_: ContentType,
         value: Option<ContentId>,
-    ) -> Result<RevisionId> {
+    ) -> Result<RevisionId, TracimClientError> {
         let mut data = Map::new();
         data.insert("parent_id".to_string(), json!(value));
         self.update_content(content_id, type_, data)
     }
 
-    fn trash_content(&self, content_id: ContentId) -> Result<()> {
+    fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError> {
         let url = self.workspace_url(&format!("contents/{}/trashed", content_id));
         let response = self
             .client
@@ -381,10 +499,9 @@ impl TracimClient for Tracim {
             .send()?;
 
         self.no_content_response(response)
-            .context("Read post created revision request response")
     }
 
-    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent> {
+    fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError> {
         let response = self
             .client
             .request(
@@ -397,7 +514,7 @@ impl TracimClient for Tracim {
         Ok(response.json::<RemoteContent>()?)
     }
 
-    fn get_contents(&self) -> Result<Vec<RemoteContent>> {
+    fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError> {
         let url = self.workspace_url("contents");
 
         let response = self
@@ -414,11 +531,7 @@ impl TracimClient for Tracim {
                 .into_iter()
                 .filter(|c| ContentType::from_str(c.content_type.as_str()).is_some())
                 .collect::<Vec<RemoteContent>>()),
-            _ => {
-                bail!(self
-                    .response_error(response)
-                    .context("Interpret response error after get all remote contents")?)
-            }
+            _ => Err(self.response_error(response)?),
         }
     }
 
@@ -427,7 +540,7 @@ impl TracimClient for Tracim {
         content_id: ContentId,
         _type_: ContentType,
         path: &PathBuf,
-    ) -> Result<()> {
+    ) -> Result<(), TracimClientError> {
         // FIXME BS NOW: html-doc
         let mut response = self
             .client
@@ -438,9 +551,20 @@ impl TracimClient for Tracim {
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .send()?;
 
-        let mut out = std::fs::File::create(path)
-            .context(format!("Open or create file at {}", path.display()))?;
-        io::copy(&mut response, &mut out).context(format!("Fill file at {}", path.display()))?;
+        let mut out = std::fs::File::create(path).map_err(|error| {
+            TracimClientError::PrepareError(format!(
+                "Error when open or create file at {}: {}",
+                path.display(),
+                error
+            ))
+        })?;
+        io::copy(&mut response, &mut out).map_err(|error| {
+            TracimClientError::PrepareError(format!(
+                "Error when fill file at {}: {}",
+                path.display(),
+                error
+            ))
+        })?;
 
         Ok(())
     }
@@ -450,7 +574,7 @@ impl TracimClient for Tracim {
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
-    ) -> Result<RevisionId> {
+    ) -> Result<RevisionId, TracimClientError> {
         match type_ {
             ContentType::File => self.fill_content_file_with_file(content_id, path),
             ContentType::Folder => todo!(),
@@ -466,6 +590,34 @@ impl TracimClient for Tracim {
             username: self.username.clone(),
             password: self.password.clone(),
         })
+    }
+
+    fn find_one(
+        &self,
+        file_name: &ContentFileName,
+        parent_id: ParentIdParameter,
+    ) -> Result<Option<ContentId>, TracimClientError> {
+        let url = self.workspace_url(&format!(
+            "contents?parent_ids={}",
+            parent_id.to_parameter_value()
+        ));
+        let response = self
+            .client
+            .request(Method::GET, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .send()?;
+
+        let status_code = response.status().as_u16();
+        match status_code {
+            200 => Ok(response
+                .json::<Paginated<Vec<RemoteContent>>>()?
+                .items
+                .into_iter()
+                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_some())
+                .find(|c| c.filename == file_name.0)
+                .map(|c| c.content_id)),
+            _ => Err(self.response_error(response)?),
+        }
     }
 }
 

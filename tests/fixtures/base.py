@@ -18,7 +18,7 @@ from tests.fixtures.model import Content, User, Workspace
 TRACIM_VERSION = "4.1.3"
 TRACIM_CONTAINER_NAME = "tracim_rsync_test_instance"
 TRACIM_HTTP_PORT = 8080
-TRACIM_URL = f"localhost:{TRACIM_HTTP_PORT}"
+TRACIM_HOST = "localhost"
 DEFAULT_LOGIN = "admin@admin.admin"
 DEFAULT_PASSWORD = "admin@admin.admin"
 USERS = {
@@ -27,16 +27,16 @@ USERS = {
 }
 
 
-def _find_container():
+def _find_container(name):
     docker_ = docker.from_env()
     containers = docker_.containers.list()
-    return next(c for c in containers if c.attrs["Name"] == f"/{TRACIM_CONTAINER_NAME}")
+    return next(c for c in containers if c.attrs["Name"] == f"/{name}")
 
 
-def _ensure_user(user: User):
+def _ensure_user(user: User, container_port: int):
     # TODO : check before create (or assume correct creation error)
     response = requests.post(
-        f"http://{TRACIM_URL}/api/users",
+        f"http://{TRACIM_HOST}:{container_port}/api/users",
         json={
             "email": user.email,
             "password": user.password,
@@ -50,20 +50,24 @@ def _ensure_user(user: User):
     assert response.status_code == 200
 
 
-def stopped_tracim_instance():
+def stopped_tracim_instance(name):
     try:
-        _find_container().stop()
+        while _find_container(name):
+            try:
+                _find_container(name).stop()
+            except StopIteration:
+                pass
     except StopIteration:
         pass
 
 
-def fresh_tracim_instance():
+def fresh_tracim_instance(name, port):
     docker_ = docker.from_env()
     docker_.containers.run(
         f"algoo/tracim:{TRACIM_VERSION}",
         detach=True,
-        name=TRACIM_CONTAINER_NAME,
-        ports={"80/tcp": TRACIM_HTTP_PORT},
+        name=name,
+        ports={"80/tcp": port},
         auto_remove=True,
         environment=["DATABASE_TYPE=sqlite"],
     )
@@ -71,7 +75,7 @@ def fresh_tracim_instance():
     # Wait for Tracim http response to consider it as ready
     while True:
         try:
-            response = requests.get(f"http://localhost:{TRACIM_HTTP_PORT}")
+            response = requests.get(f"http://localhost:{port}")
             if response.status_code == 200:
                 break
         except requests.exceptions.ConnectionError:
@@ -79,13 +83,13 @@ def fresh_tracim_instance():
         time.sleep(0.250)
 
 
-def ensure_users():
-    _ensure_user(USERS["user1"])
+def ensure_users(container_port):
+    _ensure_user(USERS["user1"], container_port)
 
 
-def create_workspace(owner: User, name: str) -> Workspace:
+def create_workspace(container_port: int, owner: User, name: str) -> Workspace:
     response = requests.post(
-        f"http://{TRACIM_URL}/api/workspaces",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces",
         json={
             "access_type": "confidential",
             "agenda_enabled": False,
@@ -108,7 +112,11 @@ def create_workspace(owner: User, name: str) -> Workspace:
 
 
 def execute_trsync_and_wait_finished(
-    folder: Path, workspace_id: int, user: User, stdout
+    container_port: int,
+    folder: Path,
+    workspace_id: int,
+    user: User,
+    stdout,
 ) -> None:
     args = [
         f"{Path.home()}/.cargo/bin/cargo",
@@ -116,7 +124,7 @@ def execute_trsync_and_wait_finished(
         "--bin",
         "trsync",
         str(folder),
-        TRACIM_URL,
+        f"{TRACIM_HOST}:{container_port}",
         str(workspace_id),
         user.username,
         "--env-var-pass PASSWORD",
@@ -133,6 +141,12 @@ def execute_trsync_and_wait_finished(
     )
 
 
+@pytest.fixture
+def container_port():
+    pytest.tracim_http_port_counter = pytest.tracim_http_port_counter + 1
+    return TRACIM_HTTP_PORT + pytest.tracim_http_port_counter
+
+
 @pytest.fixture(autouse=True, scope="module")
 def setup(request):
     def end():
@@ -147,14 +161,20 @@ def setup(request):
     request.addfinalizer(end)
 
 
-def execute_trsync(folder: Path, workspace_id: int, user: User, stdout):
+def execute_trsync(
+    container_port: int,
+    folder: Path,
+    workspace_id: int,
+    user: User,
+    stdout,
+):
     args = [
         f"{Path.home()}/.cargo/bin/cargo",
         "run",
         "--bin",
         "trsync",
         str(folder),
-        TRACIM_URL,
+        f"{TRACIM_HOST}:{container_port}",
         str(workspace_id),
         user.username,
         "--env-var-pass PASSWORD",
@@ -178,27 +198,31 @@ def get_folder_listing(path: Path) -> typing.List[str]:
     return list(sorted(paths))
 
 
-def _get_workspace_contents(user: User, workspace: Workspace) -> typing.List[dict]:
+def _get_workspace_contents(
+    container_port: int,
+    user: User,
+    workspace: Workspace,
+) -> typing.List[dict]:
     response = requests.get(
-        f"http://{TRACIM_URL}/api/workspaces/{workspace.id}/contents",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace.id}/contents",
         auth=(user.username, user.password),
     )
     assert response.status_code == 200
     return json.loads(response.content)["items"]
 
 
-def get_content(user: User, content_id: int) -> dict:
+def get_content(container_port: int, user: User, content_id: int) -> dict:
     response = requests.get(
-        f"http://{TRACIM_URL}/api/contents/{content_id}",
+        f"http://{TRACIM_HOST}:{container_port}/api/contents/{content_id}",
         auth=(user.username, user.password),
     )
     assert response.status_code == 200
     return json.loads(response.content)
 
 
-def get_content_bytes(user: User, content_id: int) -> bytes:
+def get_content_bytes(container_port: int, user: User, content_id: int) -> bytes:
     response = requests.get(
-        f"http://{TRACIM_URL}/api/contents/{content_id}",
+        f"http://{TRACIM_HOST}:{container_port}/api/contents/{content_id}",
         auth=(user.username, user.password),
     )
     assert response.status_code == 200
@@ -207,19 +231,19 @@ def get_content_bytes(user: User, content_id: int) -> bytes:
     workspace_id = content["workspace_id"]
     filename = content["filename"]
     response = requests.get(
-        f"http://{TRACIM_URL}/api/workspaces/{workspace_id}/files/{content_id}/raw/{filename}",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace_id}/files/{content_id}/raw/{filename}",
         auth=(user.username, user.password),
     )
     assert response.status_code == 200
     return response.content
 
 
-def _get_content_path(user: User, content_id: int) -> Path:
+def _get_content_path(container_port: int, user: User, content_id: int) -> Path:
     paths = []
     current_content_id = content_id
 
     while True:
-        parent = get_content(user, current_content_id)
+        parent = get_content(container_port, user, current_content_id)
         if parent["is_deleted"]:
             raise IndexError()
         paths.append(parent["filename"])
@@ -230,13 +254,17 @@ def _get_content_path(user: User, content_id: int) -> Path:
     return Path().joinpath(*reversed(paths))
 
 
-def get_workspace_listing(user: User, workspace: Workspace) -> typing.Dict[str, int]:
+def get_workspace_listing(
+    container_port: int,
+    user: User,
+    workspace: Workspace,
+) -> typing.Dict[str, int]:
     paths = {}
 
-    for content in _get_workspace_contents(user, workspace):
+    for content in _get_workspace_contents(container_port, user, workspace):
         try:
             if parent_id := content["parent_id"]:
-                parent_path = _get_content_path(user, parent_id)
+                parent_path = _get_content_path(container_port, user, parent_id)
                 path = (parent_path / Path(content["filename"])), content["content_id"]
             else:
                 path = Path(content["filename"]), content["content_id"]
@@ -257,3 +285,12 @@ def check_until(callback, duration=10.0):
             if time.time() - start > duration:
                 raise exc
             time.sleep(0.250)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def setup(request):
+    def stop_container():
+        container_name = f"{TRACIM_CONTAINER_NAME}-{request.node.name}"
+        stopped_tracim_instance(container_name)
+
+    request.addfinalizer(stop_container)

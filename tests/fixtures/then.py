@@ -6,7 +6,6 @@ from tests.fixtures.base import (
     get_content_bytes,
     get_folder_listing,
     get_workspace_listing,
-    get_content,
 )
 
 from tests.fixtures.model import User, Workspace
@@ -24,8 +23,12 @@ def assert_local_folder_empty(user: User, workspace: Workspace, tmp_path: Path):
 
 
 @then("Remote workspace is empty")
-def remote_workspace_empty(user: User, workspace: Workspace):
-    assert get_workspace_listing(user, workspace) == {}
+def remote_workspace_empty(
+    user: User,
+    workspace: Workspace,
+    container_port: int,
+):
+    assert get_workspace_listing(container_port, user, workspace) == {}
 
 
 @then(parsers.cfparse('Local folder contains "{set_name}"'))
@@ -39,46 +42,74 @@ def folder_contains_remove_contents1(
 
 @then(parsers.cfparse('Remote workspace contains "{set_name}"'))
 def workspace_contains_remove_contents1(
-    user: User, workspace: Workspace, set_name: str
+    user: User,
+    workspace: Workspace,
+    set_name: str,
+    container_port: int,
 ):
-    workspace_listing = get_workspace_listing(user, workspace).keys()
+    workspace_listing = get_workspace_listing(container_port, user, workspace).keys()
     assert list(sorted(workspace_listing)) == sorted(SETS[set_name])
 
 
 @then(parsers.cfparse('I should see remote file at "{path}"'))
-def workspace_contains_file(user: User, workspace: Workspace, path: str):
+def workspace_contains_file(
+    user: User,
+    workspace: Workspace,
+    path: str,
+    container_port: int,
+):
     def check():
-        assert path in list(get_workspace_listing(user, workspace).keys())
+        assert path in list(
+            get_workspace_listing(container_port, user, workspace).keys()
+        )
 
     check_until(check)
 
 
 @then(parsers.cfparse('I should not see remote file at "{path}"'))
-def workspace_not_contains_file(user: User, workspace: Workspace, path: str):
+def workspace_not_contains_file(
+    user: User,
+    workspace: Workspace,
+    path: str,
+    container_port: int,
+):
     def check():
-        assert path not in list(get_workspace_listing(user, workspace).keys())
+        assert path not in list(
+            get_workspace_listing(container_port, user, workspace).keys()
+        )
 
     check_until(check)
 
 
 @then(parsers.cfparse('I should see remote file "{path}" with content "{content}"'))
 def workspace_contains_file_with_content(
-    user: User, workspace: Workspace, path: str, content: str
+    user: User,
+    workspace: Workspace,
+    path: str,
+    content: str,
+    container_port: int,
 ):
     def check():
-        workspace_listing = get_workspace_listing(user, workspace)
+        workspace_listing = get_workspace_listing(container_port, user, workspace)
         assert path in list(workspace_listing.keys())
         content_id = workspace_listing[path]
-        content_ = get_content_bytes(user, content_id)
+        content_ = get_content_bytes(container_port, user, content_id)
         assert content_ == content.encode()
 
     check_until(check)
 
 
 @then(parsers.cfparse('I should see remote folder at "{path}"'))
-def workspace_contains_folder(user: User, workspace: Workspace, path: str):
+def workspace_contains_folder(
+    user: User,
+    workspace: Workspace,
+    path: str,
+    container_port: int,
+):
     def check():
-        assert path in list(get_workspace_listing(user, workspace).keys())
+        assert path in list(
+            get_workspace_listing(container_port, user, workspace).keys()
+        )
 
     check_until(check)
 

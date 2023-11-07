@@ -77,6 +77,12 @@ impl Runner {
                 .operate(remote_change.into())
                 .context(format!("Operate on remote change {:?}", event_display))?
         }
+        for local_change in local_changes {
+            let event_display = format!("{:?}", &local_change);
+            operator
+                .operate(local_change.into())
+                .context(format!("Operate on local change {:?}", event_display))?
+        }
 
         Ok(())
     }

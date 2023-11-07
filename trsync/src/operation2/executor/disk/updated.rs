@@ -13,21 +13,23 @@ use crate::{
     util::last_modified_timestamp,
 };
 
-pub struct NamedOnDiskExecutor {
+pub struct UpdatedOnDiskExecutor {
     workspace_folder: PathBuf,
     content_id: ContentId,
+    download: bool,
 }
 
-impl NamedOnDiskExecutor {
-    pub fn new(workspace_folder: PathBuf, content_id: ContentId) -> Self {
+impl UpdatedOnDiskExecutor {
+    pub fn new(workspace_folder: PathBuf, content_id: ContentId, download: bool) -> Self {
         Self {
             workspace_folder,
             content_id,
+            download,
         }
     }
 }
 
-impl Executor for NamedOnDiskExecutor {
+impl Executor for UpdatedOnDiskExecutor {
     fn execute(
         &self,
         state: &Box<dyn State>,
@@ -60,6 +62,21 @@ impl Executor for NamedOnDiskExecutor {
             previous_absolute_path.display(),
             new_absolute_path.display()
         ))?;
+
+        if self.download {
+            tracim
+                .fill_file_with_content(
+                    self.content_id,
+                    *remote_content.type_(),
+                    &new_absolute_path,
+                )
+                .context(format!(
+                    "Fill {} with content {}",
+                    new_absolute_path.display(),
+                    self.content_id
+                ))?;
+        }
+
         let disk_timestamp = DiskTimestamp(
             last_modified_timestamp(&new_absolute_path)
                 .context(format!(

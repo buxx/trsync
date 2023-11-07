@@ -1,6 +1,6 @@
 import json
 import requests
-from tests.fixtures.base import TRACIM_URL
+from tests.fixtures.base import TRACIM_HOST
 from tests.fixtures.model import User, Workspace
 
 
@@ -23,6 +23,7 @@ FILE_CONTENTS = {
 
 
 def create_file(
+    container_port: int,
     user: User,
     workspace: Workspace,
     name: str,
@@ -33,7 +34,7 @@ def create_file(
     if parent_id is not None:
         data["parent_id"] = parent_id
     response = requests.post(
-        f"http://{TRACIM_URL}/api/workspaces/{workspace.id}/files",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace.id}/files",
         files={"files": (name, content)},
         data=data,
         auth=(user.username, user.password),
@@ -44,10 +45,15 @@ def create_file(
 
 
 def update_file(
-    user: User, workspace: Workspace, content_id: int, name: str, content: bytes
+    container_port: int,
+    user: User,
+    workspace: Workspace,
+    content_id: int,
+    name: str,
+    content: bytes,
 ) -> None:
     response = requests.put(
-        f"http://{TRACIM_URL}/api/workspaces/{workspace.id}/files/{content_id}/raw/{name}",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace.id}/files/{content_id}/raw/{name}",
         files={"files": (name, content)},
         auth=(user.username, user.password),
     )
@@ -55,6 +61,7 @@ def update_file(
 
 
 def create_folder(
+    container_port: int,
     user: User,
     workspace: Workspace,
     name: str,
@@ -64,7 +71,7 @@ def create_folder(
     if parent_id is not None:
         json_["parent_id"] = parent_id
     response = requests.post(
-        f"http://{TRACIM_URL}/api/workspaces/{workspace.id}/contents",
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace.id}/contents",
         json=json_,
         auth=(user.username, user.password),
     )
@@ -73,14 +80,28 @@ def create_folder(
     return response_json["content_id"]
 
 
-def create_set_on_remote(user: User, workspace: Workspace, set_name: str) -> None:
+def create_set_on_remote(
+    container_port: int, user: User, workspace: Workspace, set_name: str
+) -> None:
     content_ids = {}
     for file_path in SETS[set_name]:
-        create_remote(user, workspace, file_path, content_ids, contents=FILE_CONTENTS)
+        create_remote(
+            container_port,
+            user,
+            workspace,
+            file_path,
+            content_ids,
+            contents=FILE_CONTENTS,
+        )
 
 
 def create_remote(
-    user: User, workspace: Workspace, file_path: str, content_ids: dict, contents: dict
+    container_port: int,
+    user: User,
+    workspace: Workspace,
+    file_path: str,
+    content_ids: dict,
+    contents: dict,
 ) -> None:
     # Create only the last part (set must be ordered correctly)
     splitted = file_path[1:].split("/")
@@ -92,6 +113,7 @@ def create_remote(
 
     if concerned_part.startswith("file_"):
         id = create_file(
+            container_port,
             user,
             workspace,
             concerned_part,
@@ -99,6 +121,12 @@ def create_remote(
             parent_id=parent_id,
         )
     elif concerned_part.startswith("folder_"):
-        id = create_folder(user, workspace, concerned_part, parent_id=parent_id)
+        id = create_folder(
+            container_port,
+            user,
+            workspace,
+            concerned_part,
+            parent_id=parent_id,
+        )
 
     content_ids[file_path] = id

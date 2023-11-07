@@ -11,8 +11,8 @@ use super::{
     executor::Executor,
     executor::{
         disk::{
-            absent::AbsentFromDiskExecutor, named::NamedOnDiskExecutor,
-            present::PresentOnDiskExecutor,
+            absent::AbsentFromDiskExecutor, present::PresentOnDiskExecutor,
+            updated::UpdatedOnDiskExecutor,
         },
         remote::{
             absent::AbsentFromRemoteExecutor, created::CreatedOnRemoteExecutor,
@@ -60,8 +60,8 @@ impl<'a> Operator<'a> {
             Event::Remote(event) => match event {
                 RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(id)),
                 RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(id)),
-                RemoteEvent::Updated(id) => Box::new(self.present_on_disk_executor(id)),
-                RemoteEvent::Renamed(id) => Box::new(self.named_on_disk_executor(id)),
+                RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(id, true)),
+                RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(id, false)),
             },
             Event::Local(event) => match event {
                 LocalEvent::Deleted(id) => Box::new(self.absent_from_remote_executor(id)),
@@ -92,8 +92,12 @@ impl<'a> Operator<'a> {
         ModifiedOnRemoteExecutor::new(self.workspace_folder.clone(), content_id)
     }
 
-    fn named_on_disk_executor(&self, content_id: ContentId) -> NamedOnDiskExecutor {
-        NamedOnDiskExecutor::new(self.workspace_folder.clone(), content_id)
+    fn updated_on_disk_executor(
+        &self,
+        content_id: ContentId,
+        download: bool,
+    ) -> UpdatedOnDiskExecutor {
+        UpdatedOnDiskExecutor::new(self.workspace_folder.clone(), content_id, download)
     }
 
     fn named_on_remote_executor(
