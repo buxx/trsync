@@ -29,6 +29,9 @@ pub mod state;
 pub mod sync;
 pub mod util;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
 struct Opt {

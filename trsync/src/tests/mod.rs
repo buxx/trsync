@@ -213,20 +213,24 @@ impl MockTracimClientCase {
                     .times(1)
                     .returning(|_, _, _| Ok(()));
             }
-            MockTracimClientCase::CreateOk((
-                raw_file_name,
-                raw_parent_id,
-                raw_returned_content_id,
-            )) => {
-                let content_type = content_type(&raw_file_name);
+            MockTracimClientCase::CreateOk((raw_path, raw_parent_id, raw_returned_content_id)) => {
+                let content_type = content_type(&raw_path);
                 mock.expect_create_content()
                     .with(
-                        predicate::eq(ContentFileName(raw_file_name)),
+                        predicate::eq(ContentFileName(
+                            PathBuf::from(&raw_path)
+                                .file_name()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                        )),
                         predicate::eq(content_type),
                         predicate::eq(raw_parent_id.map(ContentId)),
+                        predicate::eq(workspace_folder.join(raw_path)),
                     )
                     .times(1)
-                    .returning(move |_, _, _| Ok(ContentId(raw_returned_content_id)));
+                    .returning(move |_, _, _, _| Ok(ContentId(raw_returned_content_id)));
             }
             MockTracimClientCase::FillRemoteOk(raw_content_id, raw_path, new_revision_id) => {
                 let content_type = content_type(&raw_path);

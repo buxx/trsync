@@ -284,7 +284,7 @@ impl OperationalHandler {
         );
         let (content_id, revision_id) = match self.client.create_content(
             file_infos.absolute_path,
-            file_infos.content_type.clone(),
+            file_infos.content_type,
             parent_id,
         ) {
             Ok((content_id, revision_id)) => {

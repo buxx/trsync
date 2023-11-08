@@ -90,7 +90,7 @@ pub trait TracimClient {
         file_name: ContentFileName,
         type_: ContentType,
         parent: Option<ContentId>,
-        path: &PathBuf,
+        path: PathBuf,
     ) -> Result<ContentId, TracimClientError>;
     fn set_label(
         &self,
@@ -385,14 +385,14 @@ impl Tracim {
     fn create_file(
         &self,
         parent: Option<ContentId>,
-        path: &PathBuf,
+        path: PathBuf,
     ) -> Result<ContentId, TracimClientError> {
         let mut form = multipart::Form::new();
         if let Some(parent_id) = parent {
             form = form.text("parent_id", parent_id.to_string());
         };
         let url = self.workspace_url("files");
-        form = form.file("files", path).map_err(|e| {
+        form = form.file("files", &path).map_err(|e| {
             TracimClientError::PrepareError(format!(
                 "Error during preparation of form for file {} : {}",
                 path.display(),
@@ -456,7 +456,7 @@ impl TracimClient for Tracim {
         file_name: ContentFileName,
         type_: ContentType,
         parent: Option<ContentId>,
-        path: &PathBuf,
+        path: PathBuf,
     ) -> Result<ContentId, TracimClientError> {
         match type_ {
             ContentType::Folder => self.create_folder(file_name, parent),

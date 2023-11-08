@@ -68,26 +68,40 @@ impl Executor for CreatedOnRemoteExecutor {
         let parent = self.parent(state)?;
         let content_type = self.content_type();
 
-        let content_id =
-            match tracim.create_content(file_name.clone(), content_type, parent, &absolute_path) {
-                Ok(content_id) => content_id,
-                Err(TracimClientError::ContentAlreadyExist) => tracim
-                    .find_one(
-                        &file_name,
-                        parent.map_or(ParentIdParameter::Root, ParentIdParameter::Some),
-                    )
-                    .context(format!(
-                        "Search already existing content id for name {} ({:?})",
-                        &file_name.0, parent
-                    ))?
-                    .context(format!(
+        let content_id = match tracim.create_content(
+            file_name.clone(),
+            content_type,
+            parent,
+            absolute_path.clone(),
+        ) {
+            Ok(content_id) => content_id,
+            Err(TracimClientError::ContentAlreadyExist) => tracim
+                .find_one(
+                    &file_name,
+                    parent.map_or(ParentIdParameter::Root, ParentIdParameter::Some),
+                )
+                .context(format!(
+                    "Search already existing content id for name {} ({:?})",
+                    &file_name.0, parent
+                ))?
+                .context(format!(
                     "After receive ContentAlreadyExist error, content is expected for {} ({:?})",
                     &file_name.0, parent
                 ))?,
-                Err(error) => {
-                    bail!(error)
-                }
-            };
+            Err(error) => {
+                bail!(error)
+            }
+        };
+
+        if content_type.fillable() {
+            tracim
+                .fill_content_with_file(content_id, content_type, &absolute_path)
+                .context(format!(
+                    "Fill content {} after created it with file {}",
+                    content_id,
+                    absolute_path.display()
+                ))?;
+        }
 
         let content = Content::from_remote(
             &tracim

@@ -324,7 +324,7 @@ mod test {
         Event::Local(LocalEvent::Created(PathBuf::from("Folder/a.txt"))),
         false,
         vec![
-            MockTracimClientCase::CreateOk(("a.txt".to_string(), Some(1), 2)),
+            MockTracimClientCase::CreateOk(("Folder/a.txt".to_string(), Some(1), 2)),
             MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string(), 3),
             MockTracimClientCase::GetOk((2, 3, "a.txt".to_string(), Some(1))),
         ],

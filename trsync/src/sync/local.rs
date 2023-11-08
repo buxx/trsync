@@ -281,7 +281,10 @@ mod test {
         let state = local_sync.changes().unwrap();
 
         // Then
-        assert_eq!(state, vec![LocalChange::Updated(PathBuf::from("a.txt"))])
+        assert_eq!(
+            state,
+            vec![LocalChange::Updated(PathBuf::from("a.txt"), ContentId(1))]
+        )
     }
 
     #[test]
@@ -298,6 +301,9 @@ mod test {
         let state = local_sync.changes().unwrap();
 
         // Then
-        assert_eq!(state, vec![LocalChange::Disappear(PathBuf::from("a.txt"))])
+        assert_eq!(
+            state,
+            vec![LocalChange::Disappear(PathBuf::from("a.txt"), ContentId(1))]
+        )
     }
 }
