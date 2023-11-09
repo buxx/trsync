@@ -54,7 +54,7 @@ pub struct RemoteWatcher {
     context: Context,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
-    operational_sender: Sender<OperationalMessage>,
+    operational_sender: Sender<RemoteEvent>,
 }
 
 // TODO : Must have a local db with tuple (content_id,modified_timestamp)
@@ -67,7 +67,7 @@ impl RemoteWatcher {
         context: Context,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
-        operational_sender: Sender<OperationalMessage>,
+        operational_sender: Sender<RemoteEvent>,
     ) -> Self {
         Self {
             connection,

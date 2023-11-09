@@ -1,4 +1,6 @@
 use std::{fmt, io, str::Utf8Error};
+use strum_macros::Display;
+use thiserror::Error;
 
 use trsync_core::types::{AbsoluteFilePath, ContentId, RevisionId};
 
@@ -56,7 +58,7 @@ impl fmt::Display for ClientError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error, Display)]
 pub enum Error {
     FailToCreateContentOnRemote(String),
     FailToCreateContentOnLocal(String),

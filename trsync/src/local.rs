@@ -1,5 +1,6 @@
 use crate::context::Context;
 use crate::database::{Database, DatabaseOperation};
+use crate::event::local::LocalEvent;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use rusqlite::Connection;
@@ -14,14 +15,13 @@ use std::{fs, thread};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::error::Error;
-use crate::operation::OperationalMessage;
 use crate::util;
 
 pub struct LocalWatcher {
     context: Context,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
-    operational_sender: Sender<OperationalMessage>,
+    operational_sender: Sender<LocalEvent>,
 }
 
 impl LocalWatcher {
@@ -29,7 +29,7 @@ impl LocalWatcher {
         context: Context,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
-        operational_sender: Sender<OperationalMessage>,
+        operational_sender: Sender<LocalEvent>,
     ) -> Result<Self, Error> {
         Ok(Self {
             context,
@@ -109,24 +109,24 @@ impl LocalWatcher {
             &event,
         );
 
-        let messages: Vec<OperationalMessage> = match event {
+        let messages: Vec<LocalEvent> = match event {
             DebouncedEvent::Create(absolute_path) => {
-                vec![OperationalMessage::NewLocalFile(util::path_to_string(
+                vec![LocalEvent::NewLocalFile(util::path_to_string(
                     absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Write(absolute_path) => {
-                vec![OperationalMessage::ModifiedLocalFile(util::path_to_string(
+                vec![LocalEvent::ModifiedLocalFile(util::path_to_string(
                     absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Remove(absolute_path) => {
-                vec![OperationalMessage::DeletedLocalFile(util::path_to_string(
+                vec![LocalEvent::DeletedLocalFile(util::path_to_string(
                     absolute_path.strip_prefix(&workspace_folder_path)?,
                 )?)]
             }
             DebouncedEvent::Rename(absolute_source_path, absolute_dest_path) => {
-                vec![OperationalMessage::RenamedLocalFile(
+                vec![LocalEvent::RenamedLocalFile(
                     util::path_to_string(
                         absolute_source_path.strip_prefix(&workspace_folder_path)?,
                     )?,
@@ -174,14 +174,14 @@ impl LocalWatcher {
 pub struct LocalSync {
     context: Context,
     connection: Connection,
-    operational_sender: Sender<OperationalMessage>,
+    operational_sender: Sender<LocalEvent>,
 }
 
 impl LocalSync {
     pub fn new(
         context: Context,
         connection: Connection,
-        operational_sender: Sender<OperationalMessage>,
+        operational_sender: Sender<LocalEvent>,
     ) -> Result<Self, Error> {
         Ok(Self {
             context,
@@ -282,11 +282,9 @@ impl LocalSync {
                         disk_last_modified_timestamp,
                         last_modified_timestamp,
                     );
-                    match self
-                        .operational_sender
-                        .send(OperationalMessage::ModifiedLocalFile(util::path_to_string(
-                            relative_path,
-                        )?)) {
+                    match self.operational_sender.send(LocalEvent::ModifiedLocalFile(
+                        util::path_to_string(relative_path)?,
+                    )) {
                         Err(error) => {
                             log::error!(
                                 "[{}::{}] Fail to send operational message : {:?}",
@@ -303,7 +301,7 @@ impl LocalSync {
                 // Unknown file
                 match self
                     .operational_sender
-                    .send(OperationalMessage::NewLocalFile(util::path_to_string(
+                    .send(LocalEvent::NewLocalFile(util::path_to_string(
                         relative_path,
                     )?)) {
                     Err(error) => {
@@ -347,7 +345,7 @@ impl LocalSync {
 
                 match self
                     .operational_sender
-                    .send(OperationalMessage::DeletedLocalFile(relative_path.clone()))
+                    .send(LocalEvent::DeletedLocalFile(relative_path.clone()))
                 {
                     Err(error) => {
                         log::error!(
@@ -368,7 +366,7 @@ impl LocalSync {
 
 pub fn start_local_sync(
     context: &Context,
-    operational_sender: &Sender<OperationalMessage>,
+    operational_sender: &Sender<LocalEvent>,
 ) -> JoinHandle<Result<(), Error>> {
     let local_sync_context = context.clone();
     let local_sync_operational_sender = operational_sender.clone();
@@ -392,7 +390,7 @@ pub fn start_local_sync(
 
 pub fn start_local_watch(
     context: &Context,
-    operational_sender: &Sender<OperationalMessage>,
+    operational_sender: &Sender<LocalEvent>,
     stop_signal: &Arc<AtomicBool>,
     restart_signal: &Arc<AtomicBool>,
 ) -> Result<JoinHandle<Result<(), Error>>, Error> {

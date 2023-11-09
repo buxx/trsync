@@ -25,6 +25,8 @@ crossbeam-channel = "0.5"
 minidom = "0.14.0"
 itertools = "0.11.0"
 uuid = { version = "1.4.1", features = ["v4"] }
+strum = "0.25"
+strum_macros = "0.25"
 # Logging
 log = "0.4.13"
 env_logger = "0.9.0"
