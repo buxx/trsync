@@ -36,6 +36,7 @@ impl Executor for AbsentFromDiskExecutor {
         let content_path: PathBuf = state
             .path(self.content_id)
             .context(format!("Get content {} path", self.content_id))?
+            .context(format!("Expect content {} path", self.content_id))?
             .into();
         let absolute_path = self.workspace_folder.join(&content_path);
 

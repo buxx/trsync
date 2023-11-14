@@ -38,6 +38,7 @@ impl Executor for UpdatedOnDiskExecutor {
         let local_content_path = state
             .path(self.content_id)
             .context(format!("Get local content {} path", self.content_id))?
+            .context(format!("Expect local content {} path", self.content_id))?
             .to_path_buf();
         let remote_content = Content::from_remote(
             &tracim
@@ -49,6 +50,7 @@ impl Executor for UpdatedOnDiskExecutor {
             state
                 .path(parent_id)
                 .context(format!("Get parent {} path", parent_id))?
+                .context(format!("Expect parent {} path", parent_id))?
                 .to_path_buf()
                 .join(PathBuf::from(remote_content.file_name().to_string()))
         } else {

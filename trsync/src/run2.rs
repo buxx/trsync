@@ -1,22 +1,22 @@
 extern crate notify;
 use crate::context::Context as TrSyncContext;
 use crate::database::connection;
-use crate::event::local::LocalEvent;
+use crate::event::remote::RemoteEvent;
 use crate::event::Event;
-use crate::local::LocalWatcher;
+use crate::local::{DiskEvent, LocalWatcher};
+use crate::local2::reducer::LocalReceiverReducer;
 use crate::operation::Job;
 use crate::operation2::operator::Operator;
-use crate::remote::{RemoteEvent, RemoteWatcher};
+use crate::remote::RemoteWatcher;
 use crate::state::disk::DiskState;
 use crate::state::State;
 use crate::sync::local::{LocalChange, LocalSync};
 use crate::sync::remote::{RemoteChange, RemoteSync};
 use crate::sync::{ResolveMethod, StartupSyncResolver};
 use anyhow::{Context, Result};
-use crossbeam_channel::Sender as CrossbeamSender;
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::{fs, thread};
 
@@ -24,27 +24,28 @@ struct Runner {
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
-    activity_sender: Option<CrossbeamSender<Job>>,
+    activity_sender: Option<Sender<Job>>,
     operational_sender: Sender<Event>,
     operational_receiver: Receiver<Event>,
     remote_sender: Sender<RemoteEvent>,
     remote_receiver: Receiver<RemoteEvent>,
-    local_sender: Sender<LocalEvent>,
-    local_receiver: Receiver<LocalEvent>,
+    local_sender: Sender<DiskEvent>,
+    local_receiver_reducer: LocalReceiverReducer,
 }
 
 impl Runner {
     fn new(
         context: TrSyncContext,
         stop_signal: Arc<AtomicBool>,
-        activity_sender: Option<CrossbeamSender<Job>>,
+        activity_sender: Option<Sender<Job>>,
     ) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
-            channel();
+            unbounded();
         let (remote_sender, remote_receiver): (Sender<RemoteEvent>, Receiver<RemoteEvent>) =
-            channel();
-        let (local_sender, local_receiver): (Sender<LocalEvent>, Receiver<LocalEvent>) = channel();
+            unbounded();
+        let (local_sender, local_receiver): (Sender<DiskEvent>, Receiver<DiskEvent>) = unbounded();
+        let local_receiver_reducer = LocalReceiverReducer::new(local_receiver);
 
         // FIXME BS NOW : ensure_availability
 
@@ -58,7 +59,7 @@ impl Runner {
             remote_sender,
             remote_receiver,
             local_sender,
-            local_receiver,
+            local_receiver_reducer,
         }
     }
 
@@ -125,7 +126,7 @@ impl Runner {
         Ok(())
     }
 
-    fn sync(&self) -> Result<()> {
+    fn sync(&self) -> Result<Box<dyn State>> {
         // FIXME BS NOW : stocker les "Ignore Event" que génère les Executors
         let workspace_path = PathBuf::from(&self.context.folder_path);
         let remote_changes = self.remote_changes()?;
@@ -164,7 +165,7 @@ impl Runner {
                 .context(format!("Operate on local change {:?}", event_display))?
         }
 
-        Ok(())
+        Ok(state)
     }
 
     fn remote_changes(&self) -> Result<Vec<RemoteChange>> {
@@ -184,7 +185,7 @@ impl Runner {
             .context("Determine local changes")
     }
 
-    fn listen(&self) -> Result<()> {
+    fn listen(&mut self) -> Result<()> {
         self.listen_remote()?;
         self.listen_local()?;
         Ok(())
@@ -192,10 +193,14 @@ impl Runner {
 
     fn listen_remote(&self) -> Result<()> {
         let operational_sender = self.operational_sender.clone();
+        let remote_receiver = self.remote_receiver.clone();
 
         thread::spawn(move || {
-            while let Ok(remote_event) = self.remote_receiver.recv() {
-                if let Err(error) = operational_sender.send(Event::Remote(remote_event)) {
+            while let Ok(remote_event) = remote_receiver.recv() {
+                if operational_sender
+                    .send(Event::Remote(remote_event))
+                    .is_err()
+                {
                     log::info!("Terminate remote listener");
                 }
             }
@@ -204,12 +209,13 @@ impl Runner {
         Ok(())
     }
 
-    fn listen_local(&self) -> Result<()> {
+    fn listen_local(&mut self) -> Result<()> {
         let operational_sender = self.operational_sender.clone();
+        let mut local_receiver_reducer = self.local_receiver_reducer.clone();
 
         thread::spawn(move || {
-            while let Ok(local_event) = self.local_receiver.recv() {
-                if let Err(error) = operational_sender.send(Event::Local(local_event)) {
+            while let Ok(disk_event) = local_receiver_reducer.recv() {
+                if operational_sender.send(Event::Local(disk_event)).is_err() {
                     log::info!("Terminate locate listener");
                 }
             }
@@ -218,8 +224,22 @@ impl Runner {
         Ok(())
     }
 
-    fn operate(&self) -> Result<()> {
-        todo!()
+    fn operate(&self, mut state: Box<dyn State>) -> Result<()> {
+        let workspace_path = PathBuf::from(&self.context.folder_path);
+        let client = self
+            .context
+            .client()
+            .context("Create tracim client for operate")?;
+        let mut operator = Operator::new(&mut state, &workspace_path, Box::new(client));
+
+        while let Ok(event) = self.operational_receiver.recv() {
+            log::info!("Proceed event {:?}", &event);
+            let context_message = format!("Operate on event {:?}", &event);
+            operator.operate(event).context(context_message)?;
+        }
+
+        log::info!("Terminate operational listener");
+        Ok(())
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -232,14 +252,14 @@ impl Runner {
 
         // FIXME BS NOW : argh : il faut pouvoir recolter les events locaux et remote pendant la sync SANS etre pollué par les event généras par la sync
         self.watchers()?;
-        self.sync()?;
+        let state = self.sync()?;
 
         if self.context.exit_after_sync {
             return Ok(());
         }
 
         self.listen()?;
-        self.operate()?;
+        self.operate(state)?;
 
         Ok(())
     }
@@ -248,7 +268,7 @@ impl Runner {
 pub fn run(
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
-    activity_sender: Option<CrossbeamSender<Job>>,
+    activity_sender: Option<Sender<Job>>,
 ) -> Result<()> {
     let mut runner = Runner::new(context, stop_signal, activity_sender);
     runner.run().context("Run")?;

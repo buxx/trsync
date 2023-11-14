@@ -20,7 +20,7 @@ pub trait State {
     fn get(&self, id: ContentId) -> Result<Option<Content>>;
     fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>>;
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<ContentPath>;
+    fn path(&self, id: ContentId) -> Result<Option<ContentPath>>;
     // FIXME BS NOW : Iter
     // pub trait Trait {
     //     type Iter<'a>: Iterator<Item = &'a Content> + 'a
@@ -122,7 +122,7 @@ mod test {
         let state = build_memory_state(&raw_contents, None);
 
         // When
-        let path = state.path(ContentId(from_)).unwrap();
+        let path = state.path(ContentId(from_)).unwrap().unwrap();
 
         // Then
         let path_str = &Into::<PathBuf>::into(path).display().to_string();

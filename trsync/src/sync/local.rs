@@ -5,7 +5,7 @@ use rusqlite::{params, Connection};
 use trsync_core::instance::{ContentId, DiskTimestamp};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::util::last_modified_timestamp;
+use crate::util::{ignore_file, last_modified_timestamp};
 
 pub struct LocalSync {
     connection: Connection,
@@ -27,7 +27,7 @@ impl LocalSync {
         // Read from disk to see changes or new
         for entry in WalkDir::new(&self.workspace_path)
             .into_iter()
-            .filter_entry(|e| !self.ignore_entry(e))
+            .filter_entry(|e| !ignore_file(&e.path().to_path_buf()))
         {
             let entry_debug = format!("{:?}", &entry);
             let entry = entry.context(format!("Read disk entry {:?}", entry_debug))?;
@@ -68,24 +68,6 @@ impl LocalSync {
         Ok(changes)
     }
 
-    fn ignore_entry(&self, entry: &DirEntry) -> bool {
-        // TODO : patterns from config object
-        if let Some(file_name) = entry.path().file_name() {
-            if let Some(file_name_) = file_name.to_str() {
-                let file_name_as_str = file_name_.to_string();
-                if file_name_as_str.starts_with('.')
-                    || file_name_as_str.starts_with('~')
-                    || file_name_as_str.starts_with('#')
-                {
-                    return true;
-                }
-            }
-        }
-
-        // FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes
-        false
-    }
-
     fn change(&self, entry: &DirEntry) -> Result<Option<LocalChange>> {
         let absolute_path = entry.path().to_path_buf();
         let relative_path = absolute_path
@@ -109,13 +91,7 @@ impl LocalSync {
                         &relative_path.display()
                     ))?
             {
-                let content_id =
-                    self.previously_known_content_id(&relative_path)
-                        .context(format!(
-                            "Get previously content_id for {}",
-                            &relative_path.display()
-                        ))?;
-                Ok(Some(LocalChange::Updated(relative_path, content_id)))
+                Ok(Some(LocalChange::Updated(relative_path)))
             } else {
                 Ok(None)
             }
@@ -169,17 +145,13 @@ impl LocalSync {
 
         for row in self
             .connection
-            .prepare("SELECT relative_path, content_id FROM file")?
-            .query_map([], |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())))?
+            .prepare("SELECT relative_path FROM file")?
+            .query_map([], |row| Ok(row.get(0).unwrap()))?
         {
-            let (raw_relative_path, raw_content_id): (String, i32) =
-                row.context("Read raw relative_path from db")?;
+            let raw_relative_path: String = row.context("Read raw relative_path from db")?;
             let relative_path = PathBuf::from(raw_relative_path);
             if !on_disk.contains(&relative_path) {
-                changes.push(LocalChange::Disappear(
-                    relative_path,
-                    ContentId(raw_content_id),
-                ))
+                changes.push(LocalChange::Disappear(relative_path))
             }
         }
 
@@ -190,16 +162,16 @@ impl LocalSync {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum LocalChange {
     New(PathBuf),
-    Disappear(PathBuf, ContentId),
-    Updated(PathBuf, ContentId),
+    Disappear(PathBuf),
+    Updated(PathBuf),
 }
 
 impl LocalChange {
     pub fn path(&self) -> PathBuf {
         match self {
-            LocalChange::New(path)
-            | LocalChange::Disappear(path, _)
-            | LocalChange::Updated(path, _) => path.clone(),
+            LocalChange::New(path) | LocalChange::Disappear(path) | LocalChange::Updated(path) => {
+                path.clone()
+            }
         }
     }
 }
@@ -281,10 +253,7 @@ mod test {
         let state = local_sync.changes().unwrap();
 
         // Then
-        assert_eq!(
-            state,
-            vec![LocalChange::Updated(PathBuf::from("a.txt"), ContentId(1))]
-        )
+        assert_eq!(state, vec![LocalChange::Updated(PathBuf::from("a.txt"))])
     }
 
     #[test]
@@ -301,9 +270,6 @@ mod test {
         let state = local_sync.changes().unwrap();
 
         // Then
-        assert_eq!(
-            state,
-            vec![LocalChange::Disappear(PathBuf::from("a.txt"), ContentId(1))]
-        )
+        assert_eq!(state, vec![LocalChange::Disappear(PathBuf::from("a.txt"))])
     }
 }

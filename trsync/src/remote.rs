@@ -1,17 +1,18 @@
-use crate::database::Database;
 use crate::error::Error;
+use crate::{database::Database, event::remote::RemoteEvent};
 use async_std::task;
 use bytes::Bytes;
+use crossbeam_channel::Sender;
 use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::Sender,
         Arc,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+use trsync_core::instance::ContentId as ContentId2;
 use trsync_core::types::{ContentId, RemoteEventType, RevisionId};
 
 use futures_util::StreamExt;
@@ -32,13 +33,13 @@ use crate::{
 const LAST_ACTIVITY_TIMEOUT: u64 = 60;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RemoteEvent {
+pub struct TracimLiveEvent {
     event_id: i32,
     event_type: String,
     fields: Value,
 }
 
-impl RemoteEvent {
+impl TracimLiveEvent {
     pub fn from_str(json_as_str: &str) -> Result<Self, serde_json::Error> {
         let event: Self = match serde_json::from_str(json_as_str) {
             Ok(event) => event,
@@ -135,7 +136,7 @@ impl RemoteWatcher {
             for line in str::from_utf8(lines)?.lines() {
                 if line.starts_with("data: ") {
                     let json_as_str = &line[6..];
-                    match RemoteEvent::from_str(json_as_str) {
+                    match TracimLiveEvent::from_str(json_as_str) {
                         Ok(remote_event) => self.proceed_remote_event(remote_event)?,
                         Err(error) => {
                             log::error!(
@@ -152,7 +153,7 @@ impl RemoteWatcher {
         Ok(())
     }
 
-    fn proceed_remote_event(&self, remote_event: RemoteEvent) -> Result<(), Error> {
+    fn proceed_remote_event(&self, remote_event: TracimLiveEvent) -> Result<(), Error> {
         log::debug!("Proceed remote event {:?}", remote_event);
 
         if RemoteEventType::from_str(&remote_event.event_type.as_str()).is_some() {
@@ -181,7 +182,7 @@ impl RemoteWatcher {
                 if self.context.workspace_id.0 != workspace_id as i32 {
                     // If content exist locally that means content has change its workspace id
                     if DatabaseOperation::new(&self.connection).content_id_is_known(content_id)? {
-                        Some(OperationalMessage::DeletedRemoteFile(content_id))
+                        Some(RemoteEvent::Deleted(ContentId2(content_id)))
                     } else {
                         log::debug!("Remote event is not for current workspace, skip");
                         None
@@ -196,21 +197,17 @@ impl RemoteWatcher {
                     let message = match event_type {
                         "content.modified.html-document"
                         | "content.modified.file"
-                        | "content.modified.folder" => {
-                            OperationalMessage::ModifiedRemoteFile(content_id)
-                        }
+                        | "content.modified.folder" => RemoteEvent::Updated(ContentId2(content_id)),
                         "content.created.html-document"
                         | "content.created.file"
-                        | "content.created.folder" => OperationalMessage::NewRemoteFile(content_id),
+                        | "content.created.folder" => RemoteEvent::Created(ContentId2(content_id)),
                         "content.deleted.html-document"
                         | "content.deleted.file"
-                        | "content.deleted.folder" => {
-                            OperationalMessage::DeletedRemoteFile(content_id)
-                        }
+                        | "content.deleted.folder" => RemoteEvent::Deleted(ContentId2(content_id)),
                         "content.undeleted.html-document"
                         | "content.undeleted.file"
                         | "content.undeleted.folder" => {
-                            OperationalMessage::NewRemoteFile(content_id)
+                            RemoteEvent::Created(ContentId2(content_id))
                         }
                         _ => {
                             return Err(Error::UnexpectedError(format!(
@@ -417,35 +414,35 @@ pub fn start_remote_sync(
     })
 }
 
-pub fn start_remote_watch(
-    context: &Context,
-    operational_sender: &Sender<OperationalMessage>,
-    stop_signal: &Arc<AtomicBool>,
-    restart_signal: &Arc<AtomicBool>,
-) -> Result<JoinHandle<Result<(), Error>>, Error> {
-    let exit_after_sync = context.exit_after_sync;
-    let remote_watcher_context = context.clone();
-    let remote_watcher_stop_signal = stop_signal.clone();
-    let remote_watcher_restart_signal = restart_signal.clone();
-    let remote_watcher_operational_sender = operational_sender.clone();
+// pub fn start_remote_watch(
+//     context: &Context,
+//     operational_sender: &Sender<OperationalMessage>,
+//     stop_signal: &Arc<AtomicBool>,
+//     restart_signal: &Arc<AtomicBool>,
+// ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+//     let exit_after_sync = context.exit_after_sync;
+//     let remote_watcher_context = context.clone();
+//     let remote_watcher_stop_signal = stop_signal.clone();
+//     let remote_watcher_restart_signal = restart_signal.clone();
+//     let remote_watcher_operational_sender = operational_sender.clone();
 
-    Ok(thread::spawn(move || {
-        if !exit_after_sync {
-            Database::new(remote_watcher_context.database_path.clone()).with_new_connection(
-                |connection| {
-                    let mut remote_watcher = RemoteWatcher::new(
-                        connection,
-                        remote_watcher_context,
-                        remote_watcher_stop_signal,
-                        remote_watcher_restart_signal,
-                        remote_watcher_operational_sender,
-                    );
-                    Ok(remote_watcher.listen()?)
-                },
-            )?;
-            Ok(())
-        } else {
-            Ok(())
-        }
-    }))
-}
+//     Ok(thread::spawn(move || {
+//         if !exit_after_sync {
+//             Database::new(remote_watcher_context.database_path.clone()).with_new_connection(
+//                 |connection| {
+//                     let mut remote_watcher = RemoteWatcher::new(
+//                         connection,
+//                         remote_watcher_context,
+//                         remote_watcher_stop_signal,
+//                         remote_watcher_restart_signal,
+//                         remote_watcher_operational_sender,
+//                     );
+//                     Ok(remote_watcher.listen()?)
+//                 },
+//             )?;
+//             Ok(())
+//         } else {
+//             Ok(())
+//         }
+//     }))
+// }

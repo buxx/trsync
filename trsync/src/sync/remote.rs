@@ -52,6 +52,10 @@ impl RemoteSync {
                     "Determine path for remotely modified content {}",
                     content.id()
                 ))?
+                .context(format!(
+                    "Expect path for remotely modified content {}",
+                    content.id()
+                ))?
                 .to_path_buf();
             if self.previously_known(content.id()).context(format!(
                 "Determine if content {} is previously known",

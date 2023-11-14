@@ -54,7 +54,8 @@ impl State for MemoryState {
         for content in self.contents.values() {
             let content_path = self
                 .path(content.id())
-                .context(format!("Get par for content {}", content.id()))?;
+                .context(format!("Get par for content {}", content.id()))?
+                .context(format!("Expect par for content {}", content.id()))?;
             if content_path.to_path_buf() == path {
                 return Ok(Some(content.id()));
             }
@@ -64,7 +65,7 @@ impl State for MemoryState {
     }
 
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<ContentPath> {
+    fn path(&self, id: ContentId) -> Result<Option<ContentPath>> {
         let content = self
             .contents
             .get(&id)
@@ -81,7 +82,7 @@ impl State for MemoryState {
             current = parent;
         }
 
-        Ok(ContentPath::new(parts))
+        Ok(Some(ContentPath::new(parts)))
     }
 
     // FIXME BS NOW : Iter

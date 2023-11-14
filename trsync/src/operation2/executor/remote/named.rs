@@ -16,29 +16,47 @@ use crate::{
 
 pub struct NamedOnRemoteExecutor {
     workspace_folder: PathBuf,
-    content_id: ContentId,
-    new_path: PathBuf,
+    previous_db_path: PathBuf,
+    after_disk_path: PathBuf,
 }
 
 impl NamedOnRemoteExecutor {
-    pub fn new(workspace_folder: PathBuf, content_id: ContentId, new_path: PathBuf) -> Self {
+    pub fn new(
+        workspace_folder: PathBuf,
+        previous_db_path: PathBuf,
+        after_disk_path: PathBuf,
+    ) -> Self {
         Self {
             workspace_folder,
-            content_id,
-            new_path,
+            previous_db_path,
+            after_disk_path,
         }
     }
 
+    fn content_id(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+        state
+            .content_id_for_path(self.previous_db_path.clone())
+            .context(format!(
+                "Get content_id for {}",
+                self.previous_db_path.display()
+            ))
+    }
+
     fn before_absolute_path(&self, state: &Box<dyn State>) -> Result<PathBuf> {
+        let content_id = self.content_id(state)?.context(format!(
+            "Path {} must match to a content_id",
+            self.previous_db_path.display()
+        ))?;
         let content_path = state
-            .path(self.content_id)
-            .context(format!("Get content {} path", self.content_id))?
+            .path(content_id)
+            .context(format!("Get content {} path", content_id))?
+            .context(format!("Expect content {} path", content_id))?
             .to_path_buf();
         Ok(self.workspace_folder.join(content_path))
     }
 
     fn after_absolute_path(&self) -> Result<PathBuf> {
-        Ok(self.workspace_folder.join(&self.new_path))
+        Ok(self.workspace_folder.join(&self.after_disk_path))
     }
 
     fn after_file_name(&self) -> Result<ContentFileName> {
@@ -60,23 +78,31 @@ impl NamedOnRemoteExecutor {
     }
 
     fn before_file_name(&self, state: &Box<dyn State>) -> Result<ContentFileName> {
+        let content_id = self.content_id(state)?.context(format!(
+            "Path {} must match to a content_id",
+            self.previous_db_path.display()
+        ))?;
         Ok(state
-            .get(self.content_id)?
-            .context(format!("Get content {}", self.content_id))?
+            .get(content_id)?
+            .context(format!("Get content {}", content_id))?
             .file_name()
             .clone())
     }
 
     fn before_revision_id(&self, state: &Box<dyn State>) -> Result<RevisionId> {
+        let content_id = self.content_id(state)?.context(format!(
+            "Path {} must match to a content_id",
+            self.previous_db_path.display()
+        ))?;
         Ok(state
-            .get(self.content_id)?
-            .context(format!("Get content {}", self.content_id))?
+            .get(content_id)?
+            .context(format!("Get content {}", content_id))?
             .revision_id()
             .clone())
     }
 
     fn after_parent(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
-        if let Some(parent_path) = self.new_path.parent() {
+        if let Some(parent_path) = self.after_disk_path.parent() {
             return state
                 .content_id_for_path(parent_path.to_path_buf())
                 .context(format!("Search content for path {}", parent_path.display()))
@@ -118,6 +144,10 @@ impl Executor for NamedOnRemoteExecutor {
         let before_content_type = self.before_content_type(state)?;
         let after_content_type = self.after_content_type(state)?;
         let mut revision_id = self.before_revision_id(state)?;
+        let content_id = self.content_id(state)?.context(format!(
+            "Path {} must match to a content_id",
+            self.previous_db_path.display()
+        ))?;
 
         if before_content_type != after_content_type {
             todo!()
@@ -125,12 +155,12 @@ impl Executor for NamedOnRemoteExecutor {
 
         if before_file_name != after_file_name {
             revision_id = tracim
-                .set_label(self.content_id, after_content_type, after_file_name.clone())
-                .context(format!("Set new label on remote for {}", self.content_id))?;
+                .set_label(content_id, after_content_type, after_file_name.clone())
+                .context(format!("Set new label on remote for {}", content_id))?;
         }
 
         if after_absolute_path.parent() != before_absolute_path.parent() {
-            revision_id = tracim.set_parent(self.content_id, after_content_type, after_parent)?;
+            revision_id = tracim.set_parent(content_id, after_content_type, after_parent)?;
         }
 
         let last_modified = self.last_modified().context(format!(
@@ -139,7 +169,7 @@ impl Executor for NamedOnRemoteExecutor {
         ))?;
 
         Ok(StateModification::Update(
-            self.content_id,
+            content_id,
             after_file_name,
             revision_id,
             after_parent,

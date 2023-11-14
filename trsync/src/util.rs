@@ -184,3 +184,35 @@ pub fn extract_html_body(content: &str) -> Result<String, String> {
     // If body node not found, consider given content is body content
     Ok(content.to_string())
 }
+
+pub trait TryRemove<T> {
+    fn try_remove(&mut self, index: usize) -> Option<T>;
+}
+
+impl<T> TryRemove<T> for Vec<T> {
+    fn try_remove(&mut self, index: usize) -> Option<T> {
+        if self.len() > index {
+            Some(self.remove(index))
+        } else {
+            None
+        }
+    }
+}
+
+pub fn ignore_file(relative_path: &PathBuf) -> bool {
+    // TODO : patterns from config object
+    if let Some(file_name) = relative_path.file_name() {
+        if let Some(file_name_) = file_name.to_str() {
+            let file_name_as_str = file_name_.to_string();
+            if file_name_as_str.starts_with('.')
+                || file_name_as_str.starts_with('~')
+                || file_name_as_str.starts_with('#')
+            {
+                return true;
+            }
+        }
+    }
+
+    // FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes
+    false
+}

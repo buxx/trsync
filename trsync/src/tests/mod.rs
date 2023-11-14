@@ -141,7 +141,7 @@ pub fn state_files(state: &Box<dyn State>) -> Vec<String> {
         .contents()
         .unwrap()
         .into_iter()
-        .map(|content| state.path(content.id()).unwrap())
+        .map(|content| state.path(content.id()).unwrap().unwrap())
         .map(|path| path.to_string())
         .collect::<Vec<String>>()
 }

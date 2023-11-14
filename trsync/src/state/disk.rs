@@ -133,12 +133,12 @@ impl State for DiskState {
         }
     }
 
-    // FIXME: Option<ContentPath> instead ContentPath for cas where ContentId unknown
-    fn path(&self, id: ContentId) -> Result<ContentPath> {
-        let content = self
-            .get(id)
-            .context(format!("Get content {}", id))?
-            .expect("See FIXME (return None if not content)");
+    // FIXME BS NOW: Option<ContentPath> instead ContentPath for cas where ContentId unknown
+    fn path(&self, id: ContentId) -> Result<Option<ContentPath>> {
+        let content = match self.get(id).context(format!("Get content {}", id))? {
+            Some(content) => content,
+            None => return Ok(None),
+        };
         let mut parts = vec![content.clone()];
 
         let mut current = content;
@@ -151,7 +151,7 @@ impl State for DiskState {
             current = parent;
         }
 
-        Ok(ContentPath::new(parts))
+        Ok(Some(ContentPath::new(parts)))
     }
 
     // FIXME BS NOW : Iter
@@ -249,6 +249,7 @@ impl State for DiskState {
         let new_path = if let Some(parent_path) = self
             .path(content_id)
             .context(format!("Get content {} path", content_id))?
+            .context(format!("Expect content {} path", content_id))?
             .to_path_buf()
             .parent()
         {
@@ -349,7 +350,7 @@ mod test {
         insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
-        let path = state.path(ContentId(1)).unwrap();
+        let path = state.path(ContentId(1)).unwrap().unwrap();
 
         // Then
         assert_eq!(path.to_string(), "a.txt".to_string());
@@ -365,7 +366,7 @@ mod test {
         insert_content(&connection(&tmpdir_), "a.txt", 3, 4, Some(1), 0);
 
         // When
-        let path = state.path(ContentId(3)).unwrap();
+        let path = state.path(ContentId(3)).unwrap().unwrap();
 
         // Then
         assert_eq!(path.to_string(), "Folder/a.txt".to_string());

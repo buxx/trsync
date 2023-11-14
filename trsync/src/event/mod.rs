@@ -1,6 +1,10 @@
-use crate::sync::{local::LocalChange, remote::RemoteChange};
+use crate::{
+    local::DiskEvent,
+    local2::reducer::DiskEventWrap,
+    sync::{local::LocalChange, remote::RemoteChange},
+};
 
-use self::{local::LocalEvent, remote::RemoteEvent};
+use self::remote::RemoteEvent;
 
 pub mod local;
 pub mod remote;
@@ -8,7 +12,7 @@ pub mod remote;
 #[derive(Debug)]
 pub enum Event {
     Remote(RemoteEvent),
-    Local(LocalEvent),
+    Local(DiskEventWrap),
 }
 
 impl From<RemoteChange> for Event {
@@ -26,11 +30,15 @@ impl From<RemoteChange> for Event {
 impl From<LocalChange> for Event {
     fn from(value: LocalChange) -> Self {
         match value {
-            LocalChange::New(path) => Self::Local(LocalEvent::Created(path)),
-            LocalChange::Disappear(path, content_id) => {
-                Self::Local(LocalEvent::Deleted(content_id))
+            LocalChange::New(path) => {
+                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Created(path)))
             }
-            LocalChange::Updated(path, content_id) => Self::Local(LocalEvent::Modified(content_id)),
+            LocalChange::Disappear(path) => {
+                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Deleted(path)))
+            }
+            LocalChange::Updated(path) => {
+                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Modified(path)))
+            }
         }
     }
 }

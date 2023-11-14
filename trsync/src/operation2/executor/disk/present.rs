@@ -45,6 +45,7 @@ impl Executor for PresentOnDiskExecutor {
             state
                 .path(parent_id)
                 .context(format!("Get parent {} path", parent_id))?
+                .context(format!("Expect parent {} path", parent_id))?
                 .to_path_buf()
                 .join(PathBuf::from(content.file_name().to_string()))
         } else {

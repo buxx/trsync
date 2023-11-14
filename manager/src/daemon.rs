@@ -208,7 +208,7 @@ impl Daemon {
         let thread_stop_signal = stop_signal.clone();
         let thread_activity_sender = self.activity_sender.clone();
         thread::spawn(move || {
-            trsync::run::run(
+            trsync::run2::run(
                 trsync_context,
                 thread_stop_signal,
                 Some(thread_activity_sender),

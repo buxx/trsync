@@ -308,7 +308,6 @@ impl Tracim {
 
     fn response_error(&self, response: Response) -> Result<TracimClientError, TracimClientError> {
         let content_value = response.json::<Value>()?;
-        dbg!(&content_value);
         let error_code =
             content_value["code"]
                 .as_u64()
@@ -318,7 +317,6 @@ impl Tracim {
                 ))?;
 
         if let Some(error) = TracimClientError::from_code(error_code) {
-            dbg!(&error);
             return Ok(error);
         }
 

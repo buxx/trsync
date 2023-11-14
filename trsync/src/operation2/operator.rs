@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use crate::{
-    event::{local::LocalEvent, remote::RemoteEvent, Event},
+    event::{remote::RemoteEvent, Event},
+    local::DiskEvent,
+    local2::reducer::DiskEventWrap,
     state::State,
 };
 use anyhow::{Context, Result};
@@ -44,7 +46,7 @@ impl<'a> Operator<'a> {
         // FIXME BS : il faut que l'appel au dessus choisisse quoi faire en cas d'erreur
         // En gros, ressayer si c'est un problème reseau, etc
         match self
-            .executor(event)
+            .executor(event)?
             .execute(self.state, &self.tracim)
             .context("Run executor")
         {
@@ -55,41 +57,54 @@ impl<'a> Operator<'a> {
         Ok(())
     }
 
-    fn executor(&self, event: Event) -> Box<dyn Executor> {
-        match event {
+    fn executor(&self, event: Event) -> Result<Box<dyn Executor>> {
+        Ok(match event {
             Event::Remote(event) => match event {
                 RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(id)),
                 RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(id)),
                 RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(id, true)),
                 RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(id, false)),
             },
-            Event::Local(event) => match event {
-                LocalEvent::Deleted(id) => Box::new(self.absent_from_remote_executor(id)),
-                LocalEvent::Created(path) => Box::new(self.created_on_remote_executor(path)),
-                LocalEvent::Modified(id) => Box::new(self.modified_on_remote_executor(id)),
-                LocalEvent::Renamed(id, path) => Box::new(self.named_on_remote_executor(id, path)),
+            // FIXME BS NOW : add test on case where db_path and disk_path are not the same
+            Event::Local(disk_event) => match disk_event {
+                DiskEventWrap(db_path, DiskEvent::Deleted(_)) => {
+                    Box::new(self.absent_from_remote_executor(db_path))
+                }
+                DiskEventWrap(_, DiskEvent::Created(disk_path)) => {
+                    Box::new(self.created_on_remote_executor(disk_path))
+                }
+                DiskEventWrap(db_path, DiskEvent::Modified(disk_path)) => {
+                    Box::new(self.modified_on_remote_executor(db_path, disk_path))
+                }
+                DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => {
+                    Box::new(self.named_on_remote_executor(db_path, after_disk_path))
+                }
             },
-        }
+        })
     }
 
     fn absent_from_disk_executor(&self, content_id: ContentId) -> AbsentFromDiskExecutor {
         AbsentFromDiskExecutor::new(self.workspace_folder.clone(), content_id)
     }
 
-    fn absent_from_remote_executor(&self, content_id: ContentId) -> AbsentFromRemoteExecutor {
-        AbsentFromRemoteExecutor::new(content_id)
+    fn absent_from_remote_executor(&self, db_path: PathBuf) -> AbsentFromRemoteExecutor {
+        AbsentFromRemoteExecutor::new(db_path)
     }
 
     fn present_on_disk_executor(&self, content_id: ContentId) -> PresentOnDiskExecutor {
         PresentOnDiskExecutor::new(self.workspace_folder.clone(), content_id)
     }
 
-    fn created_on_remote_executor(&self, path: PathBuf) -> CreatedOnRemoteExecutor {
-        CreatedOnRemoteExecutor::new(self.workspace_folder.clone(), path)
+    fn created_on_remote_executor(&self, disk_path: PathBuf) -> CreatedOnRemoteExecutor {
+        CreatedOnRemoteExecutor::new(self.workspace_folder.clone(), disk_path)
     }
 
-    fn modified_on_remote_executor(&self, content_id: ContentId) -> ModifiedOnRemoteExecutor {
-        ModifiedOnRemoteExecutor::new(self.workspace_folder.clone(), content_id)
+    fn modified_on_remote_executor(
+        &self,
+        db_path: PathBuf,
+        disk_path: PathBuf,
+    ) -> ModifiedOnRemoteExecutor {
+        ModifiedOnRemoteExecutor::new(self.workspace_folder.clone(), db_path, disk_path)
     }
 
     fn updated_on_disk_executor(
@@ -102,15 +117,20 @@ impl<'a> Operator<'a> {
 
     fn named_on_remote_executor(
         &self,
-        content_id: ContentId,
-        new_path: PathBuf,
+        previous_db_path: PathBuf,
+        after_disk_path: PathBuf,
     ) -> NamedOnRemoteExecutor {
-        NamedOnRemoteExecutor::new(self.workspace_folder.clone(), content_id, new_path)
+        NamedOnRemoteExecutor::new(
+            self.workspace_folder.clone(),
+            previous_db_path,
+            after_disk_path,
+        )
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::local2::reducer::DiskEventWrap;
     use mockall::predicate::*;
     use trsync_core::client::MockTracimClient;
     use trsync_core::instance::ContentId;
@@ -272,7 +292,7 @@ mod test {
     #[case(
         vec![(1, 1, "a.txt", None)],
         vec![],
-        Event::Local(LocalEvent::Deleted(ContentId(1))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Deleted(PathBuf::from("a.txt")))),
         false,
         vec![MockTracimClientCase::TrashOk(ContentId(1))],
         vec![],
@@ -280,7 +300,7 @@ mod test {
     #[case(
         vec![(1, 1, "a.txt", None), (2, 2, "b.txt", None)],
         vec![],
-        Event::Local(LocalEvent::Deleted(ContentId(1))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Deleted(PathBuf::from("a.txt")))),
         false,
         vec![MockTracimClientCase::TrashOk(ContentId(1))],
         vec!["b.txt"],
@@ -289,17 +309,16 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", Some(1))],
         vec![],
-        Event::Local(LocalEvent::Deleted(ContentId(2))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder/a.txt"), DiskEvent::Deleted(PathBuf::from("Folder/a.txt")))),
         false,
         vec![MockTracimClientCase::TrashOk(ContentId(2))],
         vec!["Folder"],
     )]
-    // // Delete a folder containing a file
+    // Delete a folder containing a file
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", Some(1))],
         vec![],
-        Event::Local(LocalEvent::Deleted(ContentId(1))),
-        false,
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder"), DiskEvent::Deleted(PathBuf::from("Folder")))),        false,
         vec![MockTracimClientCase::TrashOk(ContentId(1))],
         vec![],
     )]
@@ -308,7 +327,7 @@ mod test {
     #[case(
         vec![],
         vec![OperateOnDisk::Create("a.txt".to_string())],
-        Event::Local(LocalEvent::Created(PathBuf::from("a.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Created(PathBuf::from("a.txt")))),
         false,
         vec![
             MockTracimClientCase::CreateOk(("a.txt".to_string(), None, 1)),
@@ -321,7 +340,7 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None)],
         vec![OperateOnDisk::Create("Folder/a.txt".to_string())],
-        Event::Local(LocalEvent::Created(PathBuf::from("Folder/a.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder/a.txt"), DiskEvent::Created(PathBuf::from("Folder/a.txt")))),
         false,
         vec![
             MockTracimClientCase::CreateOk(("Folder/a.txt".to_string(), Some(1), 2)),
@@ -334,7 +353,7 @@ mod test {
     #[case(
         vec![],
         vec![OperateOnDisk::Create("Folder".to_string())],
-        Event::Local(LocalEvent::Created(PathBuf::from("Folder"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder"), DiskEvent::Created(PathBuf::from("Folder")))),
         false,
         vec![
             MockTracimClientCase::CreateOk(("Folder".to_string(), None, 1)),
@@ -347,7 +366,7 @@ mod test {
     #[case(
         vec![(1, 1, "a.txt", None)],
         vec![],
-        Event::Local(LocalEvent::Modified(ContentId(1))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Modified(PathBuf::from("a.txt")))),
         false,
         vec![
             MockTracimClientCase::FillRemoteOk(1, "a.txt".to_string(), 2),
@@ -359,7 +378,7 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", Some(1))],
         vec![],
-        Event::Local(LocalEvent::Modified(ContentId(2))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder/a.txt"), DiskEvent::Modified(PathBuf::from("Folder/a.txt")))),
         false,
         vec![
             MockTracimClientCase::FillRemoteOk(2, "Folder/a.txt".to_string(), 3),
@@ -372,7 +391,7 @@ mod test {
     #[case(
         vec![(1, 1, "a.txt", None)],
         vec![OperateOnDisk::Rename("a.txt".to_string(), "b.txt".to_string())],
-        Event::Local(LocalEvent::Renamed(ContentId(1), PathBuf::from("b.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Renamed(PathBuf::from("a.txt"), PathBuf::from("b.txt")))),
         false,
         vec![
             MockTracimClientCase::SetLabel(1, "b.txt".to_string(), 2),
@@ -383,7 +402,7 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", Some(1))],
         vec![OperateOnDisk::Rename("Folder/a.txt".to_string(), "Folder/b.txt".to_string())],
-        Event::Local(LocalEvent::Renamed(ContentId(2), PathBuf::from("Folder/b.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("Folder/a.txt"), DiskEvent::Renamed(PathBuf::from("Folder/a.txt"), PathBuf::from("Folder/b.txt")))),
         false,
         vec![
             MockTracimClientCase::SetLabel(2, "b.txt".to_string(), 3),
@@ -394,7 +413,7 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", None)],
         vec![OperateOnDisk::Rename("a.txt".to_string(), "Folder/a.txt".to_string())],
-        Event::Local(LocalEvent::Renamed(ContentId(2), PathBuf::from("Folder/a.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Renamed(PathBuf::from("a.txt"), PathBuf::from("Folder/a.txt")))),
         false,
         vec![
             MockTracimClientCase::SetParent(2, "a.txt".to_string(), Some(1), 3),
@@ -405,7 +424,7 @@ mod test {
     #[case(
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", None)],
         vec![OperateOnDisk::Rename("a.txt".to_string(), "Folder/b.txt".to_string())],
-        Event::Local(LocalEvent::Renamed(ContentId(2), PathBuf::from("Folder/b.txt"))),
+        Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Renamed(PathBuf::from("a.txt"), PathBuf::from("Folder/b.txt")))),
         false,
         vec![
             MockTracimClientCase::SetLabel(2, "b.txt".to_string(), 3),
