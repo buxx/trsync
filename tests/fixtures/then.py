@@ -107,9 +107,8 @@ def workspace_contains_folder(
     container_port: int,
 ):
     def check():
-        assert path in list(
-            get_workspace_listing(container_port, user, workspace).keys()
-        )
+        listing = list(get_workspace_listing(container_port, user, workspace).keys())
+        assert path in listing, f"'{path}' not found in remote ('{listing}')"
 
     check_until(check)
 

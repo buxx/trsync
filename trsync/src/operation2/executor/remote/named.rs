@@ -9,6 +9,7 @@ use trsync_core::{
 };
 
 use crate::{
+    event::{remote::RemoteEvent, Event},
     operation2::executor::Executor,
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
@@ -135,6 +136,7 @@ impl Executor for NamedOnRemoteExecutor {
         &self,
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let before_absolute_path = self.before_absolute_path(state)?;
         let after_absolute_path = self.after_absolute_path()?;
@@ -149,6 +151,9 @@ impl Executor for NamedOnRemoteExecutor {
             self.previous_db_path.display()
         ))?;
 
+        // FIXME BS NOW : before content type ne peut pas se base sur le path before il n'existe plus ...
+        // il faut le stocker en bdd :S
+        dbg!((&before_content_type, &after_content_type));
         if before_content_type != after_content_type {
             todo!()
         }
@@ -157,10 +162,12 @@ impl Executor for NamedOnRemoteExecutor {
             revision_id = tracim
                 .set_label(content_id, after_content_type, after_file_name.clone())
                 .context(format!("Set new label on remote for {}", content_id))?;
+            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }
 
         if after_absolute_path.parent() != before_absolute_path.parent() {
             revision_id = tracim.set_parent(content_id, after_content_type, after_parent)?;
+            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }
 
         let last_modified = self.last_modified().context(format!(

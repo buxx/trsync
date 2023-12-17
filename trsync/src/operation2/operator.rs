@@ -27,6 +27,7 @@ pub struct Operator<'a> {
     state: &'a mut Box<dyn State>,
     workspace_folder: &'a PathBuf,
     tracim: Box<dyn TracimClient>,
+    ignore_events: Vec<Event>,
 }
 
 impl<'a> Operator<'a> {
@@ -39,15 +40,22 @@ impl<'a> Operator<'a> {
             state,
             workspace_folder,
             tracim,
+            ignore_events: vec![],
         }
     }
 
     pub fn operate(&mut self, event: Event) -> Result<()> {
+        if self.ignore_events.contains(&event) {
+            self.ignore_events.retain(|x| *x != event);
+            log::info!("Ignore event (planned ignore) : {:?}", &event);
+            return Ok(());
+        };
+
         // FIXME BS : il faut que l'appel au dessus choisisse quoi faire en cas d'erreur
         // En gros, ressayer si c'est un problème reseau, etc
         match self
             .executor(event)?
-            .execute(self.state, &self.tracim)
+            .execute(self.state, &self.tracim, &mut self.ignore_events)
             .context("Run executor")
         {
             Ok(state_change) => self.state.change(state_change)?,

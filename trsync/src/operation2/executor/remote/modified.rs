@@ -10,6 +10,7 @@ use trsync_core::{
 };
 
 use crate::{
+    event::{remote::RemoteEvent, Event},
     operation2::executor::Executor,
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
@@ -73,6 +74,7 @@ impl Executor for ModifiedOnRemoteExecutor {
         &self,
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let absolute_path = self.absolute_path(state)?;
         let content_type = self.content_type(state)?;
@@ -89,6 +91,7 @@ impl Executor for ModifiedOnRemoteExecutor {
                     content_id,
                     &absolute_path.display(),
                 ))?;
+            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }
 
         let content = Content::from_remote(

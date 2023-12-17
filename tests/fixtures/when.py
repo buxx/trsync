@@ -34,7 +34,8 @@ def start_sync(
     tmp_path: Path,
     container_port: int,
 ):
-    with open(tmp_path / "trsync.log", "w+") as trsync_logs:
+    log_path = os.environ.get("TRSYNC_LOG_PATH", tmp_path / "trsync.log")
+    with open(log_path, "w+") as trsync_logs:
         execute_trsync(
             container_port=container_port,
             folder=workspace.folder(tmp_path),

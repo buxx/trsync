@@ -8,6 +8,9 @@ use trsync_core::{
 };
 
 use crate::{
+    event::Event,
+    local::DiskEvent,
+    local2::reducer::DiskEventWrap,
     operation2::executor::Executor,
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
@@ -34,6 +37,7 @@ impl Executor for UpdatedOnDiskExecutor {
         &self,
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let local_content_path = state
             .path(self.content_id)
@@ -56,14 +60,19 @@ impl Executor for UpdatedOnDiskExecutor {
         } else {
             PathBuf::from(remote_content.file_name().to_string())
         };
-        let previous_absolute_path = self.workspace_folder.join(local_content_path);
-        let new_absolute_path = self.workspace_folder.join(remote_content_path);
+        let previous_absolute_path = self.workspace_folder.join(&local_content_path);
+        let new_absolute_path = self.workspace_folder.join(&remote_content_path);
 
         fs::rename(&previous_absolute_path, &new_absolute_path).context(format!(
             "Move {} to {}",
             previous_absolute_path.display(),
             new_absolute_path.display()
         ))?;
+
+        ignore_events.push(Event::Local(DiskEventWrap::new(
+            local_content_path.clone(),
+            DiskEvent::Renamed(local_content_path.clone(), remote_content_path.clone()),
+        )));
 
         if self.download {
             tracim
@@ -77,6 +86,11 @@ impl Executor for UpdatedOnDiskExecutor {
                     new_absolute_path.display(),
                     self.content_id
                 ))?;
+
+            ignore_events.push(Event::Local(DiskEventWrap::new(
+                local_content_path.clone(),
+                DiskEvent::Modified(local_content_path.clone()),
+            )))
         }
 
         let disk_timestamp = DiskTimestamp(

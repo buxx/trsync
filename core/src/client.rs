@@ -297,11 +297,11 @@ impl Tracim {
             value.clone(),
         ))?;
         let raw_revision_id =
-            data["revision_id"]
+            data["current_revision_id"]
                 .as_i64()
                 .ok_or(TracimClientError::InvalidResponse(
-                    "Response revision_id is not an integer".to_string(),
-                    data["revision_id"].clone(),
+                    "Response current_revision_id is not an integer".to_string(),
+                    data["current_revision_id"].clone(),
                 ))?;
         Ok(RevisionId(raw_revision_id as i32))
     }
@@ -358,7 +358,7 @@ impl Tracim {
         type_: ContentType,
         data: Map<String, Value>,
     ) -> Result<RevisionId, TracimClientError> {
-        let url = format!("{}/{}", type_.url_prefix(), content_id);
+        let url = self.workspace_url(&format!("{}/{}", type_.url_prefix(), content_id));
         let mut data = data.clone();
 
         // Be compatible with Tracim which not have this https://github.com/tracim/tracim/pull/5864

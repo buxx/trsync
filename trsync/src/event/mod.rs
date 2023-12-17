@@ -9,7 +9,7 @@ use self::remote::RemoteEvent;
 pub mod local;
 pub mod remote;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Event {
     Remote(RemoteEvent),
     Local(DiskEventWrap),

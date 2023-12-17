@@ -180,11 +180,12 @@ def execute_trsync(
         "--env-var-pass PASSWORD",
         "--no-ssl",
     ]
+    log_level = os.environ.get("RUST_LOG", "DEBUG")
     subprocess.Popen(
         " ".join(args),
         stdout=stdout,
         stderr=stdout,
-        env={"PASSWORD": user.password, "RUST_LOG": "DEBUG"},
+        env={"PASSWORD": user.password, "RUST_LOG": log_level},
         shell=True,
     )
 

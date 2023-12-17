@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use trsync_core::{client::TracimClient, instance::ContentId};
 
 use crate::{
+    event::{remote::RemoteEvent, Event},
     operation2::executor::Executor,
     state::{modification::StateModification, State},
 };
@@ -30,6 +31,7 @@ impl Executor for AbsentFromRemoteExecutor {
         &self,
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
@@ -39,9 +41,17 @@ impl Executor for AbsentFromRemoteExecutor {
             .get(content_id)
             .context(format!("Get content {}", content_id))?;
 
+        let remote_content = tracim
+            .get_content(content_id)
+            .context(format!("Get content {}", content_id))?;
+
         tracim
             .trash_content(content_id)
             .context(format!("Trash content {}", content_id))?;
+
+        if !remote_content.is_deleted {
+            ignore_events.push(Event::Remote(RemoteEvent::Deleted(content_id)));
+        }
 
         return Ok(StateModification::Forgot(content_id));
     }

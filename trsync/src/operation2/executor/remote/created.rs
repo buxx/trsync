@@ -10,6 +10,7 @@ use trsync_core::{
 };
 
 use crate::{
+    event::{remote::RemoteEvent, Event},
     operation2::executor::Executor,
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
@@ -62,6 +63,7 @@ impl Executor for CreatedOnRemoteExecutor {
         &self,
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let absolute_path = self.absolute_path();
         let file_name = ContentFileName(self.file_name()?);
@@ -74,7 +76,10 @@ impl Executor for CreatedOnRemoteExecutor {
             parent,
             absolute_path.clone(),
         ) {
-            Ok(content_id) => content_id,
+            Ok(content_id) => {
+                ignore_events.push(Event::Remote(RemoteEvent::Created(content_id)));
+                content_id
+            }
             Err(TracimClientError::ContentAlreadyExist) => tracim
                 .find_one(
                     &file_name,
@@ -101,6 +106,7 @@ impl Executor for CreatedOnRemoteExecutor {
                     content_id,
                     absolute_path.display()
                 ))?;
+            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }
 
         let content = Content::from_remote(

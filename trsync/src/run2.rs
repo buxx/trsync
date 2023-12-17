@@ -80,6 +80,7 @@ impl Runner {
         Ok(())
     }
 
+    // FIXME BS NOW : échange d'event a ignorer (sync de départ / executors)
     fn remote_watcher(&self) -> Result<()> {
         let remote_watcher_context = self.context.clone();
         let remote_watcher_stop_signal = self.stop_signal.clone();
@@ -104,6 +105,7 @@ impl Runner {
         Ok(())
     }
 
+    // FIXME BS NOW : échange d'event a ignorer (sync de départ / executors)
     fn local_watcher(&self) -> Result<()> {
         let local_watcher_context = self.context.clone();
         let local_watcher_operational_sender = self.local_sender.clone();
@@ -126,31 +128,12 @@ impl Runner {
         Ok(())
     }
 
-    fn sync(&self) -> Result<Box<dyn State>> {
-        // FIXME BS NOW : stocker les "Ignore Event" que génère les Executors
-        let workspace_path = PathBuf::from(&self.context.folder_path);
+    fn sync(&self, operator: &mut Operator) -> Result<()> {
         let remote_changes = self.remote_changes()?;
         let local_changes = self.local_changes()?;
         let (remote_changes, local_changes) =
             StartupSyncResolver::new(remote_changes, local_changes, ResolveMethod::ForceLocal)
                 .resolve()?;
-
-        // DEBUG
-        dbg!(&remote_changes);
-        dbg!(&local_changes);
-
-        let client = self
-            .context
-            .client()
-            .context("Create tracim client for startup sync")?;
-        let mut state: Box<dyn State> = Box::new(DiskState::new(
-            connection(&workspace_path).context(format!(
-                "Create connection for startup sync for {}",
-                workspace_path.display()
-            ))?,
-            workspace_path.clone(),
-        ));
-        let mut operator = Operator::new(&mut state, &workspace_path, Box::new(client));
 
         for remote_change in remote_changes {
             let event_display = format!("{:?}", &remote_change);
@@ -165,7 +148,7 @@ impl Runner {
                 .context(format!("Operate on local change {:?}", event_display))?
         }
 
-        Ok(state)
+        Ok(())
     }
 
     fn remote_changes(&self) -> Result<Vec<RemoteChange>> {
@@ -185,7 +168,7 @@ impl Runner {
             .context("Determine local changes")
     }
 
-    fn listen(&mut self) -> Result<()> {
+    fn listen(&self) -> Result<()> {
         self.listen_remote()?;
         self.listen_local()?;
         Ok(())
@@ -209,7 +192,7 @@ impl Runner {
         Ok(())
     }
 
-    fn listen_local(&mut self) -> Result<()> {
+    fn listen_local(&self) -> Result<()> {
         let operational_sender = self.operational_sender.clone();
         let mut local_receiver_reducer = self.local_receiver_reducer.clone();
 
@@ -224,14 +207,7 @@ impl Runner {
         Ok(())
     }
 
-    fn operate(&self, mut state: Box<dyn State>) -> Result<()> {
-        let workspace_path = PathBuf::from(&self.context.folder_path);
-        let client = self
-            .context
-            .client()
-            .context("Create tracim client for operate")?;
-        let mut operator = Operator::new(&mut state, &workspace_path, Box::new(client));
-
+    fn operate(&self, operator: &mut Operator) -> Result<()> {
         while let Ok(event) = self.operational_receiver.recv() {
             log::info!("Proceed event {:?}", &event);
             let context_message = format!("Operate on event {:?}", &event);
@@ -246,20 +222,35 @@ impl Runner {
         self.ensure_folders()?;
         self.ensure_db()?;
 
+        let workspace_path = PathBuf::from(&self.context.folder_path);
+        let mut state: Box<dyn State> = Box::new(DiskState::new(
+            connection(&workspace_path).context(format!(
+                "Create connection for startup sync for {}",
+                workspace_path.display()
+            ))?,
+            workspace_path.clone(),
+        ));
+        let workspace_path = PathBuf::from(&self.context.folder_path);
+        let client = self
+            .context
+            .client()
+            .context("Create tracim client for startup sync")?;
+        let mut operator = Operator::new(&mut state, &workspace_path, Box::new(client));
+
         // TODO : Start listening remote TLM
         // TODO : Start listening local changes
         // TODO : Keep eye on stop_signal to stop soon as requested
 
         // FIXME BS NOW : argh : il faut pouvoir recolter les events locaux et remote pendant la sync SANS etre pollué par les event généras par la sync
         self.watchers()?;
-        let state = self.sync()?;
+        self.sync(&mut operator)?;
 
         if self.context.exit_after_sync {
             return Ok(());
         }
 
         self.listen()?;
-        self.operate(state)?;
+        self.operate(&mut operator)?;
 
         Ok(())
     }

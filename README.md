@@ -84,3 +84,22 @@ Then start `trsync_manager_systray` binary.
 ## Deployment on your OS
 
 See [deployment doc file](doc/deployment.md)
+
+
+## Testing
+
+Each packages contains its own rust tests. All tests can be executed with `cargo test` command.
+
+### End 2 end tests
+
+`tests` folder contains end to end tests which run tracim in docker container then start trsync. To execute all the tests :
+
+    pytest tests
+
+To see trsync log during execution of test you can use the `TRSYNC_LOG_PATH` en var (and for example, `tail -f /tmp/trsync.log`). Example :
+
+    TRSYNC_LOG_PATH=/tmp/trsync.log pytest -k test_sync_with_empty_workspace
+
+You can change trsync log level with `RUST_LOG` env var (default is `DEBUG`) :
+
+    TRSYNC_LOG_PATH=/tmp/trsync.log RUST_LOG=INFO pytest -k test_sync_with_empty_workspace

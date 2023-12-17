@@ -5,6 +5,9 @@ use log::debug;
 use trsync_core::{client::TracimClient, instance::ContentId, types::ContentType};
 
 use crate::{
+    event::{local::LocalEvent, Event},
+    local::DiskEvent,
+    local2::reducer::DiskEventWrap,
     operation2::executor::Executor,
     state::{modification::StateModification, State},
 };
@@ -28,6 +31,7 @@ impl Executor for AbsentFromDiskExecutor {
         &self,
         state: &Box<dyn State>,
         _tracim: &Box<dyn TracimClient>,
+        ignore_events: &mut Vec<Event>,
     ) -> Result<StateModification> {
         let content = state
             .get(self.content_id)
@@ -39,6 +43,13 @@ impl Executor for AbsentFromDiskExecutor {
             .context(format!("Expect content {} path", self.content_id))?
             .into();
         let absolute_path = self.workspace_folder.join(&content_path);
+
+        if absolute_path.exists() {
+            ignore_events.push(Event::Local(DiskEventWrap::new(
+                content_path.clone(),
+                DiskEvent::Deleted(content_path.clone()),
+            )))
+        }
 
         if let Err(_err) = match content.type_() {
             ContentType::Folder => fs::remove_dir_all(&absolute_path),
