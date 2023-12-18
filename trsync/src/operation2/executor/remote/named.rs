@@ -153,7 +153,6 @@ impl Executor for NamedOnRemoteExecutor {
 
         // FIXME BS NOW : before content type ne peut pas se base sur le path before il n'existe plus ...
         // il faut le stocker en bdd :S
-        dbg!((&before_content_type, &after_content_type));
         if before_content_type != after_content_type {
             todo!()
         }

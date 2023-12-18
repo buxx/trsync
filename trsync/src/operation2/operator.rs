@@ -304,7 +304,7 @@ mod test {
         vec![],
         Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Deleted(PathBuf::from("a.txt")))),
         false,
-        vec![MockTracimClientCase::TrashOk(ContentId(1))],
+        vec![MockTracimClientCase::GetOk((1, 1, "a.txt".to_string(), None)), MockTracimClientCase::TrashOk(ContentId(1))],
         vec![],
     )]
     #[case(
@@ -312,7 +312,7 @@ mod test {
         vec![],
         Event::Local(DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Deleted(PathBuf::from("a.txt")))),
         false,
-        vec![MockTracimClientCase::TrashOk(ContentId(1))],
+        vec![MockTracimClientCase::GetOk((1, 1, "a.txt".to_string(), None)), MockTracimClientCase::TrashOk(ContentId(1))],
         vec!["b.txt"],
     )]
     // Delete a file in a folder
@@ -321,7 +321,7 @@ mod test {
         vec![],
         Event::Local(DiskEventWrap::new(PathBuf::from("Folder/a.txt"), DiskEvent::Deleted(PathBuf::from("Folder/a.txt")))),
         false,
-        vec![MockTracimClientCase::TrashOk(ContentId(2))],
+        vec![MockTracimClientCase::GetOk((2, 2, "a.txt".to_string(), None)), MockTracimClientCase::TrashOk(ContentId(2))],
         vec!["Folder"],
     )]
     // Delete a folder containing a file
@@ -329,7 +329,7 @@ mod test {
         vec![(1, 1, "Folder", None), (2, 2, "a.txt", Some(1))],
         vec![],
         Event::Local(DiskEventWrap::new(PathBuf::from("Folder"), DiskEvent::Deleted(PathBuf::from("Folder")))),        false,
-        vec![MockTracimClientCase::TrashOk(ContentId(1))],
+        vec![MockTracimClientCase::GetOk((1, 1, "Folder".to_string(), None)), MockTracimClientCase::TrashOk(ContentId(1))],
         vec![],
     )]
     // LOCAL CREATED
