@@ -40,13 +40,6 @@ impl LocalSync {
                     .to_path_buf(),
             );
 
-            let is_root = self.workspace_path == entry.path();
-            if !is_root && entry.file_type().is_dir() {
-                // Ignore directory from local sync : changes can only be rename.
-                // And modification time is problematic :https://github.com/buxx/trsync/issues/60
-                continue;
-            }
-
             if self.workspace_path == entry.path() {
                 continue;
             }
@@ -83,13 +76,17 @@ impl LocalSync {
                     .context(format!("Get disk timestamp of {}", relative_path.display()))?
                     .as_millis() as u64,
             );
-            if modified
-                != self
-                    .previously_known_disk_timestamp(&relative_path)
-                    .context(format!(
-                        "Get previously disk timestamp for {}",
-                        &relative_path.display()
-                    ))?
+
+            // Ignore directory from local sync : changes can only be rename.
+            // And modification time is problematic :https://github.com/buxx/trsync/issues/60
+            if !entry.file_type().is_dir()
+                && modified
+                    != self
+                        .previously_known_disk_timestamp(&relative_path)
+                        .context(format!(
+                            "Get previously disk timestamp for {}",
+                            &relative_path.display()
+                        ))?
             {
                 Ok(Some(LocalChange::Updated(relative_path)))
             } else {

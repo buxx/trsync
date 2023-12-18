@@ -51,6 +51,8 @@ impl<'a> Operator<'a> {
             return Ok(());
         };
 
+        log::info!("Proceed event : {:?}", &event);
+
         // FIXME BS : il faut que l'appel au dessus choisisse quoi faire en cas d'erreur
         // En gros, ressayer si c'est un problème reseau, etc
         match self
