@@ -32,7 +32,7 @@ impl Executor for AbsentFromDiskExecutor {
         state: &Box<dyn State>,
         _tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let content = state
             .get(self.content_id)
             .context(format!("Get content {}", self.content_id))?
@@ -58,6 +58,6 @@ impl Executor for AbsentFromDiskExecutor {
             debug!("File/folder {} was already absent", content_path.display());
         }
 
-        Ok(StateModification::Forgot(self.content_id))
+        Ok(vec![StateModification::Forgot(self.content_id)])
     }
 }

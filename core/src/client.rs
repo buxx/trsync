@@ -7,7 +7,6 @@ use reqwest::{
 };
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use strum_macros::Display;
 use thiserror::Error;
 
 use crate::{
@@ -17,16 +16,26 @@ use crate::{
 };
 
 pub const CONTENT_ALREADY_EXIST_ERR_CODE: u64 = 3002;
+pub const CONTENT_IN_NOT_EDITABLE_STATE_ERR_CODE: u64 = 2044;
 pub const DEFAULT_CLIENT_TIMEOUT: u64 = 30;
 
-#[derive(Debug, Clone, Error, Display)]
+#[derive(Debug, Clone, Error)]
 pub enum TracimClientError {
+    #[error("Content already exist")]
     ContentAlreadyExist,
+    #[error("Content is deleted or archived")]
+    ContentDeletedOrArchived,
+    #[error("Connection error")]
     ConnectionError,
+    #[error("Timeout error")]
     TimeoutError,
+    #[error("Unknown error: `{0}`")]
     Unknown(String),
+    #[error("Preparation error: `{0}`")]
     PrepareError(String),
+    #[error("Invalid response: `{0}` (`{1}`)")]
     InvalidResponse(String, Value),
+    #[error("Authentication error")]
     AuthenticationError,
 }
 
@@ -34,6 +43,9 @@ impl TracimClientError {
     fn from_code(error_code: u64) -> Option<TracimClientError> {
         match error_code {
             CONTENT_ALREADY_EXIST_ERR_CODE => Some(TracimClientError::ContentAlreadyExist),
+            CONTENT_IN_NOT_EDITABLE_STATE_ERR_CODE => {
+                Some(TracimClientError::ContentDeletedOrArchived)
+            }
             _ => None,
         }
     }
@@ -83,6 +95,15 @@ impl ParentIdParameter {
     }
 }
 
+impl From<Option<ContentId>> for ParentIdParameter {
+    fn from(value: Option<ContentId>) -> Self {
+        match value {
+            Some(value) => Self::Some(value),
+            None => Self::Root,
+        }
+    }
+}
+
 #[automock]
 pub trait TracimClient {
     fn create_content(
@@ -101,10 +122,11 @@ pub trait TracimClient {
     fn set_parent(
         &self,
         content_id: ContentId,
-        type_: ContentType,
         value: Option<ContentId>,
+        new_workspace_id: Option<WorkspaceId>,
     ) -> Result<RevisionId, TracimClientError>;
     fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
+    fn restore_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
     fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError>;
     fn find_one(
         &self,
@@ -480,16 +502,40 @@ impl TracimClient for Tracim {
     fn set_parent(
         &self,
         content_id: ContentId,
-        type_: ContentType,
         value: Option<ContentId>,
+        new_workspace_id: Option<WorkspaceId>,
     ) -> Result<RevisionId, TracimClientError> {
+        let url = self.workspace_url(&format!("contents/{}/move", content_id));
         let mut data = Map::new();
-        data.insert("parent_id".to_string(), json!(value));
-        self.update_content(content_id, type_, data)
+        data.insert("new_parent_id".to_string(), json!(value));
+        data.insert(
+            "new_workspace_id".to_string(),
+            json!(new_workspace_id.unwrap_or(self.workspace_id)),
+        );
+
+        let response = self
+            .client
+            .request(Method::PUT, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .json(&data)
+            .send()?;
+
+        self.created_revision_id(response)
     }
 
     fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError> {
         let url = self.workspace_url(&format!("contents/{}/trashed", content_id));
+        let response = self
+            .client
+            .request(Method::PUT, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .send()?;
+
+        self.no_content_response(response)
+    }
+
+    fn restore_content(&self, content_id: ContentId) -> Result<(), TracimClientError> {
+        let url = self.workspace_url(&format!("contents/{}/trashed/restore", content_id));
         let response = self
             .client
             .request(Method::PUT, url)

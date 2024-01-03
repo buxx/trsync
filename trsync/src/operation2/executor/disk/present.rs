@@ -37,7 +37,7 @@ impl Executor for PresentOnDiskExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let content = Content::from_remote(
             &tracim
                 .get_content(self.content_id)
@@ -97,10 +97,10 @@ impl Executor for PresentOnDiskExecutor {
 
         let disk_timestamp = last_modified_timestamp(&absolute_path)
             .context(format!("Get disk timestamp of {}", absolute_path.display()))?;
-        Ok(StateModification::Add(
+        Ok(vec![StateModification::Add(
             content,
             content_path_buf,
             DiskTimestamp(disk_timestamp.as_millis() as u64),
-        ))
+        )])
     }
 }

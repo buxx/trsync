@@ -38,7 +38,7 @@ impl Executor for UpdatedOnDiskExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let local_content_path = state
             .path(self.content_id)
             .context(format!("Get local content {} path", self.content_id))?
@@ -102,12 +102,12 @@ impl Executor for UpdatedOnDiskExecutor {
                 .as_millis() as u64,
         );
 
-        Ok(StateModification::Update(
+        Ok(vec![StateModification::Update(
             self.content_id,
             remote_content.file_name().clone(),
             remote_content.revision_id(),
             remote_content.parent_id(),
             disk_timestamp,
-        ))
+        )])
     }
 }

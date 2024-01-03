@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 
 use trsync_core::{
-    client::TracimClient,
+    client::{TracimClient, TracimClientError},
     content::Content,
     instance::{ContentId, DiskTimestamp},
     types::ContentType,
@@ -67,6 +67,38 @@ impl ModifiedOnRemoteExecutor {
         let since_epoch = last_modified_timestamp(&absolute_path)?;
         Ok(DiskTimestamp(since_epoch.as_millis() as u64))
     }
+
+    fn update_content(
+        &self,
+        tracim: &Box<dyn TracimClient>,
+        content_id: ContentId,
+        content_type: ContentType,
+        absolute_path: &PathBuf,
+        ignore_events: &mut Vec<Event>,
+    ) -> Result<(), TracimClientError> {
+        tracim
+            .fill_content_with_file(content_id, content_type, &absolute_path)
+            .context(format!(
+                "Fill remote file {} with {}",
+                content_id,
+                absolute_path.display(),
+            ))?;
+        ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
+        Ok(())
+    }
+
+    fn restore_content(
+        &self,
+        tracim: &Box<dyn TracimClient>,
+        content_id: ContentId,
+        ignore_events: &mut Vec<Event>,
+    ) -> Result<(), TracimClientError> {
+        tracim
+            .restore_content(content_id)
+            .context(format!("Restore remote file {}", content_id,))?;
+        ignore_events.push(Event::Remote(RemoteEvent::Created(content_id)));
+        Ok(())
+    }
 }
 
 impl Executor for ModifiedOnRemoteExecutor {
@@ -75,7 +107,7 @@ impl Executor for ModifiedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let absolute_path = self.absolute_path(state)?;
         let content_type = self.content_type(state)?;
         let content_id = self.content_id(state)?.context(format!(
@@ -84,14 +116,23 @@ impl Executor for ModifiedOnRemoteExecutor {
         ))?;
 
         if content_type.fillable() {
-            tracim
-                .fill_content_with_file(content_id, content_type, &absolute_path)
-                .context(format!(
-                    "Fill remote file {} with {}",
+            if let Err(TracimClientError::ContentDeletedOrArchived) = self.update_content(
+                tracim,
+                content_id,
+                content_type,
+                &absolute_path,
+                ignore_events,
+            ) {
+                // TODO : manage archived case
+                self.restore_content(tracim, content_id, ignore_events)?;
+                self.update_content(
+                    tracim,
                     content_id,
-                    &absolute_path.display(),
-                ))?;
-            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
+                    content_type,
+                    &absolute_path,
+                    ignore_events,
+                )?;
+            }
         }
 
         let content = Content::from_remote(
@@ -104,12 +145,12 @@ impl Executor for ModifiedOnRemoteExecutor {
             absolute_path.display()
         ))?;
 
-        Ok(StateModification::Update(
+        Ok(vec![StateModification::Update(
             content.id(),
             content.file_name().clone(),
             content.revision_id(),
             content.parent_id(),
             last_modified,
-        ))
+        )])
     }
 }

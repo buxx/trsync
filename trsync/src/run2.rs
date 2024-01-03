@@ -138,13 +138,13 @@ impl Runner {
         for remote_change in remote_changes {
             let event_display = format!("{:?}", &remote_change);
             operator
-                .operate(remote_change.into())
+                .operate(&(remote_change.into()))
                 .context(format!("Operate on remote change {:?}", event_display))?
         }
         for local_change in local_changes {
             let event_display = format!("{:?}", &local_change);
             operator
-                .operate(local_change.into())
+                .operate(&(local_change.into()))
                 .context(format!("Operate on local change {:?}", event_display))?
         }
 
@@ -211,7 +211,13 @@ impl Runner {
         while let Ok(event) = self.operational_receiver.recv() {
             log::info!("Proceed event {:?}", &event);
             let context_message = format!("Operate on event {:?}", &event);
-            operator.operate(event).context(context_message)?;
+            if let Err(error) = operator.operate(&event).context(context_message) {
+                log::error!(
+                    "Error happens during operate of '{:?}': '{:#}'",
+                    &event,
+                    &error,
+                )
+            };
         }
 
         log::info!("Terminate operational listener");

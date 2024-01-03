@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::Duration;
+use trsync_core::types::ContentType;
 
 use crate::util::{self, ignore_file};
 
@@ -158,10 +159,21 @@ impl LocalWatcher {
                 vec![DiskEvent::Deleted(absolute_path.relative(workspace)?)]
             }
             DebouncedEvent::Rename(absolute_source_path, absolute_dest_path) => {
-                vec![DiskEvent::Renamed(
-                    absolute_source_path.relative(workspace)?,
-                    absolute_dest_path.relative(workspace)?,
-                )]
+                let before_content_type = ContentType::from_path(absolute_source_path);
+                let after_content_type = ContentType::from_path(absolute_dest_path);
+
+                // If renaming change the content-type: consider as new file
+                if before_content_type != after_content_type {
+                    vec![
+                        DiskEvent::Deleted(absolute_source_path.relative(workspace)?),
+                        DiskEvent::Created(absolute_dest_path.relative(workspace)?),
+                    ]
+                } else {
+                    vec![DiskEvent::Renamed(
+                        absolute_source_path.relative(workspace)?,
+                        absolute_dest_path.relative(workspace)?,
+                    )]
+                }
             }
             // Ignore these
             DebouncedEvent::NoticeWrite(_)

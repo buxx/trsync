@@ -15,5 +15,5 @@ pub trait Executor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification>;
+    ) -> Result<Vec<StateModification>>;
 }

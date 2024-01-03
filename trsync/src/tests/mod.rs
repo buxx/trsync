@@ -260,12 +260,11 @@ impl MockTracimClientCase {
                 raw_parent_id,
                 raw_new_revision_id,
             ) => {
-                let content_type = content_type(&raw_file_name);
                 mock.expect_set_parent()
                     .with(
                         predicate::eq(ContentId(raw_content_id)),
-                        predicate::eq(content_type),
                         predicate::eq(raw_parent_id.map(ContentId)),
+                        predicate::eq(None),
                     )
                     .times(1)
                     .returning(move |_, _, _| Ok(RevisionId(raw_new_revision_id)));

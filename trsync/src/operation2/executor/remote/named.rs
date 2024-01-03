@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use trsync_core::{
-    client::TracimClient,
+    client::{ParentIdParameter, TracimClient, TracimClientError},
     instance::{ContentFileName, ContentId, DiskTimestamp, RevisionId},
     types::ContentType,
 };
@@ -137,7 +137,8 @@ impl Executor for NamedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
+        let mut state_modifications = vec![];
         let before_absolute_path = self.before_absolute_path(state)?;
         let after_absolute_path = self.after_absolute_path()?;
         let before_file_name = self.before_file_name(state)?;
@@ -154,7 +155,7 @@ impl Executor for NamedOnRemoteExecutor {
         // FIXME BS NOW : before content type ne peut pas se base sur le path before il n'existe plus ...
         // il faut le stocker en bdd :S
         if before_content_type != after_content_type {
-            todo!()
+            bail!("NamedOnRemoteExecutor called on a file type change : it should never happen")
         }
 
         if before_file_name != after_file_name {
@@ -165,7 +166,25 @@ impl Executor for NamedOnRemoteExecutor {
         }
 
         if after_absolute_path.parent() != before_absolute_path.parent() {
-            revision_id = tracim.set_parent(content_id, after_content_type, after_parent)?;
+            revision_id = match tracim.set_parent(content_id, after_parent, None) {
+                Ok(revision_id) => revision_id,
+                Err(TracimClientError::ContentAlreadyExist) => {
+                    // FIXME BS NOW : test when move into root (and file already exist)
+                    let content_id_to_replace = match tracim
+                        .find_one(&after_file_name, ParentIdParameter::from(after_parent))?
+                    {
+                        Some(content_id) => content_id,
+                        None => bail!(
+                            "No matching content found for name '{}' when searching it",
+                            &after_file_name
+                        ),
+                    };
+                    tracim.trash_content(content_id_to_replace)?;
+                    state_modifications.push(StateModification::Forgot(content_id_to_replace));
+                    tracim.set_parent(content_id, after_parent, None)?
+                }
+                Err(error) => bail!(error),
+            };
             ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }
 
@@ -174,12 +193,13 @@ impl Executor for NamedOnRemoteExecutor {
             after_absolute_path.display()
         ))?;
 
-        Ok(StateModification::Update(
+        state_modifications.push(StateModification::Update(
             content_id,
             after_file_name,
             revision_id,
             after_parent,
             last_modified,
-        ))
+        ));
+        Ok(state_modifications)
     }
 }

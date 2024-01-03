@@ -32,7 +32,7 @@ impl Executor for AbsentFromRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.db_path.display()
@@ -53,6 +53,6 @@ impl Executor for AbsentFromRemoteExecutor {
             ignore_events.push(Event::Remote(RemoteEvent::Deleted(content_id)));
         }
 
-        return Ok(StateModification::Forgot(content_id));
+        return Ok(vec![StateModification::Forgot(content_id)]);
     }
 }

@@ -64,7 +64,7 @@ impl Executor for CreatedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<StateModification> {
+    ) -> Result<Vec<StateModification>> {
         let absolute_path = self.absolute_path();
         let file_name = ContentFileName(self.file_name()?);
         let parent = self.parent(state)?;
@@ -116,10 +116,10 @@ impl Executor for CreatedOnRemoteExecutor {
         )?;
         let disk_timestamp = last_modified_timestamp(&absolute_path)
             .context(format!("Get disk timestamp of {}", absolute_path.display()))?;
-        Ok(StateModification::Add(
+        Ok(vec![StateModification::Add(
             content,
             self.path.clone(),
             DiskTimestamp(disk_timestamp.as_millis() as u64),
-        ))
+        )])
     }
 }

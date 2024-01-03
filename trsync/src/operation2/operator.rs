@@ -44,9 +44,9 @@ impl<'a> Operator<'a> {
         }
     }
 
-    pub fn operate(&mut self, event: Event) -> Result<()> {
-        if self.ignore_events.contains(&event) {
-            self.ignore_events.retain(|x| *x != event);
+    pub fn operate(&mut self, event: &Event) -> Result<()> {
+        if self.ignore_events.contains(event) {
+            self.ignore_events.retain(|x| x != event);
             log::info!("Ignore event (planned ignore) : {:?}", &event);
             return Ok(());
         };
@@ -60,35 +60,39 @@ impl<'a> Operator<'a> {
             .execute(self.state, &self.tracim, &mut self.ignore_events)
             .context("Run executor")
         {
-            Ok(state_change) => self.state.change(state_change)?,
+            Ok(state_changes) => {
+                for state_change in state_changes {
+                    self.state.change(state_change)?
+                }
+            }
             Err(error) => return Err(error),
         };
 
         Ok(())
     }
 
-    fn executor(&self, event: Event) -> Result<Box<dyn Executor>> {
+    fn executor(&self, event: &Event) -> Result<Box<dyn Executor>> {
         Ok(match event {
             Event::Remote(event) => match event {
-                RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(id)),
-                RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(id)),
-                RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(id, true)),
-                RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(id, false)),
+                RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(*id)),
+                RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(*id)),
+                RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(*id, true)),
+                RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(*id, false)),
             },
             // FIXME BS NOW : add test on case where db_path and disk_path are not the same
             Event::Local(disk_event) => match disk_event {
                 DiskEventWrap(db_path, DiskEvent::Deleted(_)) => {
-                    Box::new(self.absent_from_remote_executor(db_path))
+                    Box::new(self.absent_from_remote_executor(db_path.clone()))
                 }
                 DiskEventWrap(_, DiskEvent::Created(disk_path)) => {
-                    Box::new(self.created_on_remote_executor(disk_path))
+                    Box::new(self.created_on_remote_executor(disk_path.clone()))
                 }
                 DiskEventWrap(db_path, DiskEvent::Modified(disk_path)) => {
-                    Box::new(self.modified_on_remote_executor(db_path, disk_path))
+                    Box::new(self.modified_on_remote_executor(db_path.clone(), disk_path.clone()))
                 }
-                DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => {
-                    Box::new(self.named_on_remote_executor(db_path, after_disk_path))
-                }
+                DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => Box::new(
+                    self.named_on_remote_executor(db_path.clone(), after_disk_path.clone()),
+                ),
             },
         })
     }
@@ -286,7 +290,7 @@ mod test {
         MockTracimClientCase::apply_multiples(&tmpdir_, &mut client, expect_tracim);
 
         // When
-        let result = Operator::new(&mut state, &tmpdir_, Box::new(client)).operate(event);
+        let result = Operator::new(&mut state, &tmpdir_, Box::new(client)).operate(&event);
 
         // Then
         assert_eq!(result.is_err(), error);
@@ -460,7 +464,7 @@ mod test {
 
         // When
         let result =
-            Operator::new(&mut previous_event_state, &tmpdir_, Box::new(client)).operate(event);
+            Operator::new(&mut previous_event_state, &tmpdir_, Box::new(client)).operate(&event);
 
         // Then
         assert_eq!(result.is_err(), error);
