@@ -180,6 +180,7 @@ impl Executor for NamedOnRemoteExecutor {
                         ),
                     };
                     tracim.trash_content(content_id_to_replace)?;
+                    ignore_events.push(Event::Remote(RemoteEvent::Deleted(content_id_to_replace)));
                     state_modifications.push(StateModification::Forgot(content_id_to_replace));
                     tracim.set_parent(content_id, after_parent, None)?
                 }

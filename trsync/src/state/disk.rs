@@ -246,17 +246,19 @@ impl State for DiskState {
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
     ) -> Result<()> {
-        let new_path = if let Some(parent_path) = self
-            .path(content_id)
-            .context(format!("Get content {} path", content_id))?
-            .context(format!("Expect content {} path", content_id))?
-            .to_path_buf()
-            .parent()
-        {
-            parent_path.join(file_name.0)
-        } else {
-            PathBuf::from(file_name.0)
-        };
+        let new_path = parent_id
+            .and_then(|parent_id| {
+                Some(
+                    self.path(parent_id)
+                        .context(format!("Get content {} path", content_id))
+                        .ok()?
+                        .context(format!("Expect content {} path", content_id))
+                        .ok()?
+                        .to_path_buf()
+                        .join(&file_name.0),
+                )
+            })
+            .unwrap_or(PathBuf::from(file_name.0));
 
         self.connection.execute(
             "UPDATE file SET relative_path = ?, revision_id = ?, parent_id = ?, last_modified_timestamp = ? WHERE content_id = ?",
