@@ -27,6 +27,7 @@ mod config;
 mod error;
 mod icon;
 mod state;
+mod sync;
 
 type DaemonMessageChannels = (Sender<DaemonMessage>, Receiver<DaemonMessage>);
 type ActivityChannels = (Sender<Job>, Receiver<Job>);
@@ -58,16 +59,13 @@ fn run() -> Result<()> {
         let tray_activity_state = activity_state.clone();
         let tray_stop_signal = stop_signal.clone();
         let main_sender_ = main_sender.clone();
-        match linux::run_tray(
+        if let Err(error) = linux::run_tray(
             tray_config,
             main_sender_,
             tray_activity_state,
             tray_stop_signal,
         ) {
-            Err(error) => {
-                log::error!("{}", error)
-            }
-            _ => {}
+            log::error!("{}", error)
         }
     }
 

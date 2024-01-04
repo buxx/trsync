@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
-use trsync_core::instance::{ContentId, DiskTimestamp};
+use trsync_core::{
+    instance::{ContentId, DiskTimestamp},
+    local::LocalChange,
+};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::util::{ignore_file, last_modified_timestamp};
@@ -156,25 +159,10 @@ impl LocalSync {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum LocalChange {
-    New(PathBuf),
-    Disappear(PathBuf),
-    Updated(PathBuf),
-}
-
-impl LocalChange {
-    pub fn path(&self) -> PathBuf {
-        match self {
-            LocalChange::New(path) | LocalChange::Disappear(path) | LocalChange::Updated(path) => {
-                path.clone()
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
+
+    use trsync_core::local::LocalChange;
 
     use super::*;
     use crate::{state::disk::DiskState, tests::*};

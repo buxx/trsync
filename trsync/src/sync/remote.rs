@@ -6,6 +6,7 @@ use trsync_core::{
     client::{RemoteContent, TracimClient},
     content::Content,
     instance::{ContentId, RevisionId},
+    remote::RemoteChange,
 };
 
 use crate::state::{memory::MemoryState, State};
@@ -181,25 +182,9 @@ impl RemoteSync {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum RemoteChange {
-    New(ContentId, PathBuf),
-    Disappear(ContentId, PathBuf),
-    Updated(ContentId, PathBuf),
-}
-
-impl RemoteChange {
-    pub fn path(&self) -> PathBuf {
-        match self {
-            RemoteChange::New(_, path)
-            | RemoteChange::Disappear(_, path)
-            | RemoteChange::Updated(_, path) => path.clone(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use trsync_core::remote::RemoteChange;
     use trsync_core::{client::MockTracimClient, instance::RevisionId};
 
     use crate::state::disk::DiskState;

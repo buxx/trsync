@@ -25,7 +25,7 @@ use super::{
 
 pub struct Operator<'a> {
     state: &'a mut Box<dyn State>,
-    workspace_folder: &'a PathBuf,
+    workspace_folder: PathBuf,
     tracim: Box<dyn TracimClient>,
     ignore_events: Vec<Event>,
 }
@@ -33,7 +33,7 @@ pub struct Operator<'a> {
 impl<'a> Operator<'a> {
     pub fn new(
         state: &'a mut Box<dyn State>,
-        workspace_folder: &'a PathBuf,
+        workspace_folder: PathBuf,
         tracim: Box<dyn TracimClient>,
     ) -> Self {
         Self {
@@ -290,7 +290,7 @@ mod test {
         MockTracimClientCase::apply_multiples(&tmpdir_, &mut client, expect_tracim);
 
         // When
-        let result = Operator::new(&mut state, &tmpdir_, Box::new(client)).operate(&event);
+        let result = Operator::new(&mut state, tmpdir_, Box::new(client)).operate(&event);
 
         // Then
         assert_eq!(result.is_err(), error);
@@ -464,7 +464,7 @@ mod test {
 
         // When
         let result =
-            Operator::new(&mut previous_event_state, &tmpdir_, Box::new(client)).operate(&event);
+            Operator::new(&mut previous_event_state, tmpdir_, Box::new(client)).operate(&event);
 
         // Then
         assert_eq!(result.is_err(), error);

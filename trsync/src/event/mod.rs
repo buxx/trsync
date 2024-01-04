@@ -1,8 +1,6 @@
-use crate::{
-    local::DiskEvent,
-    local2::reducer::DiskEventWrap,
-    sync::{local::LocalChange, remote::RemoteChange},
-};
+use trsync_core::{local::LocalChange, remote::RemoteChange};
+
+use crate::{local::DiskEvent, local2::reducer::DiskEventWrap};
 
 use self::remote::RemoteEvent;
 

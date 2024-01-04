@@ -16,18 +16,19 @@ pub enum Activity {
 
 pub struct ActivityState {
     // (instance_name, workspace_id), counter
-    counter: HashMap<JobIdentifier, i32>,
+    jobs: HashMap<JobIdentifier, i32>,
+    // errors: HashMap<JobIdentifier, JobErrors>,
 }
 
 impl ActivityState {
     pub fn new() -> Self {
         Self {
-            counter: HashMap::new(),
+            jobs: HashMap::new(),
         }
     }
 
     pub fn activity(&self) -> Activity {
-        for (_, count) in &self.counter {
+        for (_, count) in &self.jobs {
             if count > &0 {
                 return Activity::Working;
             }
@@ -37,11 +38,11 @@ impl ActivityState {
     }
 
     pub fn new_job(&mut self, job_identifier: JobIdentifier) {
-        *self.counter.entry(job_identifier).or_insert(0) += 1;
+        *self.jobs.entry(job_identifier).or_insert(0) += 1;
     }
 
     pub fn finished_job(&mut self, job_identifier: JobIdentifier) {
-        *self.counter.get_mut(&job_identifier).unwrap() -= 1;
+        *self.jobs.get_mut(&job_identifier).unwrap() -= 1;
     }
 }
 

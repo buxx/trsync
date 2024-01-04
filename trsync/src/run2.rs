@@ -5,20 +5,25 @@ use crate::event::remote::RemoteEvent;
 use crate::event::Event;
 use crate::local::{DiskEvent, LocalWatcher};
 use crate::local2::reducer::LocalReceiverReducer;
-use crate::operation::Job;
+use crate::operation::{Job, JobIdentifier};
 use crate::operation2::operator::Operator;
 use crate::remote::RemoteWatcher;
 use crate::state::disk::DiskState;
 use crate::state::State;
-use crate::sync::local::{LocalChange, LocalSync};
-use crate::sync::remote::{RemoteChange, RemoteSync};
+use crate::sync::local::LocalSync;
+use crate::sync::remote::RemoteSync;
 use crate::sync::{ResolveMethod, StartupSyncResolver};
 use anyhow::{Context, Result};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use std::{fs, thread};
+use trsync_core::client::Tracim;
+use trsync_core::local::LocalChange;
+use trsync_core::remote::RemoteChange;
+use trsync_core::sync::SyncPolitic;
 
 struct Runner {
     context: TrSyncContext,
@@ -46,8 +51,6 @@ impl Runner {
             unbounded();
         let (local_sender, local_receiver): (Sender<DiskEvent>, Receiver<DiskEvent>) = unbounded();
         let local_receiver_reducer = LocalReceiverReducer::new(local_receiver);
-
-        // FIXME BS NOW : ensure_availability
 
         Self {
             context,
@@ -80,7 +83,6 @@ impl Runner {
         Ok(())
     }
 
-    // FIXME BS NOW : échange d'event a ignorer (sync de départ / executors)
     fn remote_watcher(&self) -> Result<()> {
         let remote_watcher_context = self.context.clone();
         let remote_watcher_stop_signal = self.stop_signal.clone();
@@ -105,7 +107,6 @@ impl Runner {
         Ok(())
     }
 
-    // FIXME BS NOW : échange d'event a ignorer (sync de départ / executors)
     fn local_watcher(&self) -> Result<()> {
         let local_watcher_context = self.context.clone();
         let local_watcher_operational_sender = self.local_sender.clone();
@@ -207,47 +208,113 @@ impl Runner {
         Ok(())
     }
 
+    fn is_stop_requested(&self) -> bool {
+        self.stop_signal.load(Ordering::Relaxed)
+    }
+
+    fn is_restart_requested(&self) -> bool {
+        self.restart_signal.load(Ordering::Relaxed)
+    }
+
     fn operate(&self, operator: &mut Operator) -> Result<()> {
-        while let Ok(event) = self.operational_receiver.recv() {
-            log::info!("Proceed event {:?}", &event);
-            let context_message = format!("Operate on event {:?}", &event);
-            if let Err(error) = operator.operate(&event).context(context_message) {
-                log::error!(
-                    "Error happens during operate of '{:?}': '{:#}'",
-                    &event,
-                    &error,
-                )
-            };
+        loop {
+            match self
+                .operational_receiver
+                .recv_timeout(Duration::from_millis(150))
+            {
+                Err(RecvTimeoutError::Timeout) => {
+                    if self.is_stop_requested() {
+                        log::info!(
+                            "[{}::{}] Finished operational (on stop signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
+                        break;
+                    }
+                    if self.is_restart_requested() {
+                        log::info!(
+                            "[{}::{}] Finished operational (on restart signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
+                        break;
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    log::error!(
+                        "[{}::{}] Finished operational (on channel closed)",
+                        self.context.instance_name,
+                        self.context.workspace_id,
+                    );
+                    break;
+                }
+                Ok(event) => {
+                    if self.is_stop_requested() {
+                        log::info!(
+                            "[{}::{}] Finished operational (on stop signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
+                        break;
+                    }
+                    if self.is_restart_requested() {
+                        log::info!(
+                            "[{}::{}] Finished operational (on restart signal)",
+                            self.context.instance_name,
+                            self.context.workspace_id,
+                        );
+                        break;
+                    }
+
+                    log::info!("Proceed event {:?}", &event);
+                    let context_message = format!("Operate on event {:?}", &event);
+                    self.signal_job_start()?;
+                    if let Err(error) = operator.operate(&event).context(context_message) {
+                        self.signal_job_end()?;
+                        log::error!(
+                            "Error happens during operate of '{:?}': '{:#}'",
+                            &event,
+                            &error,
+                        );
+                        continue;
+                    };
+                    self.signal_job_end()?;
+                }
+            }
         }
 
         log::info!("Terminate operational listener");
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<()> {
-        self.ensure_folders()?;
-        self.ensure_db()?;
-
+    fn state(&self) -> Result<Box<dyn State>> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
-        let mut state: Box<dyn State> = Box::new(DiskState::new(
+        Ok(Box::new(DiskState::new(
             connection(&workspace_path).context(format!(
                 "Create connection for startup sync for {}",
                 workspace_path.display()
             ))?,
             workspace_path.clone(),
-        ));
-        let workspace_path = PathBuf::from(&self.context.folder_path);
-        let client = self
-            .context
+        )))
+    }
+
+    fn client(&self) -> Result<Tracim> {
+        self.context
             .client()
-            .context("Create tracim client for startup sync")?;
-        let mut operator = Operator::new(&mut state, &workspace_path, Box::new(client));
+            .context("Create tracim client for startup sync")
+    }
 
-        // TODO : Start listening remote TLM
-        // TODO : Start listening local changes
-        // TODO : Keep eye on stop_signal to stop soon as requested
+    pub fn run(&mut self) -> Result<()> {
+        self.ensure_folders()?;
+        self.ensure_db()?;
 
-        // FIXME BS NOW : argh : il faut pouvoir recolter les events locaux et remote pendant la sync SANS etre pollué par les event généras par la sync
+        let mut state = self.state()?;
+        let mut operator = Operator::new(
+            &mut state,
+            PathBuf::from(&self.context.folder_path),
+            Box::new(self.client()?),
+        );
+
         self.watchers()?;
         self.sync(&mut operator)?;
 
@@ -266,9 +333,16 @@ pub fn run(
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
     activity_sender: Option<Sender<Job>>,
+    sync_politic: Box<dyn SyncPolitic>,
 ) -> Result<()> {
-    let mut runner = Runner::new(context, stop_signal, activity_sender);
-    runner.run().context("Run")?;
+    let mut runner = Runner::new(context, stop_signal.clone(), activity_sender, sync_politic);
+    loop {
+        runner.run().context("Run")?;
+        if stop_signal.load(Ordering::Relaxed) {
+            stop_signal.swap(false, Ordering::Relaxed);
+            break;
+        }
+    }
 
     Ok(())
 }
