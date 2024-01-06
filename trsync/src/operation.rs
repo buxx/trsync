@@ -22,27 +22,10 @@ use crate::{
     util,
 };
 
-use trsync_core::types::{ContentId, ContentType, RelativeFilePath};
-
-#[derive(PartialEq, Eq, Hash)]
-pub struct JobIdentifier {
-    pub instance_name: String,
-    pub workspace_id: i32,
-}
-
-impl JobIdentifier {
-    pub fn new(instance_name: String, workspace_id: i32) -> Self {
-        Self {
-            instance_name,
-            workspace_id,
-        }
-    }
-}
-
-pub enum Job {
-    Begin(JobIdentifier),
-    End(JobIdentifier),
-}
+use trsync_core::{
+    job::{Job, JobIdentifier},
+    types::{ContentId, ContentType, RelativeFilePath},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OperationalMessage {
@@ -166,6 +149,7 @@ impl OperationalHandler {
                         if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
                             self.context.instance_name.clone(),
                             self.context.workspace_id.0,
+                            self.context.workspace_name.clone(),
                         ))) {
                             log::error!(
                                 "[{}::{}] Error when sending activity begin : {:?}",
@@ -217,6 +201,7 @@ impl OperationalHandler {
                         if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
                             self.context.instance_name.clone(),
                             self.context.workspace_id.0,
+                            self.context.workspace_name.clone(),
                         ))) {
                             log::error!(
                                 "[{}::{}] Error when sending activity end : {:?}",

@@ -4,8 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
+use trsync_core::job::Job;
+use trsync_core::sync::AcceptAllSyncPolitic;
 
-use trsync::operation::Job;
 use trsync_core::config::ManagerConfig;
 
 use crate::{client::Client, error::Error, message::DaemonMessage, types::*};
@@ -175,6 +176,13 @@ impl Daemon {
                 )))
             }
         };
+        // TODO: no unwrap ...
+        let workspace_name = folder_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let folder_path = match folder_path.to_str() {
             Some(folder_path) => folder_path,
             None => {
@@ -192,6 +200,7 @@ impl Daemon {
             instance.password.clone(),
             folder_path.to_string(),
             workspace.workspace_id,
+            workspace_name,
             false,
             self.config.prevent_delete_sync,
         ) {
@@ -212,6 +221,7 @@ impl Daemon {
                 trsync_context,
                 thread_stop_signal,
                 Some(thread_activity_sender),
+                Box::new(AcceptAllSyncPolitic), // FIXME BS NOW : implementing confirmation box
             )
         });
         self.processes.insert(trsync_uid, stop_signal);

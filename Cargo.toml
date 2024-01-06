@@ -6,4 +6,5 @@ members = [
     "manager",
     "systray",
     "configure",
+    "monitor",
 ]

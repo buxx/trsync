@@ -10,12 +10,18 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
+    thread,
+    time::Duration,
 };
-use trsync::operation::Job;
-use trsync_core::config::ManagerConfig;
+use trsync_core::{
+    activity::{ActivityMonitor, ActivityState},
+    config::ManagerConfig,
+    job::Job,
+    user::UserRequest,
+};
 use trsync_manager::{self, daemon::Daemon, message::DaemonMessage};
-
-use crate::state::ActivityMonitor;
+use trsync_manager_configure::run::run as run_configure;
+use trsync_manager_monitor::run::run as run_monitor;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -26,7 +32,6 @@ mod windows;
 mod config;
 mod error;
 mod icon;
-mod state;
 mod sync;
 
 type DaemonMessageChannels = (Sender<DaemonMessage>, Receiver<DaemonMessage>);
@@ -36,7 +41,8 @@ fn run() -> Result<()> {
     // Some initialize
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let stop_signal = Arc::new(AtomicBool::new(false));
-    let activity_state = Arc::new(Mutex::new(state::ActivityState::new()));
+    let activity_state = Arc::new(Mutex::new(ActivityState::new()));
+    // let sync_politic_bridge = SyncPoliticBridge::new();
     let config = config::Config::from_env()?;
 
     // Start manager
@@ -52,32 +58,73 @@ fn run() -> Result<()> {
     let stop_signal_ = stop_signal.clone();
     ActivityMonitor::new(activity_receiver_, activity_state_, stop_signal_).start();
 
-    log::info!("Start systray");
-    #[cfg(target_os = "linux")]
-    {
-        let tray_config = config.clone();
-        let tray_activity_state = activity_state.clone();
-        let tray_stop_signal = stop_signal.clone();
-        let main_sender_ = main_sender.clone();
-        if let Err(error) = linux::run_tray(
-            tray_config,
-            main_sender_,
-            tray_activity_state,
-            tray_stop_signal,
-        ) {
-            log::error!("{}", error)
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let tray_stop_signal = stop_signal.clone();
-        let main_sender_ = main_sender.clone();
-        match windows::run_tray(main_sender_, activity_state, tray_stop_signal) {
-            Err(error) => {
+    // Systray
+    let (user_request_sender, user_request_receiver): (Sender<UserRequest>, Receiver<UserRequest>) =
+        unbounded();
+    let activity_state_ = activity_state.clone();
+    let stop_signal_ = stop_signal.clone();
+    let main_sender_ = main_sender.clone();
+    let user_request_sender_ = user_request_sender.clone();
+    thread::spawn(move || {
+        log::info!("Start systray");
+        #[cfg(target_os = "linux")]
+        {
+            let tray_config = config.clone();
+            let tray_activity_state = activity_state_.clone();
+            let tray_stop_signal_ = stop_signal_.clone();
+            let main_sender_ = main_sender_.clone();
+            if let Err(error) = linux::run_tray(
+                tray_config,
+                main_sender_,
+                tray_activity_state,
+                tray_stop_signal_,
+                user_request_sender_,
+            ) {
                 log::error!("{}", error)
             }
-            _ => {}
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let tray_stop_signal = stop_signal.clone();
+            let main_sender_ = main_sender.clone();
+            match windows::run_tray(
+                main_sender_,
+                activity_state,
+                tray_stop_signal,
+                user_request_sender_,
+            ) {
+                Err(error) => {
+                    log::error!("{}", error)
+                }
+                _ => {}
+            }
+        }
+    });
+
+    let activity_state_ = activity_state.clone();
+    let main_sender_ = main_sender.clone();
+    loop {
+        match user_request_receiver.recv_timeout(Duration::from_millis(150)) {
+            Err(RecvTimeoutError) => {}
+            Err(_) => break,
+            Ok(request) => match request {
+                UserRequest::OpenMonitorWindow => {
+                    if let Err(error) =
+                        run_monitor(activity_state_.clone(), user_request_receiver.clone())
+                    {
+                        log::error!("Unable to run configure window : '{}'", error)
+                    }
+                }
+                UserRequest::OpenConfigurationWindow => {
+                    if let Err(error) =
+                        run_configure(main_sender_.clone(), user_request_receiver.clone())
+                    {
+                        log::error!("Unable to run configure window : '{}'", error)
+                    }
+                }
+                UserRequest::Quit => break,
+            },
         }
     }
 

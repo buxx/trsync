@@ -7,7 +7,7 @@ use anyhow::Result;
 use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
-use trsync_core::instance::WorkspaceId;
+use trsync_core::{instance::WorkspaceId, sync::AcceptAllSyncPolitic};
 extern crate notify;
 
 pub mod client;
@@ -63,6 +63,8 @@ struct Opt {
 
 impl Opt {
     fn to_context(&self, password: String) -> Result<context::Context, Error> {
+        // TODO: no unwrap ...
+        let workspace_name = self.path.file_name().unwrap().to_str().unwrap().to_string();
         context::Context::new(
             !self.no_ssl,
             self.tracim_address.clone(),
@@ -70,6 +72,7 @@ impl Opt {
             password.clone(),
             util::canonicalize_to_string(&self.path)?,
             WorkspaceId(self.workspace_id),
+            workspace_name,
             self.exit_after_sync,
             self.prevent_delete_sync,
         )
@@ -97,7 +100,7 @@ fn main() -> Result<(), Error> {
 
     let context = opt.to_context(password.clone())?;
     let _stop_signal = Arc::new(AtomicBool::new(false));
-    if let Err(error) = run2::run(context, _stop_signal, None) {
+    if let Err(error) = run2::run(context, _stop_signal, None, Box::new(AcceptAllSyncPolitic)) {
         return Err(Error::UnexpectedError(format!("{:#}", error)));
     }
     log::info!("Exit application");

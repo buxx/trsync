@@ -19,6 +19,7 @@ pub struct Context {
     pub folder_path: String,
     pub database_path: String,
     pub workspace_id: WorkspaceId,
+    pub workspace_name: String,
     pub exit_after_sync: bool,
     pub prevent_delete_sync: bool,
 }
@@ -31,6 +32,7 @@ impl Context {
         password: String,
         folder_path: String,
         workspace_id: WorkspaceId,
+        workspace_name: String,
         exit_after_sync: bool,
         prevent_delete_sync: bool,
     ) -> Result<Self, Error> {
@@ -45,6 +47,7 @@ impl Context {
             folder_path,
             database_path,
             workspace_id,
+            workspace_name,
             exit_after_sync,
             prevent_delete_sync,
         })

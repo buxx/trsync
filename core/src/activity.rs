@@ -7,8 +7,10 @@ use std::{
     },
     time::Duration,
 };
-use trsync::operation::{Job, JobIdentifier};
 
+use crate::job::{Job, JobIdentifier};
+
+#[derive(Debug)]
 pub enum Activity {
     Idle,
     Working,
@@ -44,6 +46,10 @@ impl ActivityState {
     pub fn finished_job(&mut self, job_identifier: JobIdentifier) {
         *self.jobs.get_mut(&job_identifier).unwrap() -= 1;
     }
+
+    pub fn jobs(&self) -> &HashMap<JobIdentifier, i32> {
+        &self.jobs
+    }
 }
 
 pub struct ActivityMonitor {
@@ -70,9 +76,11 @@ impl ActivityMonitor {
             match self.receiver.recv_timeout(Duration::from_millis(250)) {
                 Ok(message) => match message {
                     Job::Begin(job_identifier) => {
+                        log::debug!("Receive Job::Begin ({:?})", job_identifier);
                         self.state.lock().unwrap().new_job(job_identifier);
                     }
                     Job::End(job_identifier) => {
+                        log::debug!("Receive Job::End ({:?})", job_identifier);
                         self.state.lock().unwrap().finished_job(job_identifier);
                     }
                 },

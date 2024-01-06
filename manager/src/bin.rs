@@ -1,8 +1,7 @@
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
-use trsync::operation::Job;
-use trsync_core::config::ManagerConfig;
+use trsync_core::{config::ManagerConfig, job::Job};
 
 mod client;
 mod daemon;

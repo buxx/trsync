@@ -1,20 +1,23 @@
 use anyhow::{bail, Result};
 
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Sender};
 use eframe::epaint::vec2;
-use trsync_core::config::ManagerConfig;
+use trsync_core::{config::ManagerConfig, user::UserRequest};
 use trsync_manager::message::DaemonMessage;
 
 use crate::{app::App, state::State};
 
-pub fn run(main_sender: Sender<DaemonMessage>) -> Result<()> {
+pub fn run(
+    main_sender: Sender<DaemonMessage>,
+    user_request_receiver: Receiver<UserRequest>,
+) -> Result<()> {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(vec2(710.0, 600.0)),
+        // initial_window_size: Some(vec2(710.0, 600.0)),
         ..Default::default()
     };
     let config = ManagerConfig::from_env(false)?;
     let state = State::from_config(&config);
-    let mut app = App::new(state, main_sender);
+    let mut app = App::new(state, main_sender, user_request_receiver);
     app.start()?;
 
     if let Err(error) = eframe::run_native(

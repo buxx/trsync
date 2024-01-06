@@ -23,6 +23,7 @@ env_logger = "0.9.0"
 reqwest = { version = "0.11.4", features = ["blocking", "json", "stream", "multipart"] }
 strum = "0.25"
 strum_macros = "0.25"
+crossbeam-channel = "0.5"
 # Tests
 mockall_double = "0.3.0"
 mockall = "0.11.1"

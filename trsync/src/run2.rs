@@ -5,7 +5,6 @@ use crate::event::remote::RemoteEvent;
 use crate::event::Event;
 use crate::local::{DiskEvent, LocalWatcher};
 use crate::local2::reducer::LocalReceiverReducer;
-use crate::operation::{Job, JobIdentifier};
 use crate::operation2::operator::Operator;
 use crate::remote::RemoteWatcher;
 use crate::state::disk::DiskState;
@@ -21,6 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
 use trsync_core::client::Tracim;
+use trsync_core::job::{Job, JobIdentifier};
 use trsync_core::local::LocalChange;
 use trsync_core::remote::RemoteChange;
 use trsync_core::sync::SyncPolitic;
@@ -36,6 +36,7 @@ struct Runner {
     remote_receiver: Receiver<RemoteEvent>,
     local_sender: Sender<DiskEvent>,
     local_receiver_reducer: LocalReceiverReducer,
+    sync_politic: Box<dyn SyncPolitic>,
 }
 
 impl Runner {
@@ -43,6 +44,7 @@ impl Runner {
         context: TrSyncContext,
         stop_signal: Arc<AtomicBool>,
         activity_sender: Option<Sender<Job>>,
+        sync_politic: Box<dyn SyncPolitic>,
     ) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
@@ -63,6 +65,7 @@ impl Runner {
             remote_receiver,
             local_sender,
             local_receiver_reducer,
+            sync_politic,
         }
     }
 
@@ -129,12 +132,71 @@ impl Runner {
         Ok(())
     }
 
+    fn signal_job_start(&self) -> Result<()> {
+        if let Some(activity_sender) = &self.activity_sender {
+            log::info!(
+                "[{}::{}] Start job",
+                self.context.instance_name,
+                self.context.workspace_id,
+            );
+            if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
+                self.context.instance_name.clone(),
+                self.context.workspace_id.0,
+                self.context.workspace_name.clone(),
+            ))) {
+                log::error!(
+                    "[{}::{}] Error when sending activity begin : {:?}",
+                    self.context.instance_name,
+                    self.context.workspace_id,
+                    error
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn signal_job_end(&self) -> Result<()> {
+        if let Some(activity_sender) = &self.activity_sender {
+            log::info!(
+                "[{}::{}] Ended job",
+                self.context.instance_name,
+                self.context.workspace_id,
+            );
+            if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
+                self.context.instance_name.clone(),
+                self.context.workspace_id.0,
+                self.context.workspace_name.clone(),
+            ))) {
+                log::error!(
+                    "[{}::{}] Error when sending activity end : {:?}",
+                    self.context.instance_name,
+                    self.context.workspace_id,
+                    error
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn sync(&self, operator: &mut Operator) -> Result<()> {
+        self.signal_job_start()?;
+        if let Err(error) = self.sync_(operator) {
+            self.signal_job_end()?;
+            return Err(error);
+        }
+        self.signal_job_end()?;
+        Ok(())
+    }
+
+    fn sync_(&self, operator: &mut Operator) -> Result<()> {
         let remote_changes = self.remote_changes()?;
         let local_changes = self.local_changes()?;
         let (remote_changes, local_changes) =
             StartupSyncResolver::new(remote_changes, local_changes, ResolveMethod::ForceLocal)
                 .resolve()?;
+
+        let (remote_changes, local_changes) =
+            self.sync_politic.deal(remote_changes, local_changes)?;
 
         for remote_change in remote_changes {
             let event_display = format!("{:?}", &remote_change);

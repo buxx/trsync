@@ -10,6 +10,7 @@ use eframe::{
 use trsync_core::{
     instance::{Instance, InstanceId, Workspace},
     security::set_password,
+    user::UserRequest,
 };
 use trsync_manager::message::DaemonMessage;
 
@@ -36,10 +37,11 @@ pub struct App {
     event_sender: Sender<Event>,
     updating: Vec<InstanceId>,
     delete_instance: Option<InstanceId>,
+    user_request_receiver: Receiver<UserRequest>,
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &EguiContext, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &EguiContext, frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
         let mut events: Vec<Event> = self.event_receiver.try_iter().collect();
 
@@ -60,11 +62,20 @@ impl eframe::App for App {
         if let Err(error) = self.deletion_window(ctx) {
             self.windowed_error = Some(format!("{:#}", error))
         };
+
+        // Exit window if user request something from systray
+        if !self.user_request_receiver.is_empty() {
+            frame.close()
+        }
     }
 }
 
 impl App {
-    pub fn new(state: State, main_sender: Sender<DaemonMessage>) -> Self {
+    pub fn new(
+        state: State,
+        main_sender: Sender<DaemonMessage>,
+        user_request_receiver: Receiver<UserRequest>,
+    ) -> Self {
         let (event_sender, event_receiver) = unbounded();
         Self {
             state,
@@ -75,6 +86,7 @@ impl App {
             event_sender,
             updating: vec![],
             delete_instance: None,
+            user_request_receiver,
         }
     }
 

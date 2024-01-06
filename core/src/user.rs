@@ -7,3 +7,9 @@ impl Display for UserId {
         f.write_str(&self.0.to_string())
     }
 }
+
+pub enum UserRequest {
+    OpenMonitorWindow,
+    OpenConfigurationWindow,
+    Quit,
+}

@@ -1,0 +1,18 @@
+[package]
+name = "trsync_manager_monitor"
+version = "0.1.0"
+authors = ["Bastien Sevajol <sevajol.bastien@gmail.com>"]
+edition = "2021"
+
+[lib]
+name = "trsync_manager_monitor"
+path = "src/lib.rs"
+
+[dependencies]
+trsync_core = { path = "../core" }
+trsync_manager = { path = "../manager" }
+eframe = "0.21.3"
+rfd = "0.10"
+anyhow = "1.0.69"
+crossbeam-channel = "0.5"
+whoami = "1.2.1"
