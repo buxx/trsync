@@ -1,26 +1,42 @@
 use std::{
+    fmt::Display,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::Result;
 use crossbeam_channel::Receiver;
-use eframe::{
-    egui::{self, CentralPanel, Context as EguiContext, Layout, Ui},
-    emath::Align,
-};
-use trsync_core::{
-    activity::{Activity, ActivityState},
-    user::UserRequest,
-};
+use eframe::egui::{self, CentralPanel, Context as EguiContext, Ui};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+use trsync_core::{activity::ActivityState, sync::SyncExchanger, user::UserRequest};
 
 use crate::event::Event;
 
 const PIXELS_PER_POINT: f32 = 1.25;
 
+#[derive(EnumIter, Eq, PartialEq)]
+pub enum Panel {
+    Root,
+    StartupSynchronizations,
+    Errors,
+}
+
+impl Display for Panel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Panel::Root => f.write_str("Moniteur"),
+            Panel::StartupSynchronizations => f.write_str("Synchronizations"),
+            Panel::Errors => f.write_str("Erreurs"),
+        }
+    }
+}
+
 pub struct App {
     activity_state: Arc<Mutex<ActivityState>>,
     user_request_receiver: Receiver<UserRequest>,
+    sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    current_panel: Panel,
 }
 
 impl eframe::App for App {
@@ -50,10 +66,13 @@ impl App {
     pub fn new(
         activity_state: Arc<Mutex<ActivityState>>,
         user_request_receiver: Receiver<UserRequest>,
+        sync_exchanger: Arc<Mutex<SyncExchanger>>,
     ) -> Self {
         Self {
             activity_state,
             user_request_receiver,
+            sync_exchanger,
+            current_panel: Panel::Root,
         }
     }
 
@@ -62,27 +81,30 @@ impl App {
     }
 
     fn header(&mut self, ui: &mut Ui) -> Vec<Event> {
-        let activity_state = self.activity_state.lock().unwrap();
-
         ui.horizontal_wrapped(|ui| {
-            ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
-                ui.label(format!(
-                    "Activité : {}",
-                    match activity_state.activity() {
-                        Activity::Idle => "Aucune",
-                        Activity::Working => "Synchronisation",
-                    }
-                ));
-            });
+            for panel in Panel::iter() {
+                let text = panel.to_string();
+                ui.selectable_value(&mut self.current_panel, panel, text);
+            }
         });
 
         vec![]
     }
 
     fn body(&mut self, ui: &mut Ui) -> Vec<Event> {
+        match self.current_panel {
+            Panel::Root => self.root_body(ui),
+            Panel::StartupSynchronizations => self.synchronizations_body(ui),
+            Panel::Errors => self.errors_body(ui),
+        }
+
+        vec![]
+    }
+
+    fn root_body(&self, ui: &mut Ui) {
         let activity_state = self.activity_state.lock().unwrap();
 
-        ui.label("État par instances");
+        ui.label("État par espaces");
         egui::Grid::new("instances_states")
             .num_columns(3)
             .spacing([40.0, 4.0])
@@ -99,7 +121,31 @@ impl App {
                     ui.end_row();
                 }
             });
-
-        vec![]
     }
+
+    fn synchronizations_body(&self, ui: &mut Ui) {
+        for (job_identifier, sync_channels) in self.sync_exchanger.lock().unwrap().channels() {
+            let mut changes = sync_channels.changes().lock().unwrap();
+
+            for change in changes.iter() {
+                ui.label(format!(
+                    "{}::{} : {:?}",
+                    &job_identifier.instance_name, &job_identifier.workspace_name, change
+                ));
+            }
+
+            if changes.is_some() && ui.button("Ok").clicked() {
+                *changes = None;
+                if sync_channels.confirm_sync_sender().send(true).is_err() {
+                    log::error!(
+                        "Unable to communicate with trsync to confirm startup sync for {}::{}",
+                        &job_identifier.instance_name,
+                        &job_identifier.workspace_name
+                    );
+                }
+            }
+        }
+    }
+
+    fn errors_body(&self, _ui: &mut Ui) {}
 }

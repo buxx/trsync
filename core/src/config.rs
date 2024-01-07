@@ -16,7 +16,8 @@ pub struct ManagerConfig {
     pub icons_path: Option<String>,
     pub instances: Vec<Instance>,
     pub allow_raw_passwords: bool,
-    pub prevent_delete_sync: bool,
+    pub confirm_startup_sync: bool,
+    pub popup_confirm_startup_sync: bool,
 }
 impl ManagerConfig {
     fn path() -> Result<PathBuf> {
@@ -48,7 +49,9 @@ impl ManagerConfig {
             .section(Some("server"))
             .context("Missing \"server\" section in config")?;
 
-        let prevent_delete_sync = strbool(server.get("prevent_delete_sync").unwrap_or("1"));
+        let confirm_startup_sync = strbool(server.get("confirm_startup_sync").unwrap_or("1"));
+        let popup_confirm_startup_sync =
+            strbool(server.get("popup_confirm_startup_sync").unwrap_or("1"));
         let local_folder = server
             .get("local_folder")
             .map(|v| v.to_string())
@@ -148,7 +151,8 @@ impl ManagerConfig {
             icons_path,
             instances,
             allow_raw_passwords,
-            prevent_delete_sync,
+            confirm_startup_sync,
+            popup_confirm_startup_sync,
         })
     }
 
@@ -172,12 +176,14 @@ impl Into<Ini> for ManagerConfig {
             .collect::<Vec<String>>()
             .join(",");
         let local_folder = self.local_folder.clone();
-        let prevent_delete_sync = self.prevent_delete_sync.to_string();
+        let confirm_startup_sync = self.confirm_startup_sync.to_string();
+        let popup_confirm_startup_sync = self.popup_confirm_startup_sync.to_string();
 
         conf.with_section(Some("server"))
             .set("instances", instances_ids)
             .set("local_folder", local_folder)
-            .set("prevent_delete_sync", prevent_delete_sync);
+            .set("confirm_startup_sync", confirm_startup_sync)
+            .set("popup_confirm_startup_sync", popup_confirm_startup_sync);
 
         if let Some(icons_path) = self.icons_path {
             conf.with_section(Some("server"))

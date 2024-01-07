@@ -12,7 +12,7 @@ use crate::state::State;
 use crate::sync::local::LocalSync;
 use crate::sync::remote::RemoteSync;
 use crate::sync::{ResolveMethod, StartupSyncResolver};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -182,6 +182,8 @@ impl Runner {
         self.signal_job_start()?;
         if let Err(error) = self.sync_(operator) {
             self.signal_job_end()?;
+            // FIXME BS NOW : !!! display errors in gui
+            log::error!("Sync error: {:#}", &error);
             return Err(error);
         }
         self.signal_job_end()?;
@@ -195,8 +197,13 @@ impl Runner {
             StartupSyncResolver::new(remote_changes, local_changes, ResolveMethod::ForceLocal)
                 .resolve()?;
 
-        let (remote_changes, local_changes) =
-            self.sync_politic.deal(remote_changes, local_changes)?;
+        if (!remote_changes.is_empty() || !local_changes.is_empty())
+            && !self
+                .sync_politic
+                .deal(remote_changes.clone(), local_changes.clone())?
+        {
+            bail!("TODO")
+        }
 
         for remote_change in remote_changes {
             let event_display = format!("{:?}", &remote_change);

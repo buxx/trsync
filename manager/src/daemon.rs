@@ -1,11 +1,15 @@
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
-use trsync_core::job::Job;
-use trsync_core::sync::AcceptAllSyncPolitic;
+use trsync_core::instance::InstanceId;
+use trsync_core::job::{Job, JobIdentifier};
+use trsync_core::sync::{
+    AcceptAllSyncPolitic, ConfirmationSyncPolitic, SyncExchanger, SyncPolitic,
+};
+use trsync_core::user::UserRequest;
 
 use trsync_core::config::ManagerConfig;
 
@@ -16,6 +20,8 @@ pub struct Daemon {
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
     main_receiver: Receiver<DaemonMessage>,
     activity_sender: Sender<Job>,
+    user_request_sender: Sender<UserRequest>,
+    sync_exchanger: Arc<Mutex<SyncExchanger>>,
 }
 
 impl Daemon {
@@ -23,12 +29,16 @@ impl Daemon {
         config: ManagerConfig,
         main_receiver: Receiver<DaemonMessage>,
         activity_sender: Sender<Job>,
+        user_request_sender: Sender<UserRequest>,
+        sync_exchanger: Arc<Mutex<SyncExchanger>>,
     ) -> Self {
         Self {
             config,
             processes: HashMap::new(),
             main_receiver,
             activity_sender,
+            user_request_sender,
+            sync_exchanger,
         }
     }
 
@@ -202,7 +212,6 @@ impl Daemon {
             workspace.workspace_id,
             workspace_name,
             false,
-            self.config.prevent_delete_sync,
         ) {
             Ok(context_) => context_,
             Err(error) => {
@@ -213,15 +222,33 @@ impl Daemon {
             }
         };
 
+        //
+        let sync_channels = self
+            .sync_exchanger
+            .lock()
+            .unwrap() // TODO unwrap ...
+            .insert(JobIdentifier::new(
+                trsync_context.instance_name.clone(),
+                trsync_context.workspace_id.0,
+                trsync_context.workspace_name.clone(),
+            ));
+
         let stop_signal = Arc::new(AtomicBool::new(false));
         let thread_stop_signal = stop_signal.clone();
         let thread_activity_sender = self.activity_sender.clone();
+        let sync_politic: Box<dyn SyncPolitic> = match self.config.confirm_startup_sync {
+            true => Box::new(ConfirmationSyncPolitic::new(
+                sync_channels,
+                self.user_request_sender.clone(),
+            )),
+            false => Box::new(AcceptAllSyncPolitic),
+        };
         thread::spawn(move || {
             trsync::run2::run(
                 trsync_context,
                 thread_stop_signal,
                 Some(thread_activity_sender),
-                Box::new(AcceptAllSyncPolitic), // FIXME BS NOW : implementing confirmation box
+                sync_politic,
             )
         });
         self.processes.insert(trsync_uid, stop_signal);

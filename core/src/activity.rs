@@ -8,7 +8,10 @@ use std::{
     time::Duration,
 };
 
-use crate::job::{Job, JobIdentifier};
+use crate::{
+    job::{Job, JobIdentifier},
+    sync::SyncChannels,
+};
 
 #[derive(Debug)]
 pub enum Activity {
@@ -19,6 +22,7 @@ pub enum Activity {
 pub struct ActivityState {
     // (instance_name, workspace_id), counter
     jobs: HashMap<JobIdentifier, i32>,
+    pending_startup_sync: Vec<(JobIdentifier, SyncChannels)>,
     // errors: HashMap<JobIdentifier, JobErrors>,
 }
 
@@ -26,6 +30,7 @@ impl ActivityState {
     pub fn new() -> Self {
         Self {
             jobs: HashMap::new(),
+            pending_startup_sync: vec![],
         }
     }
 
@@ -49,6 +54,16 @@ impl ActivityState {
 
     pub fn jobs(&self) -> &HashMap<JobIdentifier, i32> {
         &self.jobs
+    }
+
+    pub fn new_pending_startup_sync(&mut self, startup_sync: (JobIdentifier, SyncChannels)) {
+        self.pending_startup_sync.push(startup_sync)
+    }
+}
+
+impl Default for ActivityState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -9,7 +9,12 @@ impl Display for UserId {
 }
 
 pub enum UserRequest {
-    OpenMonitorWindow,
+    OpenMonitorWindow(MonitorWindowPanel),
     OpenConfigurationWindow,
     Quit,
+}
+
+pub enum MonitorWindowPanel {
+    Root,
+    StartupConfirmations,
 }

@@ -10,7 +10,8 @@ pub struct State {
     pub available_panels: Vec<Panel>,
     pub base_folder: String,
     pub icons_path: Option<String>,
-    pub prevent_startup_remote_delete: bool,
+    pub confirm_startup_sync: bool,
+    pub popup_confirm_startup_sync: bool,
     pub instances: Vec<Instance>,
 }
 
@@ -32,7 +33,8 @@ impl State {
             available_panels,
             base_folder: config.local_folder.clone(),
             icons_path: config.icons_path.clone(),
-            prevent_startup_remote_delete: config.prevent_delete_sync,
+            confirm_startup_sync: config.confirm_startup_sync,
+            popup_confirm_startup_sync: config.popup_confirm_startup_sync,
             instances: config.instances.clone(),
         }
     }
@@ -43,7 +45,8 @@ impl State {
             icons_path: self.icons_path.clone(),
             instances: self.instances.clone(),
             allow_raw_passwords: false,
-            prevent_delete_sync: self.prevent_startup_remote_delete,
+            confirm_startup_sync: self.confirm_startup_sync,
+            popup_confirm_startup_sync: self.popup_confirm_startup_sync,
         }
     }
 

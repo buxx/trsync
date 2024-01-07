@@ -17,6 +17,7 @@ use trsync_core::{
     activity::{ActivityMonitor, ActivityState},
     config::ManagerConfig,
     job::Job,
+    sync::SyncExchanger,
     user::UserRequest,
 };
 use trsync_manager::{self, daemon::Daemon, message::DaemonMessage};
@@ -32,7 +33,6 @@ mod windows;
 mod config;
 mod error;
 mod icon;
-mod sync;
 
 type DaemonMessageChannels = (Sender<DaemonMessage>, Receiver<DaemonMessage>);
 type ActivityChannels = (Sender<Job>, Receiver<Job>);
@@ -42,15 +42,24 @@ fn run() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let stop_signal = Arc::new(AtomicBool::new(false));
     let activity_state = Arc::new(Mutex::new(ActivityState::new()));
-    // let sync_politic_bridge = SyncPoliticBridge::new();
     let config = config::Config::from_env()?;
+    let manager_config = ManagerConfig::from_env(false)?;
+    let (user_request_sender, user_request_receiver): (Sender<UserRequest>, Receiver<UserRequest>) =
+        unbounded();
+    let sync_exchanger = Arc::new(Mutex::new(SyncExchanger::new()));
 
     // Start manager
     log::info!("Start manager");
     let (main_sender, main_receiver): DaemonMessageChannels = unbounded();
     let (activity_sender, activity_receiver): ActivityChannels = unbounded();
-    let manager_config = ManagerConfig::from_env(false)?;
-    Daemon::new(manager_config, main_receiver, activity_sender).start()?;
+    Daemon::new(
+        manager_config,
+        main_receiver,
+        activity_sender,
+        user_request_sender.clone(),
+        sync_exchanger.clone(),
+    )
+    .start()?;
 
     // Start activity monitor
     let activity_receiver_ = activity_receiver.clone();
@@ -59,8 +68,6 @@ fn run() -> Result<()> {
     ActivityMonitor::new(activity_receiver_, activity_state_, stop_signal_).start();
 
     // Systray
-    let (user_request_sender, user_request_receiver): (Sender<UserRequest>, Receiver<UserRequest>) =
-        unbounded();
     let activity_state_ = activity_state.clone();
     let stop_signal_ = stop_signal.clone();
     let main_sender_ = main_sender.clone();
@@ -109,10 +116,12 @@ fn run() -> Result<()> {
             Err(RecvTimeoutError) => {}
             Err(_) => break,
             Ok(request) => match request {
-                UserRequest::OpenMonitorWindow => {
-                    if let Err(error) =
-                        run_monitor(activity_state_.clone(), user_request_receiver.clone())
-                    {
+                UserRequest::OpenMonitorWindow(panel) => {
+                    if let Err(error) = run_monitor(
+                        activity_state_.clone(),
+                        user_request_receiver.clone(),
+                        sync_exchanger.clone(),
+                    ) {
                         log::error!("Unable to run configure window : '{}'", error)
                     }
                 }

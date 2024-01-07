@@ -10,7 +10,7 @@ use std::{
 use crossbeam_channel::Sender;
 use trsync_core::{
     activity::{Activity, ActivityState},
-    user::UserRequest,
+    user::{MonitorWindowPanel, UserRequest},
 };
 use trsync_manager::message::DaemonMessage;
 
@@ -50,7 +50,9 @@ pub fn run_tray(
     match tray.add_menu_item("Moniteur", move || {
         let activity_state__ = activity_state_.clone();
         log::info!("Request monitor window open");
-        if let Err(_) = window_sender_.send(UserRequest::OpenMonitorWindow) {}
+        if let Err(_) =
+            window_sender_.send(UserRequest::OpenMonitorWindow(MonitorWindowPanel::Root))
+        {}
     }) {
         Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
         _ => {}
@@ -92,11 +94,6 @@ pub fn run_tray(
         if glib_stop_signal.load(Ordering::Relaxed) {
             return glib::Continue(false);
         }
-
-        log::info!(
-            "Current activity is : {:?}",
-            activity_state_.lock().unwrap().activity()
-        );
 
         let activity_icon = match activity_state_.lock().unwrap().activity() {
             Activity::Idle => Icon::Idle,

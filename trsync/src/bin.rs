@@ -74,7 +74,6 @@ impl Opt {
             WorkspaceId(self.workspace_id),
             workspace_name,
             self.exit_after_sync,
-            self.prevent_delete_sync,
         )
     }
 }

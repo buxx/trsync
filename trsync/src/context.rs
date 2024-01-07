@@ -21,7 +21,6 @@ pub struct Context {
     pub workspace_id: WorkspaceId,
     pub workspace_name: String,
     pub exit_after_sync: bool,
-    pub prevent_delete_sync: bool,
 }
 
 impl Context {
@@ -34,7 +33,6 @@ impl Context {
         workspace_id: WorkspaceId,
         workspace_name: String,
         exit_after_sync: bool,
-        prevent_delete_sync: bool,
     ) -> Result<Self, Error> {
         let protocol = if ssl { "https" } else { "http" };
         let base_address = format!("{}://{}/api/", protocol, address);
@@ -49,7 +47,6 @@ impl Context {
             workspace_id,
             workspace_name,
             exit_after_sync,
-            prevent_delete_sync,
         })
     }
 
@@ -83,7 +80,6 @@ impl fmt::Debug for Context {
             .field("base_address", &self.base_address)
             .field("workspace_id", &self.workspace_id)
             .field("exit_after_sync", &self.exit_after_sync)
-            .field("prevent_delete_sync", &self.prevent_delete_sync)
             .finish()
     }
 }

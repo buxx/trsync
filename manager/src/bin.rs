@@ -26,7 +26,8 @@ fn main_() -> Result<()> {
     let config_ = config.clone();
     let (activity_sender, activity_receiver): (Sender<Job>, Receiver<Job>) = unbounded();
     std::thread::spawn(move || while activity_receiver.recv().is_ok() {});
-    daemon::Daemon::new(config_, main_channel_receiver, activity_sender).run()?;
+    // FIXME BS NOW
+    // daemon::Daemon::new(config_, main_channel_receiver, activity_sender).run()?;
     log::info!("Daemon finished, exit");
 
     Ok(())

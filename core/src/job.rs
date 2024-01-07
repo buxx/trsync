@@ -1,4 +1,4 @@
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct JobIdentifier {
     pub instance_name: String,
     pub workspace_id: i32,
