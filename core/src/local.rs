@@ -15,4 +15,12 @@ impl LocalChange {
             }
         }
     }
+
+    pub fn utf8_icon(&self) -> char {
+        match self {
+            LocalChange::New(_) => '⬆',
+            LocalChange::Disappear(_) => '❌',
+            LocalChange::Updated(_) => '⬆',
+        }
+    }
 }

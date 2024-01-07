@@ -121,6 +121,7 @@ fn run() -> Result<()> {
                         activity_state_.clone(),
                         user_request_receiver.clone(),
                         sync_exchanger.clone(),
+                        panel,
                     ) {
                         log::error!("Unable to run configure window : '{}'", error)
                     }

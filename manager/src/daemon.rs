@@ -240,6 +240,7 @@ impl Daemon {
             true => Box::new(ConfirmationSyncPolitic::new(
                 sync_channels,
                 self.user_request_sender.clone(),
+                self.config.popup_confirm_startup_sync,
             )),
             false => Box::new(AcceptAllSyncPolitic),
         };

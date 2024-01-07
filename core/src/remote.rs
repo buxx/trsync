@@ -17,4 +17,12 @@ impl RemoteChange {
             | RemoteChange::Updated(_, path) => path.clone(),
         }
     }
+
+    pub fn utf8_icon(&self) -> char {
+        match self {
+            RemoteChange::New(_, _) => '⬇',
+            RemoteChange::Disappear(_, _) => '❌',
+            RemoteChange::Updated(_, _) => '⬇',
+        }
+    }
 }

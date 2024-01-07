@@ -49,13 +49,19 @@ impl SyncPolitic for AcceptAllSyncPolitic {
 pub struct ConfirmationSyncPolitic {
     sync_channels: SyncChannels,
     user_request_sender: Sender<UserRequest>,
+    popup: bool,
 }
 
 impl ConfirmationSyncPolitic {
-    pub fn new(sync_channels: SyncChannels, user_request_sender: Sender<UserRequest>) -> Self {
+    pub fn new(
+        sync_channels: SyncChannels,
+        user_request_sender: Sender<UserRequest>,
+        popup: bool,
+    ) -> Self {
         Self {
             sync_channels,
             user_request_sender,
+            popup,
         }
     }
 }
@@ -70,16 +76,17 @@ impl SyncPolitic for ConfirmationSyncPolitic {
         // FIXME BS NOW : entrer ici que si remote_changes ou local_changes
         *self.sync_channels.changes.lock().unwrap() = Some((remote_changes, local_changes));
 
-        if self
-            .user_request_sender
-            .send(UserRequest::OpenMonitorWindow(
-                MonitorWindowPanel::StartupConfirmations,
-            ))
-            // Error means channel is closed
-            .is_err()
+        if self.popup
+            && self
+                .user_request_sender
+                .send(UserRequest::OpenMonitorWindow(
+                    MonitorWindowPanel::StartupConfirmations,
+                ))
+                // Error means channel is closed
+                .is_err()
         {
             return Err(SyncPoliticError::UnableToSendUserConfirmationRequest);
-        };
+        }
 
         match self.sync_channels.confirm_sync_receiver.recv() {
             Ok(decision) => Ok(decision),
