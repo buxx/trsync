@@ -1,7 +1,7 @@
 use std::{
-    fmt::Display,
+    fmt::{Display, Write},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
@@ -10,7 +10,10 @@ use eframe::egui::{self, CentralPanel, Context as EguiContext, Ui};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use trsync_core::{
-    activity::ActivityState, job::JobIdentifier, sync::SyncExchanger, user::{UserRequest, MonitorWindowPanel},
+    activity::ActivityState,
+    job::JobIdentifier,
+    sync::SyncExchanger,
+    user::{MonitorWindowPanel, UserRequest},
 };
 
 use crate::event::Event;
@@ -43,12 +46,36 @@ impl From<MonitorWindowPanel> for Panel {
     }
 }
 
+enum BlinkingChar {
+    On,
+    Off,
+}
+impl BlinkingChar {
+    fn next(&self) -> BlinkingChar {
+        match self {
+            BlinkingChar::On => BlinkingChar::Off,
+            BlinkingChar::Off => BlinkingChar::On,
+        }
+    }
+}
+
+impl Display for BlinkingChar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlinkingChar::On => f.write_char('⏺'),
+            BlinkingChar::Off => f.write_char('○'),
+        }
+    }
+}
+
 pub struct App {
     activity_state: Arc<Mutex<ActivityState>>,
     user_request_receiver: Receiver<UserRequest>,
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
     current_panel: Panel,
     current_sync_space: Option<JobIdentifier>,
+    blinking_char: BlinkingChar,
+    last_blinking: Instant,
 }
 
 impl eframe::App for App {
@@ -60,6 +87,7 @@ impl eframe::App for App {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
 
         self.update_synchronizations_combo_box_default_value();
+        self.update_blinking_char();
 
         CentralPanel::default().show(ctx, |ui| {
             events.extend(self.header(ui));
@@ -89,6 +117,8 @@ impl App {
             sync_exchanger,
             current_panel: panel.into(),
             current_sync_space: None,
+            blinking_char: BlinkingChar::Off,
+            last_blinking: Instant::now(),
         }
     }
 
@@ -107,7 +137,16 @@ impl App {
     fn header(&mut self, ui: &mut Ui) -> Vec<Event> {
         ui.horizontal_wrapped(|ui| {
             for panel in Panel::iter() {
-                let text = panel.to_string();
+                let text = match &panel {
+                    Panel::StartupSynchronizations => {
+                        if !self.waiting_spaces().is_empty() {
+                            format!("{} {}", panel.to_string(), self.blinking_char)
+                        } else {
+                            panel.to_string()
+                        }
+                    }
+                    _ => panel.to_string(),
+                };
                 ui.selectable_value(&mut self.current_panel, panel, text);
             }
         });
@@ -157,6 +196,13 @@ impl App {
             .collect()
     }
 
+    fn update_blinking_char(&mut self) {
+        if self.last_blinking.elapsed() > Duration::from_millis(750) {
+            self.blinking_char = self.blinking_char.next();
+            self.last_blinking = Instant::now();
+        }
+    }
+
     fn synchronizations_body(&mut self, ui: &mut Ui) {
         self.synchronizations_combo_box(ui);
         self.synchronizations_display(ui);
@@ -198,7 +244,8 @@ impl App {
                     "La synchronisation de départ de cet espace inclura les changements suivants :",
                 );
 
-                egui::Grid::new("instances_states")
+                egui::ScrollArea::both().show(ui, |ui| {
+                    egui::Grid::new("instances_states")
                     .num_columns(2)
                     .spacing([40.0, 4.0])
                     .striped(true)
@@ -217,30 +264,32 @@ impl App {
                         }
                     });
 
-                ui.horizontal_wrapped(|ui| {
-                    if changes.is_some() && ui.button("Refuser").clicked() {
-                        *changes = None;
-                        answered = true;
-                        if sync_channels.confirm_sync_sender().send(false).is_err() {
-                            log::error!(
-                                "Unable to communicate with trsync to confirm startup sync for {}::{}",
-                                &waiting_space.instance_name,
-                                &waiting_space.workspace_name
-                            );
+                    ui.horizontal_wrapped(|ui| {
+                        if changes.is_some() && ui.button("Refuser").clicked() {
+                            *changes = None;
+                            answered = true;
+                            if sync_channels.confirm_sync_sender().send(false).is_err() {
+                                log::error!(
+                                    "Unable to communicate with trsync to confirm startup sync for {}::{}",
+                                    &waiting_space.instance_name,
+                                    &waiting_space.workspace_name
+                                );
+                            };
                         };
-                    };
-    
-                    if changes.is_some() && ui.button("Accepter").clicked() {
-                        *changes = None;
-                        answered = true;
-                        if sync_channels.confirm_sync_sender().send(true).is_err() {
-                            log::error!(
-                                "Unable to communicate with trsync to refuse startup sync for {}::{}",
-                                &waiting_space.instance_name,
-                                &waiting_space.workspace_name
-                            );
+
+                        if changes.is_some() && ui.button("Accepter").clicked() {
+                            *changes = None;
+                            answered = true;
+                            if sync_channels.confirm_sync_sender().send(true).is_err() {
+                                log::error!(
+                                    "Unable to communicate with trsync to refuse startup sync for {}::{}",
+                                    &waiting_space.instance_name,
+                                    &waiting_space.workspace_name
+                                );
+                            };
                         };
-                    };
+                    });
+
                 });
             }
         }

@@ -73,7 +73,6 @@ impl SyncPolitic for ConfirmationSyncPolitic {
         local_changes: Vec<LocalChange>,
     ) -> Result<bool, SyncPoliticError> {
         // TODO: no unwrap ... -> SyncPoliticError::UnableToSendChanges
-        // FIXME BS NOW : entrer ici que si remote_changes ou local_changes
         *self.sync_channels.changes.lock().unwrap() = Some((remote_changes, local_changes));
 
         if self.popup

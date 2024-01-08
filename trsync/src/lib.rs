@@ -1,5 +1,3 @@
-pub mod run2;
-pub mod sync;
 pub mod client;
 pub mod conflict;
 pub mod context;
@@ -17,7 +15,9 @@ pub mod reader;
 pub mod remote;
 pub mod remote2;
 pub mod run;
+pub mod run2;
 pub mod state;
+pub mod sync;
 pub mod util;
 
 #[cfg(test)]
