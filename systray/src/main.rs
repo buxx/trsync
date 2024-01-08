@@ -52,12 +52,13 @@ fn run() -> Result<()> {
     log::info!("Start manager");
     let (main_sender, main_receiver): DaemonMessageChannels = unbounded();
     let (activity_sender, activity_receiver): ActivityChannels = unbounded();
+    let sync_exchanger_ = sync_exchanger.clone();
     Daemon::new(
         manager_config,
         main_receiver,
         activity_sender,
         user_request_sender.clone(),
-        sync_exchanger.clone(),
+        sync_exchanger_,
     )
     .start()?;
 
@@ -72,6 +73,7 @@ fn run() -> Result<()> {
     let stop_signal_ = stop_signal.clone();
     let main_sender_ = main_sender.clone();
     let user_request_sender_ = user_request_sender.clone();
+    let sync_exchanger_ = sync_exchanger.clone();
     thread::spawn(move || {
         log::info!("Start systray");
         #[cfg(target_os = "linux")]
@@ -86,6 +88,7 @@ fn run() -> Result<()> {
                 tray_activity_state,
                 tray_stop_signal_,
                 user_request_sender_,
+                sync_exchanger_,
             ) {
                 log::error!("{}", error)
             }

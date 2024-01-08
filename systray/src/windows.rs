@@ -57,20 +57,39 @@ pub fn run_tray(
                     break;
                 }
 
-                let activity_icon = match activity_state.lock().unwrap().activity() {
-                    Activity::Idle => Icon::Idle,
-                    Activity::Working => match current_icon {
-                        Icon::Idle => Icon::Working1,
-                        Icon::Working1 => Icon::Working2,
-                        Icon::Working2 => Icon::Working3,
-                        Icon::Working3 => Icon::Working4,
-                        Icon::Working4 => Icon::Working5,
-                        Icon::Working5 => Icon::Working6,
-                        Icon::Working6 => Icon::Working7,
-                        Icon::Working7 => Icon::Working8,
-                        Icon::Working8 => Icon::Working1,
-                    },
+                let activity_icon = {
+                    // FIXME BS NOW: mettre ce Arc Mutex SyncExchanger dans une struct container pour simplifier
+                    let is_waiting_spaces = sync_exchanger
+                        .lock()
+                        .unwrap()
+                        .channels()
+                        .iter()
+                        .any(|channel| channel.1.changes().lock().unwrap().is_some());
+                    if is_waiting_spaces {
+                        match current_icon {
+                            Icon::Idle => Icon::Ask,
+                            Icon::Ask => Icon::Idle,
+                            _ => Icon::Idle,
+                        }
+                    } else {
+                        match activity_state_.lock().unwrap().activity() {
+                            Activity::Idle => Icon::Idle,
+                            Activity::Working => match current_icon {
+                                Icon::Idle => Icon::Working1,
+                                Icon::Working1 => Icon::Working2,
+                                Icon::Working2 => Icon::Working3,
+                                Icon::Working3 => Icon::Working4,
+                                Icon::Working4 => Icon::Working5,
+                                Icon::Working5 => Icon::Working6,
+                                Icon::Working6 => Icon::Working7,
+                                Icon::Working7 => Icon::Working8,
+                                Icon::Working8 => Icon::Working1,
+                                _ => Icon::Working1,
+                            },
+                        }
+                    }
                 };
+
                 if activity_icon != current_icon {
                     current_icon = activity_icon;
                     let icon_value = current_icon.value();
