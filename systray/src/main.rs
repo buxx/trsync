@@ -16,6 +16,7 @@ use std::{
 use trsync_core::{
     activity::{ActivityMonitor, ActivityState},
     config::ManagerConfig,
+    error::ErrorExchanger,
     job::Job,
     sync::SyncExchanger,
     user::UserRequest,
@@ -47,18 +48,21 @@ fn run() -> Result<()> {
     let (user_request_sender, user_request_receiver): (Sender<UserRequest>, Receiver<UserRequest>) =
         unbounded();
     let sync_exchanger = Arc::new(Mutex::new(SyncExchanger::new()));
+    let error_exchanger = Arc::new(Mutex::new(ErrorExchanger::new()));
 
     // Start manager
     log::info!("Start manager");
     let (main_sender, main_receiver): DaemonMessageChannels = unbounded();
     let (activity_sender, activity_receiver): ActivityChannels = unbounded();
     let sync_exchanger_ = sync_exchanger.clone();
+    let error_exchanger_ = error_exchanger.clone();
     Daemon::new(
         manager_config,
         main_receiver,
         activity_sender,
         user_request_sender.clone(),
         sync_exchanger_,
+        error_exchanger_,
     )
     .start()?;
 
@@ -74,6 +78,7 @@ fn run() -> Result<()> {
     let main_sender_ = main_sender.clone();
     let user_request_sender_ = user_request_sender.clone();
     let sync_exchanger_ = sync_exchanger.clone();
+    let error_exchanger_ = error_exchanger.clone();
     thread::spawn(move || {
         log::info!("Start systray");
         #[cfg(target_os = "linux")]
@@ -89,6 +94,7 @@ fn run() -> Result<()> {
                 tray_stop_signal_,
                 user_request_sender_,
                 sync_exchanger_,
+                error_exchanger_,
             ) {
                 log::error!("{}", error)
             }
@@ -103,6 +109,8 @@ fn run() -> Result<()> {
                 activity_state,
                 tray_stop_signal,
                 user_request_sender_,
+                sync_exchanger_,
+                error_exchanger_,
             ) {
                 Err(error) => {
                     log::error!("{}", error)
@@ -114,6 +122,7 @@ fn run() -> Result<()> {
 
     let activity_state_ = activity_state.clone();
     let main_sender_ = main_sender.clone();
+    // TODO : See if we can use multiple viewports (https://github.com/emilk/egui/tree/master/examples/multiple_viewports)
     loop {
         match user_request_receiver.recv_timeout(Duration::from_millis(150)) {
             Err(RecvTimeoutError) => {}
@@ -124,6 +133,7 @@ fn run() -> Result<()> {
                         activity_state_.clone(),
                         user_request_receiver.clone(),
                         sync_exchanger.clone(),
+                        error_exchanger.clone(),
                         panel,
                     ) {
                         log::error!("Unable to run configure window : '{}'", error)

@@ -10,6 +10,7 @@ use std::{
 use crossbeam_channel::Sender;
 use trsync_core::{
     activity::{Activity, ActivityState},
+    error::ErrorExchanger,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
 };
@@ -26,6 +27,7 @@ pub fn run_tray(
     stop_signal: Arc<AtomicBool>,
     user_request_sender: Sender<UserRequest>,
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
 ) -> Result<(), String> {
     match gtk::init() {
         Err(error) => return Err(format!("Unable to initialize gtk : '{}'", error)),
@@ -105,7 +107,19 @@ pub fn run_tray(
                 .channels()
                 .iter()
                 .any(|channel| channel.1.changes().lock().unwrap().is_some());
-            if is_waiting_spaces {
+            let is_error_spaces = error_exchanger
+                .lock()
+                .unwrap()
+                .channels()
+                .iter()
+                .any(|channel| channel.1.error().lock().unwrap().is_some());
+            if is_error_spaces {
+                match current_icon {
+                    Icon::Idle => Icon::Error,
+                    Icon::Error => Icon::Idle,
+                    _ => Icon::Idle,
+                }
+            } else if is_waiting_spaces {
                 match current_icon {
                     Icon::Idle => Icon::Ask,
                     Icon::Ask => Icon::Idle,

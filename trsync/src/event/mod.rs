@@ -1,4 +1,4 @@
-use trsync_core::{local::LocalChange, remote::RemoteChange};
+use trsync_core::{client::TracimClient, local::LocalChange, remote::RemoteChange};
 
 use crate::{local::DiskEvent, local2::reducer::DiskEventWrap};
 
@@ -37,6 +37,33 @@ impl From<LocalChange> for Event {
             LocalChange::Updated(path) => {
                 Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Modified(path)))
             }
+        }
+    }
+}
+
+impl Event {
+    pub fn display(&self, client: &Box<dyn TracimClient>) -> String {
+        match self {
+            Event::Remote(event) => {
+                let path = client
+                    .get_content_path(event.content_id())
+                    .and_then(|v| Ok(format!("{}", v.display())))
+                    .unwrap_or("?".to_string());
+                match event {
+                    RemoteEvent::Deleted(_) => format!("☁❌ {}", path),
+                    RemoteEvent::Created(_) => format!("☁🆕 {}", path),
+                    RemoteEvent::Updated(_) => format!("☁⬇ {}", path),
+                    RemoteEvent::Renamed(_) => format!("☁⬇ {}", path),
+                }
+            }
+            Event::Local(event) => match &event.1 {
+                DiskEvent::Deleted(path) => format!("🖴❌ {}", path.display()),
+                DiskEvent::Created(path) => format!("⬆🆕 {}", path.display()),
+                DiskEvent::Modified(path) => format!("⬆❌ {}", path.display()),
+                DiskEvent::Renamed(before_path, after_path) => {
+                    format!("🖴 {} ➡ {}", before_path.display(), after_path.display())
+                }
+            },
         }
     }
 }

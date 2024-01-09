@@ -18,6 +18,8 @@ pub fn run_tray(
     main_sender: Sender<DaemonMessage>,
     activity_state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
+    sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
 ) -> Result<(), String> {
     let mut tray = match TrayItem::new("Tracim", "trsync_idle") {
         Ok(tray_) => tray_,
@@ -65,7 +67,19 @@ pub fn run_tray(
                         .channels()
                         .iter()
                         .any(|channel| channel.1.changes().lock().unwrap().is_some());
-                    if is_waiting_spaces {
+                    let is_error_spaces = error_exchanger
+                        .lock()
+                        .unwrap()
+                        .channels()
+                        .iter()
+                        .any(|channel| channel.1.error().lock().unwrap().is_some());
+                    if is_error_spaces {
+                        match current_icon {
+                            Icon::Idle => Icon::Error,
+                            Icon::Error => Icon::Idle,
+                            _ => Icon::Idle,
+                        }
+                    } else if is_waiting_spaces {
                         match current_icon {
                             Icon::Idle => Icon::Ask,
                             Icon::Ask => Icon::Idle,

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum LocalChange {
@@ -16,11 +16,17 @@ impl LocalChange {
         }
     }
 
-    pub fn utf8_icon(&self) -> char {
+    pub fn utf8_icon(&self) -> &str {
         match self {
-            LocalChange::New(_) => '⬆',
-            LocalChange::Disappear(_) => '❌',
-            LocalChange::Updated(_) => '⬆',
+            LocalChange::New(_) => "🖴🆕",
+            LocalChange::Disappear(_) => "🖴❌",
+            LocalChange::Updated(_) => "🖴⬆",
         }
+    }
+}
+
+impl Display for LocalChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{} {}", self.utf8_icon(), self.path().display()))
     }
 }

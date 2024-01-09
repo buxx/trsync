@@ -102,13 +102,9 @@ pub struct SyncChannels {
 }
 
 impl SyncChannels {
-    pub fn new(
-        changes: Arc<Mutex<Option<(Vec<RemoteChange>, Vec<LocalChange>)>>>,
-        confirm_sync_sender: Sender<bool>,
-        confirm_sync_receiver: Receiver<bool>,
-    ) -> Self {
+    pub fn new(confirm_sync_sender: Sender<bool>, confirm_sync_receiver: Receiver<bool>) -> Self {
         Self {
-            changes,
+            changes: Arc::new(Mutex::new(None)),
             confirm_sync_sender,
             confirm_sync_receiver,
         }
@@ -140,9 +136,8 @@ impl SyncExchanger {
     }
 
     pub fn insert(&mut self, job_identifier: JobIdentifier) -> SyncChannels {
-        let changes = Arc::new(Mutex::new(None));
         let (confirm_sync_sender, confirm_sync_receiver) = unbounded();
-        let sync_channels = SyncChannels::new(changes, confirm_sync_sender, confirm_sync_receiver);
+        let sync_channels = SyncChannels::new(confirm_sync_sender, confirm_sync_receiver);
         self.channels.insert(job_identifier, sync_channels.clone());
 
         sync_channels

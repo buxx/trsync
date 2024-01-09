@@ -128,6 +128,7 @@ pub trait TracimClient {
     fn trash_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
     fn restore_content(&self, content_id: ContentId) -> Result<(), TracimClientError>;
     fn get_content(&self, content_id: ContentId) -> Result<RemoteContent, TracimClientError>;
+    fn get_content_path(&self, content_id: ContentId) -> Result<PathBuf, TracimClientError>;
     fn find_one(
         &self,
         file_name: &ContentFileName,
@@ -556,6 +557,23 @@ impl TracimClient for Tracim {
             .send()?;
 
         Ok(response.json::<RemoteContent>()?)
+    }
+
+    fn get_content_path(&self, content_id: ContentId) -> Result<PathBuf, TracimClientError> {
+        let mut path = PathBuf::new();
+        let mut content = self.get_content(content_id)?;
+        let mut reversed_content_file_names = vec![content.filename.clone()];
+
+        while let Some(parent_id) = content.parent_id {
+            content = self.get_content(ContentId(parent_id))?;
+            reversed_content_file_names.push(content.filename.clone());
+        }
+
+        let content_file_names: Vec<String> =
+            reversed_content_file_names.into_iter().rev().collect();
+        path.extend(content_file_names);
+
+        Ok(path)
     }
 
     fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError> {

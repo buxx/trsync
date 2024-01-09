@@ -19,7 +19,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
-use trsync_core::client::Tracim;
+use trsync_core::client::{Tracim, TracimClient};
+use trsync_core::error::{Decision, ErrorChannels};
 use trsync_core::job::{Job, JobIdentifier};
 use trsync_core::local::LocalChange;
 use trsync_core::remote::RemoteChange;
@@ -37,6 +38,7 @@ struct Runner {
     local_sender: Sender<DiskEvent>,
     local_receiver_reducer: LocalReceiverReducer,
     sync_politic: Box<dyn SyncPolitic>,
+    error_channels: ErrorChannels,
 }
 
 impl Runner {
@@ -45,6 +47,7 @@ impl Runner {
         stop_signal: Arc<AtomicBool>,
         activity_sender: Option<Sender<Job>>,
         sync_politic: Box<dyn SyncPolitic>,
+        error_channels: ErrorChannels,
     ) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
@@ -66,6 +69,7 @@ impl Runner {
             local_sender,
             local_receiver_reducer,
             sync_politic,
+            error_channels,
         }
     }
 
@@ -182,8 +186,6 @@ impl Runner {
         self.signal_job_start()?;
         if let Err(error) = self.sync_(operator) {
             self.signal_job_end()?;
-            // FIXME BS NOW : !!! display errors in gui
-            log::error!("Sync error: {:#}", &error);
             return Err(error);
         }
         self.signal_job_end()?;
@@ -206,10 +208,10 @@ impl Runner {
         }
 
         for remote_change in remote_changes {
-            let event_display = format!("{:?}", &remote_change);
+            let event_display = format!("{}", &remote_change);
             operator
                 .operate(&(remote_change.into()))
-                .context(format!("Operate on remote change {:?}", event_display))?
+                .context(format!("Operate on remote change {}", event_display))?
         }
         for local_change in local_changes {
             let event_display = format!("{:?}", &local_change);
@@ -286,6 +288,8 @@ impl Runner {
     }
 
     fn operate(&self, operator: &mut Operator) -> Result<()> {
+        let client: Box<dyn TracimClient> = Box::new(self.client()?);
+
         loop {
             match self
                 .operational_receiver
@@ -336,17 +340,9 @@ impl Runner {
                     }
 
                     log::info!("Proceed event {:?}", &event);
-                    let context_message = format!("Operate on event {:?}", &event);
+                    let context_message = format!("Operate on event '{}'", event.display(&client));
                     self.signal_job_start()?;
-                    if let Err(error) = operator.operate(&event).context(context_message) {
-                        self.signal_job_end()?;
-                        log::error!(
-                            "Error happens during operate of '{:?}': '{:#}'",
-                            &event,
-                            &error,
-                        );
-                        continue;
-                    };
+                    operator.operate(&event).context(context_message)?;
                     self.signal_job_end()?;
                 }
             }
@@ -403,10 +399,33 @@ pub fn run(
     stop_signal: Arc<AtomicBool>,
     activity_sender: Option<Sender<Job>>,
     sync_politic: Box<dyn SyncPolitic>,
+    error_channels: ErrorChannels,
 ) -> Result<()> {
-    let mut runner = Runner::new(context, stop_signal.clone(), activity_sender, sync_politic);
+    let mut runner = Runner::new(
+        context,
+        stop_signal.clone(),
+        activity_sender,
+        sync_politic,
+        error_channels.clone(),
+    );
     loop {
-        runner.run().context("Run")?;
+        if let Err(error) = runner.run() {
+            // FIXME BS NOW : ErrorKind according to real kind of error !!!
+            *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
+            match error_channels.decision_receiver().recv() {
+                Ok(Decision::RestartSpaceSync) => {}
+                Ok(Decision::DisableSpaceSync) => {
+                    todo!()
+                }
+                Ok(Decision::MakeCompleteResync) => {
+                    todo!()
+                }
+                Err(_) => {
+                    log::error!("Unable to communicate from trsync run to error decision receiver");
+                    break;
+                }
+            }
+        }
         if stop_signal.load(Ordering::Relaxed) {
             stop_signal.swap(false, Ordering::Relaxed);
             break;

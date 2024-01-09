@@ -6,11 +6,15 @@ use std::{
 
 use anyhow::Result;
 use crossbeam_channel::Receiver;
-use eframe::egui::{self, CentralPanel, Context as EguiContext, Ui};
+use eframe::{
+    egui::{self, CentralPanel, Context as EguiContext, RichText, Ui},
+    epaint::Color32,
+};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use trsync_core::{
     activity::ActivityState,
+    error::ErrorExchanger,
     job::JobIdentifier,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
@@ -72,8 +76,10 @@ pub struct App {
     activity_state: Arc<Mutex<ActivityState>>,
     user_request_receiver: Receiver<UserRequest>,
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
     current_panel: Panel,
     current_sync_space: Option<JobIdentifier>,
+    current_error_space: Option<JobIdentifier>,
     blinking_char: BlinkingChar,
     last_blinking: Instant,
 }
@@ -87,6 +93,7 @@ impl eframe::App for App {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
 
         self.update_synchronizations_combo_box_default_value();
+        self.update_error_combo_box_default_value();
         self.update_blinking_char();
 
         CentralPanel::default().show(ctx, |ui| {
@@ -109,14 +116,17 @@ impl App {
         activity_state: Arc<Mutex<ActivityState>>,
         user_request_receiver: Receiver<UserRequest>,
         sync_exchanger: Arc<Mutex<SyncExchanger>>,
+        error_exchanger: Arc<Mutex<ErrorExchanger>>,
         panel: MonitorWindowPanel,
     ) -> Self {
         Self {
             activity_state,
             user_request_receiver,
             sync_exchanger,
+            error_exchanger,
             current_panel: panel.into(),
             current_sync_space: None,
+            current_error_space: None,
             blinking_char: BlinkingChar::Off,
             last_blinking: Instant::now(),
         }
@@ -134,13 +144,28 @@ impl App {
         }
     }
 
+    fn update_error_combo_box_default_value(&mut self) {
+        if self.current_error_space.is_none() {
+            if let Some(error_space) = self.error_spaces().first() {
+                self.current_error_space = Some(error_space.clone())
+            }
+        }
+    }
+
     fn header(&mut self, ui: &mut Ui) -> Vec<Event> {
         ui.horizontal_wrapped(|ui| {
             for panel in Panel::iter() {
                 let text = match &panel {
                     Panel::StartupSynchronizations => {
                         if !self.waiting_spaces().is_empty() {
-                            format!("{} {}", panel.to_string(), self.blinking_char)
+                            format!("{} {}", panel, self.blinking_char)
+                        } else {
+                            panel.to_string()
+                        }
+                    }
+                    Panel::Errors => {
+                        if !self.error_spaces().is_empty() {
+                            format!("{} {}", panel, self.blinking_char)
                         } else {
                             panel.to_string()
                         }
@@ -192,6 +217,16 @@ impl App {
         channels
             .iter()
             .filter(|(_, channels)| channels.changes().lock().unwrap().is_some())
+            .map(|(i, _)| i.clone())
+            .collect()
+    }
+
+    fn error_spaces(&self) -> Vec<JobIdentifier> {
+        let binding = self.error_exchanger.lock().unwrap();
+        let channels = binding.channels();
+        channels
+            .iter()
+            .filter(|(_, channels)| channels.error().lock().unwrap().is_some())
             .map(|(i, _)| i.clone())
             .collect()
     }
@@ -299,5 +334,51 @@ impl App {
         }
     }
 
-    fn errors_body(&self, _ui: &mut Ui) {}
+    fn errors_body(&mut self, ui: &mut Ui) {
+        self.errors_combo_box(ui);
+        self.errors_display(ui);
+    }
+
+    fn errors_combo_box(&mut self, ui: &mut Ui) {
+        let error_spaces = self.error_spaces();
+
+        egui::ComboBox::from_label("Espaces en erreur")
+            .selected_text(
+                self.current_error_space
+                    .as_ref()
+                    .map(|x| x.to_string())
+                    .unwrap_or("".to_string()),
+            )
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(120.0);
+                for error_space in error_spaces {
+                    ui.selectable_value(
+                        &mut self.current_error_space,
+                        Some(error_space.clone()),
+                        error_space.to_string(),
+                    );
+                }
+            });
+    }
+
+    fn errors_display(&mut self, ui: &mut Ui) {
+        let binding = self.error_exchanger.lock().unwrap();
+        let channels = binding.channels();
+        // let mut answered = false;
+
+        if let Some(error_space) = &self.current_error_space {
+            if let Some(sync_channels) = channels.get(error_space) {
+                let error = sync_channels.error().lock().unwrap();
+                if let Some(message) = error.clone() {
+                    ui.label("Cet espace de travail à rencontré une erreur :");
+                    ui.label(RichText::new(message).color(Color32::RED));
+                }
+            }
+        }
+
+        // if answered {
+        //     self.current_sync_space = None;
+        // }
+    }
 }

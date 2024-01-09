@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
+use trsync_core::error::ErrorExchanger;
 use trsync_core::instance::InstanceId;
 use trsync_core::job::{Job, JobIdentifier};
 use trsync_core::sync::{
@@ -22,6 +23,7 @@ pub struct Daemon {
     activity_sender: Sender<Job>,
     user_request_sender: Sender<UserRequest>,
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
 }
 
 impl Daemon {
@@ -31,6 +33,7 @@ impl Daemon {
         activity_sender: Sender<Job>,
         user_request_sender: Sender<UserRequest>,
         sync_exchanger: Arc<Mutex<SyncExchanger>>,
+        error_exchanger: Arc<Mutex<ErrorExchanger>>,
     ) -> Self {
         Self {
             config,
@@ -39,6 +42,7 @@ impl Daemon {
             activity_sender,
             user_request_sender,
             sync_exchanger,
+            error_exchanger,
         }
     }
 
@@ -223,15 +227,21 @@ impl Daemon {
         };
 
         //
+        let job_identifier = JobIdentifier::new(
+            trsync_context.instance_name.clone(),
+            trsync_context.workspace_id.0,
+            trsync_context.workspace_name.clone(),
+        );
         let sync_channels = self
             .sync_exchanger
             .lock()
             .unwrap() // TODO unwrap ...
-            .insert(JobIdentifier::new(
-                trsync_context.instance_name.clone(),
-                trsync_context.workspace_id.0,
-                trsync_context.workspace_name.clone(),
-            ));
+            .insert(job_identifier.clone());
+        let error_channels = self
+            .error_exchanger
+            .lock()
+            .unwrap() // TODO unwrap ...
+            .insert(job_identifier);
 
         let stop_signal = Arc::new(AtomicBool::new(false));
         let thread_stop_signal = stop_signal.clone();
@@ -250,6 +260,7 @@ impl Daemon {
                 thread_stop_signal,
                 Some(thread_activity_sender),
                 sync_politic,
+                error_channels,
             )
         });
         self.processes.insert(trsync_uid, stop_signal);
