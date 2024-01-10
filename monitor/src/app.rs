@@ -14,7 +14,7 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use trsync_core::{
     activity::ActivityState,
-    error::ErrorExchanger,
+    error::{Decision, ErrorExchanger},
     job::JobIdentifier,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
@@ -381,20 +381,32 @@ impl App {
     fn errors_display(&mut self, ui: &mut Ui) {
         let binding = self.error_exchanger.lock().unwrap();
         let channels = binding.channels();
-        // let mut answered = false;
 
         if let Some(error_space) = &self.current_error_space {
             if let Some(sync_channels) = channels.get(error_space) {
-                let error = sync_channels.error().lock().unwrap();
+                let mut answered = false;
+                let mut error = sync_channels.error().lock().unwrap();
                 if let Some(message) = error.clone() {
                     ui.label("Cet espace de travail à rencontré une erreur :");
                     ui.label(RichText::new(message).color(Color32::RED));
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Redémarrer la synchronisation").clicked() {
+                            answered = true;
+                            if sync_channels
+                                .decision_sender()
+                                .send(Decision::RestartSpaceSync)
+                                .is_err()
+                            {
+                                print!("Unable to send decision to {}", error_space)
+                            }
+                        }
+                    });
+                }
+                if answered {
+                    self.current_error_space = None;
+                    *error = None;
                 }
             }
         }
-
-        // if answered {
-        //     self.current_sync_space = None;
-        // }
     }
 }
