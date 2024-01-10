@@ -9,14 +9,16 @@ use crate::job::JobIdentifier;
 
 #[derive(Debug, Clone)]
 pub enum Decision {
-    DisableSpaceSync,
+    // DisableSpaceSync,
     RestartSpaceSync,
-    MakeCompleteResync,
+    // FIXME BS NOW
+    // MakeCompleteResync,
 }
 
 #[derive(Debug, Clone)]
 pub struct ErrorChannels {
     error: Arc<Mutex<Option<String>>>,
+    seen: Arc<Mutex<bool>>,
     decision_sender: Sender<Decision>,
     decision_receiver: Receiver<Decision>,
 }
@@ -25,6 +27,7 @@ impl ErrorChannels {
     pub fn new(decision_sender: Sender<Decision>, decision_receiver: Receiver<Decision>) -> Self {
         Self {
             error: Arc::new(Mutex::new(None)),
+            seen: Arc::new(Mutex::new(false)),
             decision_sender,
             decision_receiver,
         }
@@ -40,6 +43,15 @@ impl ErrorChannels {
 
     pub fn error(&self) -> &Mutex<Option<String>> {
         self.error.as_ref()
+    }
+
+    pub fn seen(&self) -> bool {
+        // TODO : no unwrap
+        *self.seen.lock().unwrap()
+    }
+
+    pub fn set_seen(&self) {
+        *self.seen.lock().unwrap() = true;
     }
 }
 

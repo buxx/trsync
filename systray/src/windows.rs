@@ -67,12 +67,15 @@ pub fn run_tray(
                         .channels()
                         .iter()
                         .any(|channel| channel.1.changes().lock().unwrap().is_some());
-                    let is_error_spaces = error_exchanger
-                        .lock()
-                        .unwrap()
-                        .channels()
-                        .iter()
-                        .any(|channel| channel.1.error().lock().unwrap().is_some());
+                    let is_error_spaces =
+                        error_exchanger
+                            .lock()
+                            .unwrap()
+                            .channels()
+                            .iter()
+                            .any(|channel| {
+                                channel.1.error().lock().unwrap().is_some() && !channel.1.seen()
+                            });
                     if is_error_spaces {
                         match current_icon {
                             Icon::Idle => Icon::Error,

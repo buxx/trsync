@@ -410,16 +410,9 @@ pub fn run(
     );
     loop {
         if let Err(error) = runner.run() {
-            // FIXME BS NOW : ErrorKind according to real kind of error !!!
             *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
             match error_channels.decision_receiver().recv() {
                 Ok(Decision::RestartSpaceSync) => {}
-                Ok(Decision::DisableSpaceSync) => {
-                    todo!()
-                }
-                Ok(Decision::MakeCompleteResync) => {
-                    todo!()
-                }
                 Err(_) => {
                     log::error!("Unable to communicate from trsync run to error decision receiver");
                     break;

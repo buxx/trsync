@@ -95,6 +95,7 @@ impl eframe::App for App {
         self.update_synchronizations_combo_box_default_value();
         self.update_error_combo_box_default_value();
         self.update_blinking_char();
+        self.update_error_space_seen();
 
         CentralPanel::default().show(ctx, |ui| {
             events.extend(self.header(ui));
@@ -238,6 +239,21 @@ impl App {
         }
     }
 
+    fn update_error_space_seen(&self) {
+        if self.current_panel == Panel::Errors {
+            let binding = self.error_exchanger.lock().unwrap();
+            let channels = binding.channels();
+
+            if let Some(error_space) = &self.current_error_space {
+                if let Some(sync_channels) = channels.get(error_space) {
+                    if !sync_channels.seen() {
+                        sync_channels.set_seen()
+                    }
+                }
+            }
+        }
+    }
+
     fn synchronizations_body(&mut self, ui: &mut Ui) {
         self.synchronizations_combo_box(ui);
         self.synchronizations_display(ui);
@@ -287,12 +303,12 @@ impl App {
                     .show(ui, |ui| {
                         for change in changes.iter() {
                             for remote_change in &change.0 {
-                                ui.label(format!("{}", remote_change.utf8_icon()));
+                                ui.label(remote_change.utf8_icon());
                                 ui.label(format!("{}", remote_change.path().display()));
                                 ui.end_row();
                             }
                             for local_change in &change.1 {
-                                ui.label(format!("{}", local_change.utf8_icon()));
+                                ui.label(local_change.utf8_icon());
                                 ui.label(format!("{}", local_change.path().display()));
                                 ui.end_row();
                             }
