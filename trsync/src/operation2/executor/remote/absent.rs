@@ -6,7 +6,7 @@ use trsync_core::{client::TracimClient, instance::ContentId};
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
 };
 
@@ -32,7 +32,7 @@ impl Executor for AbsentFromRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.db_path.display()

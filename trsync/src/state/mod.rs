@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
+use thiserror::Error;
 use trsync_core::{
     content::Content,
     instance::{ContentFileName, ContentId, DiskTimestamp, RevisionId},
@@ -20,7 +21,7 @@ pub trait State {
     fn get(&self, id: ContentId) -> Result<Option<Content>>;
     fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>>;
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<Option<ContentPath>>;
+    fn path(&self, id: ContentId) -> Result<ContentPath, StateError>;
     // FIXME BS NOW : Iter
     // pub trait Trait {
     //     type Iter<'a>: Iterator<Item = &'a Content> + 'a
@@ -100,6 +101,14 @@ pub trait State {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum StateError {
+    #[error("Unexpected error: {0:#}")]
+    UnexpectedError(#[from] anyhow::Error),
+    #[error("Unknown content: {0}")]
+    UnknownContent(ContentId),
+}
+
 #[cfg(test)]
 mod test {
     use std::path::PathBuf;
@@ -122,7 +131,7 @@ mod test {
         let state = build_memory_state(&raw_contents, None);
 
         // When
-        let path = state.path(ContentId(from_)).unwrap().unwrap();
+        let path = state.path(ContentId(from_)).unwrap();
 
         // Then
         let path_str = &Into::<PathBuf>::into(path).display().to_string();

@@ -4,9 +4,9 @@ use crate::{
     event::{remote::RemoteEvent, Event},
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
+    operation2::executor::ExecutorError,
     state::State,
 };
-use anyhow::{Context, Result};
 use trsync_core::{client::TracimClient, instance::ContentId};
 
 use super::{
@@ -44,7 +44,7 @@ impl<'a> Operator<'a> {
         }
     }
 
-    pub fn operate(&mut self, event: &Event) -> Result<()> {
+    pub fn operate(&mut self, event: &Event) -> Result<(), ExecutorError> {
         if self.ignore_events.contains(event) {
             self.ignore_events.retain(|x| x != event);
             log::info!("Ignore event (planned ignore) : {:?}", &event);
@@ -52,27 +52,18 @@ impl<'a> Operator<'a> {
         };
 
         log::info!("Proceed event : {:?}", &event);
-
-        // FIXME BS : il faut que l'appel au dessus choisisse quoi faire en cas d'erreur
-        // En gros, ressayer si c'est un problème reseau, etc
-        match self
-            .executor(event)?
-            .execute(self.state, &self.tracim, &mut self.ignore_events)
-            .context("Run executor")
-        {
-            Ok(state_changes) => {
-                for state_change in state_changes {
-                    self.state.change(state_change)?
-                }
-            }
-            Err(error) => return Err(error),
-        };
+        let state_changes =
+            self.executor(event)
+                .execute(self.state, &self.tracim, &mut self.ignore_events)?;
+        for state_change in state_changes {
+            self.state.change(state_change)?
+        }
 
         Ok(())
     }
 
-    fn executor(&self, event: &Event) -> Result<Box<dyn Executor>> {
-        Ok(match event {
+    fn executor(&self, event: &Event) -> Box<dyn Executor> {
+        match event {
             Event::Remote(event) => match event {
                 RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(*id)),
                 RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(*id)),
@@ -94,7 +85,7 @@ impl<'a> Operator<'a> {
                     self.named_on_remote_executor(db_path.clone(), after_disk_path.clone()),
                 ),
             },
-        })
+        }
     }
 
     fn absent_from_disk_executor(&self, content_id: ContentId) -> AbsentFromDiskExecutor {
@@ -290,7 +281,7 @@ mod test {
         MockTracimClientCase::apply_multiples(&tmpdir_, &mut client, expect_tracim);
 
         // When
-        let result = Operator::new(&mut state, tmpdir_, Box::new(client)).operate(&event);
+        let result = Operator::new(&mut state, tmpdir_.clone(), Box::new(client)).operate(&event);
 
         // Then
         assert_eq!(result.is_err(), error);

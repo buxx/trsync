@@ -5,10 +5,10 @@ use log::debug;
 use trsync_core::{client::TracimClient, instance::ContentId, types::ContentType};
 
 use crate::{
-    event::{local::LocalEvent, Event},
+    event::Event,
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
 };
 
@@ -32,7 +32,7 @@ impl Executor for AbsentFromDiskExecutor {
         state: &Box<dyn State>,
         _tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let content = state
             .get(self.content_id)
             .context(format!("Get content {}", self.content_id))?
@@ -40,7 +40,6 @@ impl Executor for AbsentFromDiskExecutor {
         let content_path: PathBuf = state
             .path(self.content_id)
             .context(format!("Get content {} path", self.content_id))?
-            .context(format!("Expect content {} path", self.content_id))?
             .into();
         let absolute_path = self.workspace_folder.join(&content_path);
 

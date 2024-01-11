@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use trsync_core::{
     client::{ParentIdParameter, TracimClient, TracimClientError},
@@ -11,7 +11,7 @@ use trsync_core::{
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
@@ -64,7 +64,7 @@ impl Executor for CreatedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let absolute_path = self.absolute_path();
         let file_name = ContentFileName(self.file_name()?);
         let parent = self.parent(state)?;
@@ -93,9 +93,7 @@ impl Executor for CreatedOnRemoteExecutor {
                     "After receive ContentAlreadyExist error, content is expected for {} ({:?})",
                     &file_name.0, parent
                 ))?,
-            Err(error) => {
-                bail!(error)
-            }
+            Err(error) => return Err(ExecutorError::Tracim(error)),
         };
 
         if content_type.fillable() {

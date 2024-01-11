@@ -5,6 +5,7 @@ use crate::event::remote::RemoteEvent;
 use crate::event::Event;
 use crate::local::{DiskEvent, LocalWatcher};
 use crate::local2::reducer::LocalReceiverReducer;
+use crate::operation2::executor::ExecutorError;
 use crate::operation2::operator::Operator;
 use crate::remote::RemoteWatcher;
 use crate::state::disk::DiskState;
@@ -207,17 +208,69 @@ impl Runner {
             bail!("TODO")
         }
 
-        for remote_change in remote_changes {
-            let event_display = format!("{}", &remote_change);
-            operator
-                .operate(&(remote_change.into()))
-                .context(format!("Operate on remote change {}", event_display))?
+        // FIXME BS NOW : move this code in separate struct and unit test it
+        let mut try_remote_changes_len = remote_changes.len();
+        let mut try_remote_changes = remote_changes.clone();
+        loop {
+            let mut remaining_remote_changes = vec![];
+            for remote_change in &try_remote_changes.clone() {
+                match operator.operate(&Event::from(remote_change)) {
+                    Ok(_) => {}
+                    Err(ExecutorError::MissingParent(_, _)) => {
+                        remaining_remote_changes.push(remote_change.clone())
+                    }
+                    Err(err) => bail!("Error on operate on remote event : {:#}", err),
+                };
+            }
+
+            // No retry needed, don't retry
+            if remaining_remote_changes.is_empty() {
+                break;
+            // Retried but nothing changed, stop all
+            } else if remaining_remote_changes.len() == try_remote_changes_len {
+                let detail: Vec<String> = try_remote_changes
+                    .iter()
+                    .map(|event| event.to_string())
+                    .collect();
+                bail!(
+                    "Unable to operate on following remote changes (missing parents): {}",
+                    detail.join(", ")
+                );
+            }
+            try_remote_changes = remaining_remote_changes.clone();
+            try_remote_changes_len = try_remote_changes.len();
         }
-        for local_change in local_changes {
-            let event_display = format!("{:?}", &local_change);
-            operator
-                .operate(&(local_change.into()))
-                .context(format!("Operate on local change {:?}", event_display))?
+
+        let mut try_local_changes_len = local_changes.len();
+        let mut try_local_changes = local_changes.clone();
+        loop {
+            let mut remaining_local_changes = vec![];
+            for local_change in &try_local_changes.clone() {
+                match operator.operate(&Event::from(local_change)) {
+                    Ok(_) => {}
+                    Err(ExecutorError::MissingParent(_, _)) => {
+                        remaining_local_changes.push(local_change.clone())
+                    }
+                    Err(err) => bail!("Error operate on local event : {:#}", err),
+                };
+            }
+
+            // No retry needed, don't retry
+            if remaining_local_changes.is_empty() {
+                break;
+            // Retried but nothing changed, stop all
+            } else if remaining_local_changes.len() == try_local_changes_len {
+                let detail: Vec<String> = try_local_changes
+                    .iter()
+                    .map(|event| event.to_string())
+                    .collect();
+                bail!(
+                    "Unable to operate on following local changes (missing parents): {}",
+                    detail.join(", ")
+                );
+            }
+            try_local_changes = remaining_local_changes.clone();
+            try_local_changes_len = try_local_changes.len();
         }
 
         Ok(())
@@ -410,6 +463,7 @@ pub fn run(
     );
     loop {
         if let Err(error) = runner.run() {
+            log::error!("Operate error : {:#}", &error);
             *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
             match error_channels.decision_receiver().recv() {
                 Ok(Decision::RestartSpaceSync) => {}

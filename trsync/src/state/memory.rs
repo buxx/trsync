@@ -9,7 +9,7 @@ use trsync_core::{
 
 use crate::path::ContentPath;
 
-use super::State;
+use super::{State, StateError};
 
 pub struct MemoryState {
     contents: HashMap<ContentId, Content>,
@@ -54,8 +54,7 @@ impl State for MemoryState {
         for content in self.contents.values() {
             let content_path = self
                 .path(content.id())
-                .context(format!("Get par for content {}", content.id()))?
-                .context(format!("Expect par for content {}", content.id()))?;
+                .context(format!("Get par for content {}", content.id()))?;
             if content_path.to_path_buf() == path {
                 return Ok(Some(content.id()));
             }
@@ -65,7 +64,7 @@ impl State for MemoryState {
     }
 
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<Option<ContentPath>> {
+    fn path(&self, id: ContentId) -> Result<ContentPath, StateError> {
         let content = self
             .contents
             .get(&id)
@@ -82,7 +81,7 @@ impl State for MemoryState {
             current = parent;
         }
 
-        Ok(Some(ContentPath::new(parts)))
+        Ok(ContentPath::new(parts))
     }
 
     // FIXME BS NOW : Iter

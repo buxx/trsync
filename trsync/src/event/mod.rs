@@ -13,30 +13,37 @@ pub enum Event {
     Local(DiskEventWrap),
 }
 
-impl From<RemoteChange> for Event {
-    fn from(value: RemoteChange) -> Self {
+impl From<&RemoteChange> for Event {
+    fn from(value: &RemoteChange) -> Self {
         match value {
-            RemoteChange::New(content_id, _) => Self::Remote(RemoteEvent::Created(content_id)),
-            RemoteChange::Disappear(content_id, _) => {
-                Self::Remote(RemoteEvent::Deleted(content_id))
+            RemoteChange::New(content_id, _) => {
+                Self::Remote(RemoteEvent::Created(content_id.clone()))
             }
-            RemoteChange::Updated(content_id, _) => Self::Remote(RemoteEvent::Updated(content_id)),
+            RemoteChange::Disappear(content_id, _) => {
+                Self::Remote(RemoteEvent::Deleted(content_id.clone()))
+            }
+            RemoteChange::Updated(content_id, _) => {
+                Self::Remote(RemoteEvent::Updated(content_id.clone()))
+            }
         }
     }
 }
 
-impl From<LocalChange> for Event {
-    fn from(value: LocalChange) -> Self {
+impl From<&LocalChange> for Event {
+    fn from(value: &LocalChange) -> Self {
         match value {
-            LocalChange::New(path) => {
-                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Created(path)))
-            }
-            LocalChange::Disappear(path) => {
-                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Deleted(path)))
-            }
-            LocalChange::Updated(path) => {
-                Self::Local(DiskEventWrap::new(path.clone(), DiskEvent::Modified(path)))
-            }
+            LocalChange::New(path) => Self::Local(DiskEventWrap::new(
+                path.clone(),
+                DiskEvent::Created(path.clone()),
+            )),
+            LocalChange::Disappear(path) => Self::Local(DiskEventWrap::new(
+                path.clone(),
+                DiskEvent::Deleted(path.clone()),
+            )),
+            LocalChange::Updated(path) => Self::Local(DiskEventWrap::new(
+                path.clone(),
+                DiskEvent::Modified(path.clone()),
+            )),
         }
     }
 }

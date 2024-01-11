@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use trsync_core::{
     client::{ParentIdParameter, TracimClient, TracimClientError},
@@ -10,7 +10,7 @@ use trsync_core::{
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
@@ -51,7 +51,6 @@ impl NamedOnRemoteExecutor {
         let content_path = state
             .path(content_id)
             .context(format!("Get content {} path", content_id))?
-            .context(format!("Expect content {} path", content_id))?
             .to_path_buf();
         Ok(self.workspace_folder.join(content_path))
     }
@@ -137,7 +136,7 @@ impl Executor for NamedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let mut state_modifications = vec![];
         let before_absolute_path = self.before_absolute_path(state)?;
         let after_absolute_path = self.after_absolute_path()?;
@@ -155,7 +154,10 @@ impl Executor for NamedOnRemoteExecutor {
         // FIXME BS NOW : before content type ne peut pas se base sur le path before il n'existe plus ...
         // il faut le stocker en bdd :S
         if before_content_type != after_content_type {
-            bail!("NamedOnRemoteExecutor called on a file type change : it should never happen")
+            return Err(ExecutorError::Programmatic(
+                "NamedOnRemoteExecutor called on a file type change : it should never happen"
+                    .into(),
+            ));
         }
 
         if before_file_name != after_file_name {
@@ -174,17 +176,18 @@ impl Executor for NamedOnRemoteExecutor {
                         .find_one(&after_file_name, ParentIdParameter::from(after_parent))?
                     {
                         Some(content_id) => content_id,
-                        None => bail!(
-                            "No matching content found for name '{}' when searching it",
-                            &after_file_name
-                        ),
+                        None => {
+                            return Err(ExecutorError::NotFoundAfterContentAlreadyExist(
+                                after_file_name.0.clone(),
+                            ))
+                        }
                     };
                     tracim.trash_content(content_id_to_replace)?;
                     ignore_events.push(Event::Remote(RemoteEvent::Deleted(content_id_to_replace)));
                     state_modifications.push(StateModification::Forgot(content_id_to_replace));
                     tracim.set_parent(content_id, after_parent, None)?
                 }
-                Err(error) => bail!(error),
+                Err(error) => return Err(ExecutorError::Tracim(error)),
             };
             ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
         }

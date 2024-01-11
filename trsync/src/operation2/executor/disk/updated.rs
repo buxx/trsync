@@ -11,7 +11,7 @@ use crate::{
     event::Event,
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
@@ -38,11 +38,10 @@ impl Executor for UpdatedOnDiskExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let local_content_path = state
             .path(self.content_id)
             .context(format!("Get local content {} path", self.content_id))?
-            .context(format!("Expect local content {} path", self.content_id))?
             .to_path_buf();
         let remote_content = Content::from_remote(
             &tracim
@@ -54,7 +53,6 @@ impl Executor for UpdatedOnDiskExecutor {
             state
                 .path(parent_id)
                 .context(format!("Get parent {} path", parent_id))?
-                .context(format!("Expect parent {} path", parent_id))?
                 .to_path_buf()
                 .join(PathBuf::from(remote_content.file_name().to_string()))
         } else {

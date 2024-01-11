@@ -10,7 +10,7 @@ use trsync_core::{
 
 use crate::path::ContentPath;
 
-use super::State;
+use super::{State, StateError};
 
 pub struct DiskState {
     connection: Connection,
@@ -133,11 +133,10 @@ impl State for DiskState {
         }
     }
 
-    // FIXME BS NOW: Option<ContentPath> instead ContentPath for cas where ContentId unknown
-    fn path(&self, id: ContentId) -> Result<Option<ContentPath>> {
+    fn path(&self, id: ContentId) -> Result<ContentPath, StateError> {
         let content = match self.get(id).context(format!("Get content {}", id))? {
             Some(content) => content,
-            None => return Ok(None),
+            None => return Err(StateError::UnknownContent(id)),
         };
         let mut parts = vec![content.clone()];
 
@@ -151,7 +150,7 @@ impl State for DiskState {
             current = parent;
         }
 
-        Ok(Some(ContentPath::new(parts)))
+        Ok(ContentPath::new(parts))
     }
 
     // FIXME BS NOW : Iter
@@ -246,13 +245,12 @@ impl State for DiskState {
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
     ) -> Result<()> {
+        // TODO : new_path should computed by caller of this method
         let new_path = parent_id
             .and_then(|parent_id| {
                 Some(
                     self.path(parent_id)
                         .context(format!("Get content {} path", content_id))
-                        .ok()?
-                        .context(format!("Expect content {} path", content_id))
                         .ok()?
                         .to_path_buf()
                         .join(&file_name.0),

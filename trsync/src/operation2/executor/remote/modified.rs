@@ -11,7 +11,7 @@ use trsync_core::{
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    operation2::executor::Executor,
+    operation2::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
@@ -45,7 +45,6 @@ impl ModifiedOnRemoteExecutor {
         let content_path = state
             .path(content_id)
             .context(format!("Get content {} path", content_id))?
-            .context(format!("Expect content {} path", content_id))?
             .to_path_buf();
         Ok(self.workspace_folder.join(content_path))
     }
@@ -107,7 +106,7 @@ impl Executor for ModifiedOnRemoteExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let absolute_path = self.absolute_path(state)?;
         let content_type = self.content_type(state)?;
         let content_id = self.content_id(state)?.context(format!(

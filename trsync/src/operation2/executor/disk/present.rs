@@ -12,8 +12,8 @@ use crate::{
     event::Event,
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
-    operation2::executor::Executor,
-    state::{modification::StateModification, State},
+    operation2::executor::{Executor, ExecutorError},
+    state::{modification::StateModification, State, StateError},
     util::last_modified_timestamp,
 };
 
@@ -37,7 +37,7 @@ impl Executor for PresentOnDiskExecutor {
         state: &Box<dyn State>,
         tracim: &Box<dyn TracimClient>,
         ignore_events: &mut Vec<Event>,
-    ) -> Result<Vec<StateModification>> {
+    ) -> Result<Vec<StateModification>, ExecutorError> {
         let content = Content::from_remote(
             &tracim
                 .get_content(self.content_id)
@@ -46,12 +46,15 @@ impl Executor for PresentOnDiskExecutor {
 
         // FIXME BS NOW : How to be sure than parent is always already present ?!
         let content_path_buf: PathBuf = if let Some(parent_id) = content.parent_id() {
-            state
-                .path(parent_id)
-                .context(format!("Get parent {} path", parent_id))?
-                .context(format!("Expect parent {} path", parent_id))?
-                .to_path_buf()
-                .join(PathBuf::from(content.file_name().to_string()))
+            match state.path(parent_id) {
+                Ok(path) => path,
+                Err(StateError::UnknownContent(_)) => {
+                    return Err(ExecutorError::MissingParent(self.content_id, parent_id))
+                }
+                Err(e) => return Err(ExecutorError::from(e)),
+            }
+            .to_path_buf()
+            .join(PathBuf::from(content.file_name().to_string()))
         } else {
             PathBuf::from(content.file_name().to_string())
         };
