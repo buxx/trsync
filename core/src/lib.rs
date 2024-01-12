@@ -1,12 +1,11 @@
-pub mod error;
 pub mod activity;
+pub mod change;
 pub mod client;
 pub mod config;
 pub mod content;
+pub mod error;
 pub mod instance;
 pub mod job;
-pub mod local;
-pub mod remote;
 pub mod security;
 pub mod sync;
 pub mod types;

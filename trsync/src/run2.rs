@@ -1,6 +1,6 @@
 extern crate notify;
 use crate::context::Context as TrSyncContext;
-use crate::database::connection;
+use crate::database::{connection, db_path};
 use crate::event::remote::RemoteEvent;
 use crate::event::Event;
 use crate::local::{DiskEvent, LocalWatcher};
@@ -20,11 +20,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
+use trsync_core::change::local::LocalChange;
+use trsync_core::change::remote::RemoteChange;
+use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
 use trsync_core::error::{Decision, ErrorChannels};
 use trsync_core::job::{Job, JobIdentifier};
-use trsync_core::local::LocalChange;
-use trsync_core::remote::RemoteChange;
 use trsync_core::sync::SyncPolitic;
 
 struct Runner {
@@ -39,7 +40,6 @@ struct Runner {
     local_sender: Sender<DiskEvent>,
     local_receiver_reducer: LocalReceiverReducer,
     sync_politic: Box<dyn SyncPolitic>,
-    error_channels: ErrorChannels,
 }
 
 impl Runner {
@@ -48,7 +48,6 @@ impl Runner {
         stop_signal: Arc<AtomicBool>,
         activity_sender: Option<Sender<Job>>,
         sync_politic: Box<dyn SyncPolitic>,
-        error_channels: ErrorChannels,
     ) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
@@ -70,7 +69,6 @@ impl Runner {
             local_sender,
             local_receiver_reducer,
             sync_politic,
-            error_channels,
         }
     }
 
@@ -79,7 +77,7 @@ impl Runner {
         Ok(())
     }
 
-    fn ensure_db(&self) -> Result<()> {
+    fn ensure_db(&mut self) -> Result<()> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
         DiskState::new(connection(&workspace_path)?, workspace_path.clone()).create_tables()?;
         Ok(())
@@ -208,70 +206,17 @@ impl Runner {
             bail!("TODO")
         }
 
-        // FIXME BS NOW : move this code in separate struct and unit test it
-        let mut try_remote_changes_len = remote_changes.len();
-        let mut try_remote_changes = remote_changes.clone();
-        loop {
-            let mut remaining_remote_changes = vec![];
-            for remote_change in &try_remote_changes.clone() {
-                match operator.operate(&Event::from(remote_change)) {
-                    Ok(_) => {}
-                    Err(ExecutorError::MissingParent(_, _)) => {
-                        remaining_remote_changes.push(remote_change.clone())
-                    }
-                    Err(err) => bail!("Error on operate on remote event : {:#}", err),
-                };
-            }
+        let remote_changes = remote_changes
+            .iter()
+            .map(|remote_change| remote_change.into())
+            .collect();
+        OperateChanges::new(remote_changes).operate(operator)?;
 
-            // No retry needed, don't retry
-            if remaining_remote_changes.is_empty() {
-                break;
-            // Retried but nothing changed, stop all
-            } else if remaining_remote_changes.len() == try_remote_changes_len {
-                let detail: Vec<String> = try_remote_changes
-                    .iter()
-                    .map(|event| event.to_string())
-                    .collect();
-                bail!(
-                    "Unable to operate on following remote changes (missing parents): {}",
-                    detail.join(", ")
-                );
-            }
-            try_remote_changes = remaining_remote_changes.clone();
-            try_remote_changes_len = try_remote_changes.len();
-        }
-
-        let mut try_local_changes_len = local_changes.len();
-        let mut try_local_changes = local_changes.clone();
-        loop {
-            let mut remaining_local_changes = vec![];
-            for local_change in &try_local_changes.clone() {
-                match operator.operate(&Event::from(local_change)) {
-                    Ok(_) => {}
-                    Err(ExecutorError::MissingParent(_, _)) => {
-                        remaining_local_changes.push(local_change.clone())
-                    }
-                    Err(err) => bail!("Error operate on local event : {:#}", err),
-                };
-            }
-
-            // No retry needed, don't retry
-            if remaining_local_changes.is_empty() {
-                break;
-            // Retried but nothing changed, stop all
-            } else if remaining_local_changes.len() == try_local_changes_len {
-                let detail: Vec<String> = try_local_changes
-                    .iter()
-                    .map(|event| event.to_string())
-                    .collect();
-                bail!(
-                    "Unable to operate on following local changes (missing parents): {}",
-                    detail.join(", ")
-                );
-            }
-            try_local_changes = remaining_local_changes.clone();
-            try_local_changes_len = try_local_changes.len();
-        }
+        let local_changes = local_changes
+            .iter()
+            .map(|local_change| local_change.into())
+            .collect();
+        OperateChanges::new(local_changes).operate(operator)?;
 
         Ok(())
     }
@@ -423,6 +368,7 @@ impl Runner {
     }
 
     pub fn run(&mut self) -> Result<()> {
+        let is_first_sync = !db_path(&PathBuf::from(&self.context.folder_path)).exists();
         self.ensure_folders()?;
         self.ensure_db()?;
 
@@ -431,7 +377,8 @@ impl Runner {
             &mut state,
             PathBuf::from(&self.context.folder_path),
             Box::new(self.client()?),
-        );
+        )
+        .avoid_same_sums(is_first_sync);
 
         self.watchers()?;
         self.sync(&mut operator)?;
@@ -447,6 +394,49 @@ impl Runner {
     }
 }
 
+struct OperateChanges {
+    changes: Vec<Change>,
+}
+
+impl OperateChanges {
+    fn new(changes: Vec<Change>) -> Self {
+        Self { changes }
+    }
+
+    fn operate(&mut self, operator: &mut Operator) -> Result<()> {
+        loop {
+            let mut remaining_changes = vec![];
+            for change in &self.changes {
+                match operator.operate(&Event::from(change)) {
+                    Ok(_) => {}
+                    Err(ExecutorError::MissingParent(_, _)) => {
+                        remaining_changes.push(change.clone())
+                    }
+                    Err(err) => bail!("Error when operating on change : {:#}", err),
+                };
+            }
+
+            // No retry needed, don't retry
+            if remaining_changes.is_empty() {
+                break;
+            // Retried but nothing changed, stop all
+            } else if remaining_changes.len() == self.changes.len() {
+                let detail: Vec<String> = remaining_changes
+                    .iter()
+                    .map(|event| event.to_string())
+                    .collect();
+                bail!(
+                    "Unable to operate on following changes (missing parents): {}",
+                    detail.join(", ")
+                );
+            }
+            self.changes = remaining_changes;
+        }
+
+        Ok(())
+    }
+}
+
 pub fn run(
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
@@ -454,13 +444,7 @@ pub fn run(
     sync_politic: Box<dyn SyncPolitic>,
     error_channels: ErrorChannels,
 ) -> Result<()> {
-    let mut runner = Runner::new(
-        context,
-        stop_signal.clone(),
-        activity_sender,
-        sync_politic,
-        error_channels.clone(),
-    );
+    let mut runner = Runner::new(context, stop_signal.clone(), activity_sender, sync_politic);
     loop {
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);

@@ -3,10 +3,10 @@ use std::{collections::HashMap, path::PathBuf};
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
 use trsync_core::{
+    change::remote::RemoteChange,
     client::{RemoteContent, TracimClient},
     content::Content,
     instance::{ContentId, RevisionId},
-    remote::RemoteChange,
 };
 
 use crate::state::{memory::MemoryState, State};
@@ -180,7 +180,7 @@ impl RemoteSync {
 
 #[cfg(test)]
 mod test {
-    use trsync_core::remote::RemoteChange;
+    use trsync_core::change::remote::RemoteChange;
     use trsync_core::{client::MockTracimClient, instance::RevisionId};
 
     use crate::state::disk::DiskState;

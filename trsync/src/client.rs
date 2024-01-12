@@ -9,7 +9,6 @@ use reqwest::Method;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use trsync_core::client::CONTENT_ALREADY_EXIST_ERR_CODE;
-use trsync_core::instance::ContentId;
 use trsync_core::types::{ContentId as RawContentId, ContentType, RevisionId as RawRevisionId};
 use trsync_core::HTML_DOCUMENT_LOCAL_EXTENSION;
 

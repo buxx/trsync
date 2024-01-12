@@ -28,6 +28,7 @@ pub struct Operator<'a> {
     workspace_folder: PathBuf,
     tracim: Box<dyn TracimClient>,
     ignore_events: Vec<Event>,
+    avoid_same_sums: bool,
 }
 
 impl<'a> Operator<'a> {
@@ -41,7 +42,13 @@ impl<'a> Operator<'a> {
             workspace_folder,
             tracim,
             ignore_events: vec![],
+            avoid_same_sums: false,
         }
+    }
+
+    pub fn avoid_same_sums(mut self, value: bool) -> Self {
+        self.avoid_same_sums = value;
+        self
     }
 
     pub fn operate(&mut self, event: &Event) -> Result<(), ExecutorError> {
@@ -102,6 +109,7 @@ impl<'a> Operator<'a> {
 
     fn created_on_remote_executor(&self, disk_path: PathBuf) -> CreatedOnRemoteExecutor {
         CreatedOnRemoteExecutor::new(self.workspace_folder.clone(), disk_path)
+            .avoid_same_sums(self.avoid_same_sums)
     }
 
     fn modified_on_remote_executor(

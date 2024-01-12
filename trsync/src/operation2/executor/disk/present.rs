@@ -44,7 +44,6 @@ impl Executor for PresentOnDiskExecutor {
                 .context(format!("Get content {}", self.content_id))?,
         )?;
 
-        // FIXME BS NOW : How to be sure than parent is always already present ?!
         let content_path_buf: PathBuf = if let Some(parent_id) = content.parent_id() {
             match state.path(parent_id) {
                 Ok(path) => path,
@@ -84,12 +83,19 @@ impl Executor for PresentOnDiskExecutor {
                 }
             }
             ContentType::File => {
+                let exist = absolute_path.exists();
                 fs::File::create(&absolute_path)
                     .context(format!("Create file {}", absolute_path.display()))?;
+                if !exist {
+                    ignore_events.push(Event::Local(DiskEventWrap::new(
+                        content_path_buf.clone(),
+                        DiskEvent::Created(content_path_buf.clone()),
+                    )))
+                }
+
                 tracim
                     .fill_file_with_content(self.content_id, ContentType::File, &absolute_path)
                     .context(format!("Write into file {}", absolute_path.display()))?;
-
                 ignore_events.push(Event::Local(DiskEventWrap::new(
                     content_path_buf.clone(),
                     DiskEvent::Modified(content_path_buf.clone()),

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use trsync_core::types::ContentType;
 
-use crate::util::{self, ignore_file};
+use crate::util::ignore_file;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DiskEvent {

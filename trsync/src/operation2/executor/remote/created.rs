@@ -1,12 +1,13 @@
-use std::path::PathBuf;
-
 use anyhow::{Context, Result};
+use std::path::PathBuf;
+use tempfile::NamedTempFile;
 
 use trsync_core::{
     client::{ParentIdParameter, TracimClient, TracimClientError},
     content::Content,
     instance::{ContentFileName, ContentId, DiskTimestamp},
     types::ContentType,
+    utils::md5_file,
 };
 
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
 pub struct CreatedOnRemoteExecutor {
     workspace_folder: PathBuf,
     path: PathBuf,
+    avoid_same_sums: bool,
 }
 
 impl CreatedOnRemoteExecutor {
@@ -26,7 +28,13 @@ impl CreatedOnRemoteExecutor {
         Self {
             workspace_folder,
             path,
+            avoid_same_sums: false,
         }
+    }
+
+    pub fn avoid_same_sums(mut self, value: bool) -> Self {
+        self.avoid_same_sums = value;
+        self
     }
 
     fn absolute_path(&self) -> PathBuf {
@@ -70,6 +78,7 @@ impl Executor for CreatedOnRemoteExecutor {
         let parent = self.parent(state)?;
         let content_type = self.content_type();
 
+        let mut previously_exist = false;
         let content_id = match tracim.create_content(
             file_name.clone(),
             content_type,
@@ -80,31 +89,58 @@ impl Executor for CreatedOnRemoteExecutor {
                 ignore_events.push(Event::Remote(RemoteEvent::Created(content_id)));
                 content_id
             }
-            Err(TracimClientError::ContentAlreadyExist) => tracim
-                .find_one(
-                    &file_name,
-                    parent.map_or(ParentIdParameter::Root, ParentIdParameter::Some),
-                )
-                .context(format!(
-                    "Search already existing content id for name {} ({:?})",
-                    &file_name.0, parent
-                ))?
-                .context(format!(
+            Err(TracimClientError::ContentAlreadyExist) => {
+                previously_exist = true;
+                tracim
+                    .find_one(
+                        &file_name,
+                        parent.map_or(ParentIdParameter::Root, ParentIdParameter::Some),
+                    )
+                    .context(format!(
+                        "Search already existing content id for name {} ({:?})",
+                        &file_name.0, parent
+                    ))?
+                    .context(format!(
                     "After receive ContentAlreadyExist error, content is expected for {} ({:?})",
                     &file_name.0, parent
-                ))?,
+                ))?
+            }
             Err(error) => return Err(ExecutorError::Tracim(error)),
         };
 
         if content_type.fillable() {
-            tracim
-                .fill_content_with_file(content_id, content_type, &absolute_path)
-                .context(format!(
-                    "Fill content {} after created it with file {}",
-                    content_id,
-                    absolute_path.display()
+            let do_update = if previously_exist {
+                let remote_content_file = NamedTempFile::new().context(format!(
+                    "Create temporary file to download content {}",
+                    &content_id.0,
                 ))?;
-            ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
+                let remote_content_file_path = remote_content_file.into_temp_path();
+                let remote_content_file_path_buf = remote_content_file_path.to_path_buf();
+                tracim.fill_file_with_content(
+                    content_id,
+                    content_type,
+                    &remote_content_file_path_buf,
+                )?;
+                let same = md5_file(&remote_content_file_path_buf) == md5_file(&absolute_path);
+                remote_content_file_path.close().context(format!(
+                    "Close created temporary file {}",
+                    &remote_content_file_path_buf.display(),
+                ))?;
+                !same
+            } else {
+                true
+            };
+
+            if do_update {
+                tracim
+                    .fill_content_with_file(content_id, content_type, &absolute_path)
+                    .context(format!(
+                        "Fill content {} after created it with file {}",
+                        content_id,
+                        absolute_path.display()
+                    ))?;
+                ignore_events.push(Event::Remote(RemoteEvent::Updated(content_id)));
+            }
         }
 
         let content = Content::from_remote(

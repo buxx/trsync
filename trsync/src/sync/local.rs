@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
 use trsync_core::{
+    change::local::LocalChange,
     instance::{ContentId, DiskTimestamp},
-    local::LocalChange,
 };
 use walkdir::{DirEntry, WalkDir};
 
@@ -162,7 +162,7 @@ impl LocalSync {
 #[cfg(test)]
 mod test {
 
-    use trsync_core::local::LocalChange;
+    use trsync_core::change::local::LocalChange;
 
     use super::*;
     use crate::{state::disk::DiskState, tests::*};

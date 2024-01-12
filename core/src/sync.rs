@@ -7,9 +7,8 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use thiserror::Error;
 
 use crate::{
+    change::{local::LocalChange, remote::RemoteChange},
     job::JobIdentifier,
-    local::LocalChange,
-    remote::RemoteChange,
     user::{MonitorWindowPanel, UserRequest},
 };
 

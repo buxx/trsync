@@ -1,4 +1,7 @@
-use trsync_core::{client::TracimClient, local::LocalChange, remote::RemoteChange};
+use trsync_core::{
+    change::{local::LocalChange, remote::RemoteChange, Change},
+    client::TracimClient,
+};
 
 use crate::{local::DiskEvent, local2::reducer::DiskEventWrap};
 
@@ -13,37 +16,34 @@ pub enum Event {
     Local(DiskEventWrap),
 }
 
-impl From<&RemoteChange> for Event {
-    fn from(value: &RemoteChange) -> Self {
+impl From<&Change> for Event {
+    fn from(value: &Change) -> Self {
         match value {
-            RemoteChange::New(content_id, _) => {
-                Self::Remote(RemoteEvent::Created(content_id.clone()))
-            }
-            RemoteChange::Disappear(content_id, _) => {
-                Self::Remote(RemoteEvent::Deleted(content_id.clone()))
-            }
-            RemoteChange::Updated(content_id, _) => {
-                Self::Remote(RemoteEvent::Updated(content_id.clone()))
-            }
-        }
-    }
-}
-
-impl From<&LocalChange> for Event {
-    fn from(value: &LocalChange) -> Self {
-        match value {
-            LocalChange::New(path) => Self::Local(DiskEventWrap::new(
-                path.clone(),
-                DiskEvent::Created(path.clone()),
-            )),
-            LocalChange::Disappear(path) => Self::Local(DiskEventWrap::new(
-                path.clone(),
-                DiskEvent::Deleted(path.clone()),
-            )),
-            LocalChange::Updated(path) => Self::Local(DiskEventWrap::new(
-                path.clone(),
-                DiskEvent::Modified(path.clone()),
-            )),
+            Change::Local(change) => match change {
+                LocalChange::New(path) => Self::Local(DiskEventWrap::new(
+                    path.clone(),
+                    DiskEvent::Created(path.clone()),
+                )),
+                LocalChange::Disappear(path) => Self::Local(DiskEventWrap::new(
+                    path.clone(),
+                    DiskEvent::Deleted(path.clone()),
+                )),
+                LocalChange::Updated(path) => Self::Local(DiskEventWrap::new(
+                    path.clone(),
+                    DiskEvent::Modified(path.clone()),
+                )),
+            },
+            Change::Remote(change) => match change {
+                RemoteChange::New(content_id, _) => {
+                    Self::Remote(RemoteEvent::Created(content_id.clone()))
+                }
+                RemoteChange::Disappear(content_id, _) => {
+                    Self::Remote(RemoteEvent::Deleted(content_id.clone()))
+                }
+                RemoteChange::Updated(content_id, _) => {
+                    Self::Remote(RemoteEvent::Updated(content_id.clone()))
+                }
+            },
         }
     }
 }

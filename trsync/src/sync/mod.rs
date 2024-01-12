@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use trsync_core::{local::LocalChange, remote::RemoteChange};
+use trsync_core::change::{local::LocalChange, remote::RemoteChange};
 
 pub mod local;
 pub mod remote;
