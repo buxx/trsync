@@ -199,14 +199,10 @@ impl App {
             .spacing([40.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                for (job_identifier, job_count) in activity_state.jobs() {
+                for (job_identifier, activity) in activity_state.activities() {
                     ui.label(&job_identifier.instance_name);
                     ui.label(&job_identifier.workspace_name);
-                    ui.label(if job_count > &0 {
-                        "Synchronization"
-                    } else {
-                        "En veille"
-                    });
+                    ui.label(activity.to_string());
                     ui.end_row();
                 }
             });

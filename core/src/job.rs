@@ -25,8 +25,3 @@ impl Display for JobIdentifier {
         ))
     }
 }
-
-pub enum Job {
-    Begin(JobIdentifier),
-    End(JobIdentifier),
-}

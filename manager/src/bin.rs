@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
-use trsync_core::{config::ManagerConfig, job::Job};
+use trsync_core::{activity::WrappedActivity, config::ManagerConfig};
 
 mod client;
 mod daemon;
@@ -24,7 +24,8 @@ fn main_() -> Result<()> {
 
     log::info!("Start daemon");
     let config_ = config.clone();
-    let (activity_sender, activity_receiver): (Sender<Job>, Receiver<Job>) = unbounded();
+    let (activity_sender, activity_receiver): (Sender<WrappedActivity>, Receiver<WrappedActivity>) =
+        unbounded();
     std::thread::spawn(move || while activity_receiver.recv().is_ok() {});
     // FIXME BS NOW
     // daemon::Daemon::new(config_, main_channel_receiver, activity_sender).run()?;

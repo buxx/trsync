@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
+use trsync_core::activity::WrappedActivity;
 use trsync_core::error::ErrorExchanger;
-use trsync_core::instance::InstanceId;
-use trsync_core::job::{Job, JobIdentifier};
+use trsync_core::job::JobIdentifier;
 use trsync_core::sync::{
     AcceptAllSyncPolitic, ConfirmationSyncPolitic, SyncExchanger, SyncPolitic,
 };
@@ -20,7 +20,7 @@ pub struct Daemon {
     config: ManagerConfig,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
     main_receiver: Receiver<DaemonMessage>,
-    activity_sender: Sender<Job>,
+    activity_sender: Sender<WrappedActivity>,
     user_request_sender: Sender<UserRequest>,
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
     error_exchanger: Arc<Mutex<ErrorExchanger>>,
@@ -30,7 +30,7 @@ impl Daemon {
     pub fn new(
         config: ManagerConfig,
         main_receiver: Receiver<DaemonMessage>,
-        activity_sender: Sender<Job>,
+        activity_sender: Sender<WrappedActivity>,
         user_request_sender: Sender<UserRequest>,
         sync_exchanger: Arc<Mutex<SyncExchanger>>,
         error_exchanger: Arc<Mutex<ErrorExchanger>>,

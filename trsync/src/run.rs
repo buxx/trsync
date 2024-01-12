@@ -18,7 +18,7 @@
 // pub fn run(
 //     context: Context,
 //     stop_signal: Arc<AtomicBool>,
-//     activity_sender: Option<CrossbeamSender<Job>>,
+//     activity_sender: Option<CrossbeamSender<WrappedActivity>>,
 // ) -> Result<(), Error> {
 //     // Digest input folder to watch
 //     log::info!(

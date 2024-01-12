@@ -1,6 +1,7 @@
 use crossbeam_channel::{Receiver, RecvTimeoutError};
 use std::{
     collections::HashMap,
+    fmt::Display,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -8,10 +9,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    job::{Job, JobIdentifier},
-    sync::SyncChannels,
-};
+use crate::{job::JobIdentifier, sync::SyncChannels};
 
 #[derive(Debug)]
 pub enum State {
@@ -19,41 +17,66 @@ pub enum State {
     Working,
 }
 
+// FIXME BS NOW : use activities on right places (ex. WaitingStartupSyncConfirmation not send).
+// Then change linux.rs and window.rs to simplify their algorithms
+#[derive(Debug, Clone)]
+pub enum Activity {
+    Idle,
+    Job(String),
+    StartupSync,
+    WaitingStartupSyncConfirmation,
+    WaitingConnection,
+    Error,
+}
+
+impl Activity {
+    fn is_job(&self) -> bool {
+        matches!(self, Activity::Job(_))
+    }
+}
+
+impl Display for Activity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Activity::Idle => f.write_str("En veille"),
+            Activity::Job(message) => f.write_str(message),
+            Activity::StartupSync => f.write_str("Synchronisation"),
+            Activity::WaitingStartupSyncConfirmation => f.write_str("Attend confirmation"),
+            Activity::WaitingConnection => f.write_str("Attend connection"),
+            Activity::Error => f.write_str("Erreur"),
+        }
+    }
+}
+
 pub struct ActivityState {
-    // (instance_name, workspace_id), counter
-    jobs: HashMap<JobIdentifier, i32>,
+    activities: HashMap<JobIdentifier, Activity>,
     pending_startup_sync: Vec<(JobIdentifier, SyncChannels)>,
-    // errors: HashMap<JobIdentifier, JobErrors>,
 }
 
 impl ActivityState {
     pub fn new() -> Self {
         Self {
-            jobs: HashMap::new(),
+            activities: HashMap::new(),
             pending_startup_sync: vec![],
         }
     }
 
-    pub fn activity(&self) -> State {
-        for (_, count) in &self.jobs {
-            if count > &0 {
-                return State::Working;
+    pub fn set_activity(&mut self, job_identifier: JobIdentifier, activity: Activity) {
+        self.activities.insert(job_identifier, activity);
+    }
+
+    pub fn is_working(&self) -> bool {
+        for activity in self.activities.values() {
+            if activity.is_job() {
+                return true;
             }
         }
 
-        State::Idle
+        false
     }
 
-    pub fn new_job(&mut self, job_identifier: JobIdentifier) {
-        *self.jobs.entry(job_identifier).or_insert(0) += 1;
-    }
-
-    pub fn finished_job(&mut self, job_identifier: JobIdentifier) {
-        *self.jobs.get_mut(&job_identifier).unwrap() -= 1;
-    }
-
-    pub fn jobs(&self) -> &HashMap<JobIdentifier, i32> {
-        &self.jobs
+    pub fn activities(&self) -> &HashMap<JobIdentifier, Activity> {
+        &self.activities
     }
 
     pub fn new_pending_startup_sync(&mut self, startup_sync: (JobIdentifier, SyncChannels)) {
@@ -67,15 +90,37 @@ impl Default for ActivityState {
     }
 }
 
+pub struct WrappedActivity {
+    job_identifier: JobIdentifier,
+    activity: Activity,
+}
+
+impl WrappedActivity {
+    pub fn new(job: JobIdentifier, activity: Activity) -> Self {
+        Self {
+            job_identifier: job,
+            activity,
+        }
+    }
+
+    pub fn job_identifier(&self) -> &JobIdentifier {
+        &self.job_identifier
+    }
+
+    pub fn activity(&self) -> &Activity {
+        &self.activity
+    }
+}
+
 pub struct ActivityMonitor {
-    receiver: Receiver<Job>,
+    receiver: Receiver<WrappedActivity>,
     state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
 }
 
 impl ActivityMonitor {
     pub fn new(
-        receiver: Receiver<Job>,
+        receiver: Receiver<WrappedActivity>,
         state: Arc<Mutex<ActivityState>>,
         stop_signal: Arc<AtomicBool>,
     ) -> Self {
@@ -89,16 +134,11 @@ impl ActivityMonitor {
     pub fn run(&self) {
         loop {
             match self.receiver.recv_timeout(Duration::from_millis(250)) {
-                Ok(message) => match message {
-                    Job::Begin(job_identifier) => {
-                        log::debug!("Receive Job::Begin ({:?})", job_identifier);
-                        self.state.lock().unwrap().new_job(job_identifier);
-                    }
-                    Job::End(job_identifier) => {
-                        log::debug!("Receive Job::End ({:?})", job_identifier);
-                        self.state.lock().unwrap().finished_job(job_identifier);
-                    }
-                },
+                // TODO : no unwrap
+                Ok(wrapped_activity) => self.state.lock().unwrap().set_activity(
+                    wrapped_activity.job_identifier().clone(),
+                    wrapped_activity.activity().clone(),
+                ),
                 Err(RecvTimeoutError::Timeout) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
                         log::info!("Finished ActivityMonitor (on stop signal)");

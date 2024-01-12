@@ -20,19 +20,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
+use trsync_core::activity::{Activity, WrappedActivity};
 use trsync_core::change::local::LocalChange;
 use trsync_core::change::remote::RemoteChange;
 use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
 use trsync_core::error::{Decision, ErrorChannels};
-use trsync_core::job::{Job, JobIdentifier};
+use trsync_core::job::JobIdentifier;
 use trsync_core::sync::SyncPolitic;
 
 struct Runner {
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
-    activity_sender: Option<Sender<Job>>,
+    activity_sender: Option<Sender<WrappedActivity>>,
     operational_sender: Sender<Event>,
     operational_receiver: Receiver<Event>,
     remote_sender: Sender<RemoteEvent>,
@@ -46,7 +47,7 @@ impl Runner {
     fn new(
         context: TrSyncContext,
         stop_signal: Arc<AtomicBool>,
-        activity_sender: Option<Sender<Job>>,
+        activity_sender: Option<Sender<WrappedActivity>>,
         sync_politic: Box<dyn SyncPolitic>,
     ) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
@@ -135,18 +136,21 @@ impl Runner {
         Ok(())
     }
 
-    fn signal_job_start(&self) -> Result<()> {
+    fn signal_job_start(&self, job_message: &str) -> Result<()> {
         if let Some(activity_sender) = &self.activity_sender {
             log::info!(
                 "[{}::{}] Start job",
                 self.context.instance_name,
                 self.context.workspace_id,
             );
-            if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
-                self.context.instance_name.clone(),
-                self.context.workspace_id.0,
-                self.context.workspace_name.clone(),
-            ))) {
+            if let Err(error) = activity_sender.send(WrappedActivity::new(
+                JobIdentifier::new(
+                    self.context.instance_name.clone(),
+                    self.context.workspace_id.0,
+                    self.context.workspace_name.clone(),
+                ),
+                Activity::Job(job_message.to_string()),
+            )) {
                 log::error!(
                     "[{}::{}] Error when sending activity begin : {:?}",
                     self.context.instance_name,
@@ -158,18 +162,47 @@ impl Runner {
         Ok(())
     }
 
-    fn signal_job_end(&self) -> Result<()> {
+    fn signal_sync_start(&self) -> Result<()> {
         if let Some(activity_sender) = &self.activity_sender {
             log::info!(
-                "[{}::{}] Ended job",
+                "[{}::{}] Start sync",
                 self.context.instance_name,
                 self.context.workspace_id,
             );
-            if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
-                self.context.instance_name.clone(),
-                self.context.workspace_id.0,
-                self.context.workspace_name.clone(),
-            ))) {
+            if let Err(error) = activity_sender.send(WrappedActivity::new(
+                JobIdentifier::new(
+                    self.context.instance_name.clone(),
+                    self.context.workspace_id.0,
+                    self.context.workspace_name.clone(),
+                ),
+                Activity::StartupSync,
+            )) {
+                log::error!(
+                    "[{}::{}] Error when sending sync activity : {:?}",
+                    self.context.instance_name,
+                    self.context.workspace_id,
+                    error
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn signal_idle(&self) -> Result<()> {
+        if let Some(activity_sender) = &self.activity_sender {
+            log::info!(
+                "[{}::{}] Idle",
+                self.context.instance_name,
+                self.context.workspace_id,
+            );
+            if let Err(error) = activity_sender.send(WrappedActivity::new(
+                JobIdentifier::new(
+                    self.context.instance_name.clone(),
+                    self.context.workspace_id.0,
+                    self.context.workspace_name.clone(),
+                ),
+                Activity::Idle,
+            )) {
                 log::error!(
                     "[{}::{}] Error when sending activity end : {:?}",
                     self.context.instance_name,
@@ -182,12 +215,12 @@ impl Runner {
     }
 
     fn sync(&self, operator: &mut Operator) -> Result<()> {
-        self.signal_job_start()?;
+        self.signal_sync_start()?;
         if let Err(error) = self.sync_(operator) {
-            self.signal_job_end()?;
+            self.signal_idle()?;
             return Err(error);
         }
-        self.signal_job_end()?;
+        self.signal_idle()?;
         Ok(())
     }
 
@@ -338,10 +371,11 @@ impl Runner {
                     }
 
                     log::info!("Proceed event {:?}", &event);
-                    let context_message = format!("Operate on event '{}'", event.display(&client));
-                    self.signal_job_start()?;
+                    let event_display = event.display(&client);
+                    let context_message = format!("Operate on event '{}'", &event_display);
+                    self.signal_job_start(&event_display)?;
                     operator.operate(&event).context(context_message)?;
-                    self.signal_job_end()?;
+                    self.signal_idle()?;
                 }
             }
         }
@@ -440,7 +474,7 @@ impl OperateChanges {
 pub fn run(
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
-    activity_sender: Option<Sender<Job>>,
+    activity_sender: Option<Sender<WrappedActivity>>,
     sync_politic: Box<dyn SyncPolitic>,
     error_channels: ErrorChannels,
 ) -> Result<()> {

@@ -14,10 +14,9 @@ use std::{
     time::Duration,
 };
 use trsync_core::{
-    activity::{ActivityMonitor, ActivityState},
+    activity::{ActivityMonitor, ActivityState, WrappedActivity},
     config::ManagerConfig,
     error::ErrorExchanger,
-    job::Job,
     sync::SyncExchanger,
     user::UserRequest,
 };
@@ -36,7 +35,7 @@ mod error;
 mod icon;
 
 type DaemonMessageChannels = (Sender<DaemonMessage>, Receiver<DaemonMessage>);
-type ActivityChannels = (Sender<Job>, Receiver<Job>);
+type ActivityChannels = (Sender<WrappedActivity>, Receiver<WrappedActivity>);
 
 fn run() -> Result<()> {
     // Some initialize

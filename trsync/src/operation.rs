@@ -23,7 +23,8 @@ use crate::{
 };
 
 use trsync_core::{
-    job::{Job, JobIdentifier},
+    activity::{Activity, WrappedActivity},
+    job::JobIdentifier,
     types::{ContentId, ContentType, RelativeFilePath},
 };
 
@@ -52,7 +53,7 @@ pub struct OperationalHandler {
     ignore_messages: Vec<OperationalMessage>,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
-    activity_sender: Option<Sender<Job>>,
+    activity_sender: Option<Sender<WrappedActivity>>,
 }
 
 impl OperationalHandler {
@@ -61,7 +62,7 @@ impl OperationalHandler {
         connection: Connection,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
-        activity_sender: Option<Sender<Job>>,
+        activity_sender: Option<Sender<WrappedActivity>>,
     ) -> Result<Self, Error> {
         Ok(Self {
             context: context.clone(),
@@ -140,25 +141,25 @@ impl OperationalHandler {
                     }
 
                     // Indicate start working
-                    if let Some(activity_sender) = &self.activity_sender {
-                        log::info!(
-                            "[{}::{}] Start job",
-                            self.context.instance_name,
-                            self.context.workspace_id,
-                        );
-                        if let Err(error) = activity_sender.send(Job::Begin(JobIdentifier::new(
-                            self.context.instance_name.clone(),
-                            self.context.workspace_id.0,
-                            self.context.workspace_name.clone(),
-                        ))) {
-                            log::error!(
-                                "[{}::{}] Error when sending activity begin : {:?}",
-                                self.context.instance_name,
-                                self.context.workspace_id,
-                                error
-                            );
-                        }
-                    }
+                    // if let Some(activity_sender) = &self.activity_sender {
+                    //     log::info!(
+                    //         "[{}::{}] Start job",
+                    //         self.context.instance_name,
+                    //         self.context.workspace_id,
+                    //     );
+                    //     if let Err(error) = activity_sender.send(WrappedActivity::new(JobIdentifier::new(
+                    //         self.context.instance_name.clone(),
+                    //         self.context.workspace_id.0,
+                    //         self.context.workspace_name.clone(),
+                    //     , Activity::Job(())))) {
+                    //         log::error!(
+                    //             "[{}::{}] Error when sending activity begin : {:?}",
+                    //             self.context.instance_name,
+                    //             self.context.workspace_id,
+                    //             error
+                    //         );
+                    //     }
+                    // }
 
                     let return_ = match &message {
                         // Local changes
@@ -191,26 +192,26 @@ impl OperationalHandler {
                         OperationalMessage::Exit => return (),
                     };
 
-                    // Indicate finished working
-                    if let Some(activity_sender) = &self.activity_sender {
-                        log::info!(
-                            "[{}::{}] Ended job",
-                            self.context.instance_name,
-                            self.context.workspace_id,
-                        );
-                        if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
-                            self.context.instance_name.clone(),
-                            self.context.workspace_id.0,
-                            self.context.workspace_name.clone(),
-                        ))) {
-                            log::error!(
-                                "[{}::{}] Error when sending activity end : {:?}",
-                                self.context.instance_name,
-                                self.context.workspace_id,
-                                error
-                            );
-                        }
-                    }
+                    // // Indicate finished working
+                    // if let Some(activity_sender) = &self.activity_sender {
+                    //     log::info!(
+                    //         "[{}::{}] Ended job",
+                    //         self.context.instance_name,
+                    //         self.context.workspace_id,
+                    //     );
+                    //     if let Err(error) = activity_sender.send(Job::End(JobIdentifier::new(
+                    //         self.context.instance_name.clone(),
+                    //         self.context.workspace_id.0,
+                    //         self.context.workspace_name.clone(),
+                    //     ))) {
+                    //         log::error!(
+                    //             "[{}::{}] Error when sending activity end : {:?}",
+                    //             self.context.instance_name,
+                    //             self.context.workspace_id,
+                    //             error
+                    //         );
+                    //     }
+                    // }
 
                     match return_ {
                         Err(err) => {
@@ -767,7 +768,7 @@ pub fn start_operation(
     operational_receiver: Receiver<OperationalMessage>,
     stop_signal: &Arc<AtomicBool>,
     restart_signal: &Arc<AtomicBool>,
-    activity_sender: &Option<Sender<Job>>,
+    activity_sender: &Option<Sender<WrappedActivity>>,
 ) -> JoinHandle<Result<(), Error>> {
     let operational_context = context.clone();
     let operational_stop_signal = stop_signal.clone();

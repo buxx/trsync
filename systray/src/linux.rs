@@ -125,22 +125,21 @@ pub fn run_tray(
                     Icon::Ask => Icon::Idle,
                     _ => Icon::Idle,
                 }
-            } else {
-                match activity_state_.lock().unwrap().activity() {
-                    State::Idle => Icon::Idle,
-                    State::Working => match current_icon {
-                        Icon::Idle => Icon::Working1,
-                        Icon::Working1 => Icon::Working2,
-                        Icon::Working2 => Icon::Working3,
-                        Icon::Working3 => Icon::Working4,
-                        Icon::Working4 => Icon::Working5,
-                        Icon::Working5 => Icon::Working6,
-                        Icon::Working6 => Icon::Working7,
-                        Icon::Working7 => Icon::Working8,
-                        Icon::Working8 => Icon::Working1,
-                        _ => Icon::Working1,
-                    },
+            } else if activity_state_.lock().unwrap().is_working() {
+                match current_icon {
+                    Icon::Idle => Icon::Working1,
+                    Icon::Working1 => Icon::Working2,
+                    Icon::Working2 => Icon::Working3,
+                    Icon::Working3 => Icon::Working4,
+                    Icon::Working4 => Icon::Working5,
+                    Icon::Working5 => Icon::Working6,
+                    Icon::Working6 => Icon::Working7,
+                    Icon::Working7 => Icon::Working8,
+                    Icon::Working8 => Icon::Working1,
+                    _ => Icon::Working1,
                 }
+            } else {
+                Icon::Idle
             }
         };
 
