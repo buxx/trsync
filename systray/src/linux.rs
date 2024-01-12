@@ -9,7 +9,7 @@ use std::{
 
 use crossbeam_channel::Sender;
 use trsync_core::{
-    activity::{Activity, ActivityState},
+    activity::{ActivityState, State},
     error::ErrorExchanger,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
@@ -127,8 +127,8 @@ pub fn run_tray(
                 }
             } else {
                 match activity_state_.lock().unwrap().activity() {
-                    Activity::Idle => Icon::Idle,
-                    Activity::Working => match current_icon {
+                    State::Idle => Icon::Idle,
+                    State::Working => match current_icon {
                         Icon::Idle => Icon::Working1,
                         Icon::Working1 => Icon::Working2,
                         Icon::Working2 => Icon::Working3,

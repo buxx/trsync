@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum Activity {
+pub enum State {
     Idle,
     Working,
 }
@@ -34,14 +34,14 @@ impl ActivityState {
         }
     }
 
-    pub fn activity(&self) -> Activity {
+    pub fn activity(&self) -> State {
         for (_, count) in &self.jobs {
             if count > &0 {
-                return Activity::Working;
+                return State::Working;
             }
         }
 
-        Activity::Idle
+        State::Idle
     }
 
     pub fn new_job(&mut self, job_identifier: JobIdentifier) {
