@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{job::JobIdentifier, sync::SyncChannels};
+use crate::{change::Change, job::JobIdentifier, sync::SyncChannels};
 
 #[derive(Debug)]
 pub enum State {
@@ -23,7 +23,7 @@ pub enum State {
 pub enum Activity {
     Idle,
     Job(String),
-    StartupSync,
+    StartupSync(Option<Change>),
     WaitingStartupSyncConfirmation,
     WaitingConnection,
     Error,
@@ -40,7 +40,10 @@ impl Display for Activity {
         match self {
             Activity::Idle => f.write_str("En veille"),
             Activity::Job(message) => f.write_str(message),
-            Activity::StartupSync => f.write_str("Synchronisation"),
+            Activity::StartupSync(change) => match change {
+                Some(change) => f.write_str(&format!("Synchronisation ({})", change)),
+                None => f.write_str("Synchronisation"),
+            },
             Activity::WaitingStartupSyncConfirmation => f.write_str("Attend confirmation"),
             Activity::WaitingConnection => f.write_str("Attend connection"),
             Activity::Error => f.write_str("Erreur"),

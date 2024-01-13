@@ -158,7 +158,7 @@ impl Runner {
     }
 
     fn sync(&self, operator: &mut Operator) -> Result<()> {
-        self.set_activity(Activity::StartupSync)?;
+        self.set_activity(Activity::StartupSync(None))?;
         if let Err(error) = self.sync_(operator) {
             self.set_activity(Activity::Idle)?;
             return Err(error);
@@ -189,13 +189,23 @@ impl Runner {
             .iter()
             .map(|remote_change| remote_change.into())
             .collect();
-        OperateChanges::new(remote_changes).operate(operator)?;
+        OperateChanges::new(
+            self.context.clone(),
+            self.activity_sender.clone(),
+            remote_changes,
+        )
+        .operate(operator)?;
 
         let local_changes = local_changes
             .iter()
             .map(|local_change| local_change.into())
             .collect();
-        OperateChanges::new(local_changes).operate(operator)?;
+        OperateChanges::new(
+            self.context.clone(),
+            self.activity_sender.clone(),
+            local_changes,
+        )
+        .operate(operator)?;
 
         Ok(())
     }
@@ -375,18 +385,29 @@ impl Runner {
 }
 
 struct OperateChanges {
+    context: TrSyncContext,
+    activity_sender: Option<Sender<WrappedActivity>>,
     changes: Vec<Change>,
 }
 
 impl OperateChanges {
-    fn new(changes: Vec<Change>) -> Self {
-        Self { changes }
+    fn new(
+        context: TrSyncContext,
+        activity_sender: Option<Sender<WrappedActivity>>,
+        changes: Vec<Change>,
+    ) -> Self {
+        Self {
+            context,
+            activity_sender,
+            changes,
+        }
     }
 
     fn operate(&mut self, operator: &mut Operator) -> Result<()> {
         loop {
             let mut remaining_changes = vec![];
             for change in &self.changes {
+                self.set_activity(Activity::StartupSync(Some(change.clone())))?;
                 match operator.operate(&Event::from(change)) {
                     Ok(_) => {}
                     Err(ExecutorError::MissingParent(_, _)) => {
@@ -394,6 +415,7 @@ impl OperateChanges {
                     }
                     Err(err) => bail!("Error when operating on change : {:#}", err),
                 };
+                self.set_activity(Activity::StartupSync(None))?;
             }
 
             // No retry needed, don't retry
@@ -412,6 +434,28 @@ impl OperateChanges {
             }
             self.changes = remaining_changes;
         }
+
+        Ok(())
+    }
+
+    fn set_activity(&self, activity: Activity) -> Result<()> {
+        if let Some(activity_sender) = &self.activity_sender {
+            log::info!(
+                "[{}::{}] Set activity to {}",
+                self.context.instance_name,
+                self.context.workspace_id,
+                activity,
+            );
+            if let Err(error) = activity_sender.send(WrappedActivity::new(
+                self.context.job_identifier(),
+                activity,
+            )) {
+                bail!(format!(
+                    "[{}::{}] Error when sending activity end : {:?}",
+                    self.context.instance_name, self.context.workspace_id, error
+                ));
+            }
+        };
 
         Ok(())
     }
