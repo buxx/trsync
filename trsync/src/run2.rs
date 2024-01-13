@@ -26,7 +26,6 @@ use trsync_core::change::remote::RemoteChange;
 use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
 use trsync_core::error::{Decision, ErrorChannels};
-use trsync_core::job::JobIdentifier;
 use trsync_core::sync::SyncPolitic;
 
 struct Runner {
@@ -175,12 +174,15 @@ impl Runner {
             StartupSyncResolver::new(remote_changes, local_changes, ResolveMethod::ForceLocal)
                 .resolve()?;
 
-        if (!remote_changes.is_empty() || !local_changes.is_empty())
-            && !self
+        if !remote_changes.is_empty() || !local_changes.is_empty() {
+            self.set_activity(Activity::WaitingStartupSyncConfirmation)?;
+            if !self
                 .sync_politic
                 .deal(remote_changes.clone(), local_changes.clone())?
-        {
-            bail!("TODO")
+            {
+                bail!("TODO")
+            }
+            self.set_activity(Activity::Idle)?;
         }
 
         let remote_changes = remote_changes
@@ -426,6 +428,7 @@ pub fn run(
     loop {
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);
+            runner.set_activity(Activity::Error)?;
             *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
             match error_channels.decision_receiver().recv() {
                 Ok(Decision::RestartSpaceSync) => {}
@@ -434,6 +437,7 @@ pub fn run(
                     break;
                 }
             }
+            runner.set_activity(Activity::Idle)?;
         }
         if stop_signal.load(Ordering::Relaxed) {
             stop_signal.swap(false, Ordering::Relaxed);
