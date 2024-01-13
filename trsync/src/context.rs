@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use trsync_core::client::{Tracim, DEFAULT_CLIENT_TIMEOUT};
 use trsync_core::instance::WorkspaceId;
+use trsync_core::job::JobIdentifier;
 
 use crate::database::DB_NAME;
 use crate::error::Error;
@@ -68,6 +69,14 @@ impl Context {
             self.username.clone(),
             self.password.clone(),
         ))
+    }
+
+    pub fn job_identifier(&self) -> JobIdentifier {
+        JobIdentifier::new(
+            self.instance_name.clone(),
+            self.workspace_id.0,
+            self.workspace_name.clone(),
+        )
     }
 }
 

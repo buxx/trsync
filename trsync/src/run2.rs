@@ -136,91 +136,35 @@ impl Runner {
         Ok(())
     }
 
-    fn signal_job_start(&self, job_message: &str) -> Result<()> {
+    fn set_activity(&self, activity: Activity) -> Result<()> {
         if let Some(activity_sender) = &self.activity_sender {
             log::info!(
-                "[{}::{}] Start job",
+                "[{}::{}] Set activity to {}",
                 self.context.instance_name,
                 self.context.workspace_id,
+                activity,
             );
             if let Err(error) = activity_sender.send(WrappedActivity::new(
-                JobIdentifier::new(
-                    self.context.instance_name.clone(),
-                    self.context.workspace_id.0,
-                    self.context.workspace_name.clone(),
-                ),
-                Activity::Job(job_message.to_string()),
+                self.context.job_identifier(),
+                activity,
             )) {
-                log::error!(
-                    "[{}::{}] Error when sending activity begin : {:?}",
-                    self.context.instance_name,
-                    self.context.workspace_id,
-                    error
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn signal_sync_start(&self) -> Result<()> {
-        if let Some(activity_sender) = &self.activity_sender {
-            log::info!(
-                "[{}::{}] Start sync",
-                self.context.instance_name,
-                self.context.workspace_id,
-            );
-            if let Err(error) = activity_sender.send(WrappedActivity::new(
-                JobIdentifier::new(
-                    self.context.instance_name.clone(),
-                    self.context.workspace_id.0,
-                    self.context.workspace_name.clone(),
-                ),
-                Activity::StartupSync,
-            )) {
-                log::error!(
-                    "[{}::{}] Error when sending sync activity : {:?}",
-                    self.context.instance_name,
-                    self.context.workspace_id,
-                    error
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn signal_idle(&self) -> Result<()> {
-        if let Some(activity_sender) = &self.activity_sender {
-            log::info!(
-                "[{}::{}] Idle",
-                self.context.instance_name,
-                self.context.workspace_id,
-            );
-            if let Err(error) = activity_sender.send(WrappedActivity::new(
-                JobIdentifier::new(
-                    self.context.instance_name.clone(),
-                    self.context.workspace_id.0,
-                    self.context.workspace_name.clone(),
-                ),
-                Activity::Idle,
-            )) {
-                log::error!(
+                bail!(format!(
                     "[{}::{}] Error when sending activity end : {:?}",
-                    self.context.instance_name,
-                    self.context.workspace_id,
-                    error
-                );
+                    self.context.instance_name, self.context.workspace_id, error
+                ));
             }
-        }
+        };
+
         Ok(())
     }
 
     fn sync(&self, operator: &mut Operator) -> Result<()> {
-        self.signal_sync_start()?;
+        self.set_activity(Activity::StartupSync)?;
         if let Err(error) = self.sync_(operator) {
-            self.signal_idle()?;
+            self.set_activity(Activity::Idle)?;
             return Err(error);
         }
-        self.signal_idle()?;
+        self.set_activity(Activity::Idle)?;
         Ok(())
     }
 
@@ -373,9 +317,9 @@ impl Runner {
                     log::info!("Proceed event {:?}", &event);
                     let event_display = event.display(&client);
                     let context_message = format!("Operate on event '{}'", &event_display);
-                    self.signal_job_start(&event_display)?;
+                    self.set_activity(Activity::Job(event_display.to_string()))?;
                     operator.operate(&event).context(context_message)?;
-                    self.signal_idle()?;
+                    self.set_activity(Activity::Idle)?;
                 }
             }
         }
