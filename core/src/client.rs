@@ -17,10 +17,13 @@ use crate::{
 
 pub const CONTENT_ALREADY_EXIST_ERR_CODE: u64 = 3002;
 pub const CONTENT_IN_NOT_EDITABLE_STATE_ERR_CODE: u64 = 2044;
+pub const CONTENT_NOT_FOUND: u64 = 1003;
 pub const DEFAULT_CLIENT_TIMEOUT: u64 = 30;
 
 #[derive(Debug, Clone, Error)]
 pub enum TracimClientError {
+    #[error("Content not found")]
+    ContentNotFound,
     #[error("Content already exist")]
     ContentAlreadyExist,
     #[error("Content is deleted or archived")]
@@ -42,6 +45,7 @@ pub enum TracimClientError {
 impl TracimClientError {
     fn from_code(error_code: u64) -> Option<TracimClientError> {
         match error_code {
+            CONTENT_NOT_FOUND => Some(TracimClientError::ContentNotFound),
             CONTENT_ALREADY_EXIST_ERR_CODE => Some(TracimClientError::ContentAlreadyExist),
             CONTENT_IN_NOT_EDITABLE_STATE_ERR_CODE => {
                 Some(TracimClientError::ContentDeletedOrArchived)
@@ -556,7 +560,11 @@ impl TracimClient for Tracim {
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .send()?;
 
-        Ok(response.json::<RemoteContent>()?)
+        let status_code = response.status().as_u16();
+        match status_code {
+            200 => Ok(response.json::<RemoteContent>()?),
+            _ => Err(self.response_error(response)?),
+        }
     }
 
     fn get_content_path(&self, content_id: ContentId) -> Result<PathBuf, TracimClientError> {
