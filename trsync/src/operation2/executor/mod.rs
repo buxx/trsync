@@ -37,6 +37,6 @@ pub enum ExecutorError {
         "After receive an Tracim ContentAlreadyExist error, unable to found the content ({0})"
     )]
     NotFoundAfterContentAlreadyExist(String),
-    #[error("Maximum retry reached for : {0}")]
+    #[error("Maximum retry reached for : {0} (because time out)")]
     MaximumRetryCount(String),
 }
