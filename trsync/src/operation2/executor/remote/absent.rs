@@ -48,7 +48,7 @@ impl Executor for AbsentFromRemoteExecutor {
             Ok(content) => content,
             Err(TracimClientError::ContentNotFound) => {
                 log::debug!("Content {} not found when trying to delete it", content_id);
-                return Ok(vec![]);
+                return Ok(vec![StateModification::Forgot(content_id)]);
             }
             Err(err) => return Err(ExecutorError::from(err)),
         };
