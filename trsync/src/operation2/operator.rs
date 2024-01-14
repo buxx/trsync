@@ -7,7 +7,10 @@ use crate::{
     operation2::executor::ExecutorError,
     state::State,
 };
-use trsync_core::{client::TracimClient, instance::ContentId};
+use trsync_core::{
+    client::{TracimClient, TracimClientError},
+    instance::ContentId,
+};
 
 use super::{
     executor::Executor,
@@ -22,6 +25,8 @@ use super::{
         },
     },
 };
+
+const RETRY_COUNT_MAX: usize = 5;
 
 pub struct Operator<'a> {
     state: &'a mut Box<dyn State>,
@@ -59,9 +64,31 @@ impl<'a> Operator<'a> {
         };
 
         log::info!("Proceed event : {:?}", &event);
-        let state_changes =
-            self.executor(event)
-                .execute(self.state, &self.tracim, &mut self.ignore_events)?;
+        let mut retry_count = 0;
+        let mut state_changes = vec![];
+        loop {
+            if retry_count >= RETRY_COUNT_MAX {
+                return Err(ExecutorError::MaximumRetryCount(
+                    event.display(&self.tracim),
+                ));
+            }
+
+            let state_changes_ = match self.executor(event).execute(
+                self.state,
+                &self.tracim,
+                &mut self.ignore_events,
+            ) {
+                Ok(state_changes_) => state_changes_,
+                Err(ExecutorError::Tracim(TracimClientError::TimeoutError)) => {
+                    retry_count += 1;
+                    continue;
+                }
+                Err(err) => return Err(err),
+            };
+            state_changes = state_changes_;
+            break;
+        }
+
         for state_change in state_changes {
             self.state.change(state_change)?
         }
