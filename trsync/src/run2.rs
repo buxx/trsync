@@ -26,7 +26,8 @@ use trsync_core::change::remote::RemoteChange;
 use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
 use trsync_core::error::{Decision, ErrorChannels};
-use trsync_core::sync::SyncPolitic;
+use trsync_core::sync::{AcceptAllSyncPolitic, ConfirmationSyncPolitic, SyncChannels, SyncPolitic};
+use trsync_core::user::UserRequest;
 
 struct Runner {
     context: TrSyncContext,
@@ -465,13 +466,42 @@ pub fn run(
     context: TrSyncContext,
     stop_signal: Arc<AtomicBool>,
     activity_sender: Option<Sender<WrappedActivity>>,
-    sync_politic: Box<dyn SyncPolitic>,
+    sync_channels: SyncChannels,
     error_channels: ErrorChannels,
+    // FIXME BS NOW: these parameters are manager specific, drop them.
+    confirm_startup_sync: bool,
+    popup_confirm_startup_sync: bool,
+    // FIXME BS NOW: this parameter is systray specific, drop it
+    user_request_sender: Sender<UserRequest>,
 ) -> Result<()> {
-    let mut runner = Runner::new(context, stop_signal.clone(), activity_sender, sync_politic);
     loop {
+        let sync_politic: Box<dyn SyncPolitic> = match confirm_startup_sync {
+            true => Box::new(ConfirmationSyncPolitic::new(
+                sync_channels.clone(),
+                user_request_sender.clone(),
+                popup_confirm_startup_sync,
+            )),
+            false => Box::new(AcceptAllSyncPolitic),
+        };
+
+        let mut runner = Runner::new(
+            context.clone(),
+            stop_signal.clone(),
+            activity_sender.clone(),
+            sync_politic,
+        );
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);
+
+            // FIXME BS NOW : absolutely ugly. I think we should drop anyhow !!
+            if let Some(error) = error.chain().last() {
+                dbg!(format!("{}", &error));
+                if format!("{}", error).to_lowercase().contains("connection") {
+                    log::info!("Connection error, retry in 30s.");
+                    thread::sleep(Duration::from_secs(30));
+                    continue;
+                }
+            }
             runner.set_activity(Activity::Error)?;
             *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
             match error_channels.decision_receiver().recv() {

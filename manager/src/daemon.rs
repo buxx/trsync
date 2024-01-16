@@ -47,7 +47,9 @@ impl Daemon {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
+        // TODO : this is a too much generic reason to restart every 30s !
         while let Err(error) = self.ensure_processes() {
+            // TODO : do not log in error when error is UnavailableNetwork
             log::error!("Startup error : '{}', retry in 30s", error);
             std::thread::sleep(Duration::from_secs(30))
         }
@@ -246,21 +248,19 @@ impl Daemon {
         let stop_signal = Arc::new(AtomicBool::new(false));
         let thread_stop_signal = stop_signal.clone();
         let thread_activity_sender = self.activity_sender.clone();
-        let sync_politic: Box<dyn SyncPolitic> = match self.config.confirm_startup_sync {
-            true => Box::new(ConfirmationSyncPolitic::new(
-                sync_channels,
-                self.user_request_sender.clone(),
-                self.config.popup_confirm_startup_sync,
-            )),
-            false => Box::new(AcceptAllSyncPolitic),
-        };
+        let confirm_startup_sync_ = self.config.confirm_startup_sync;
+        let popup_confirm_startup_sync_ = self.config.popup_confirm_startup_sync;
+        let user_request_sender_ = self.user_request_sender.clone();
         thread::spawn(move || {
             trsync::run2::run(
                 trsync_context,
                 thread_stop_signal,
                 Some(thread_activity_sender),
-                sync_politic,
+                sync_channels,
                 error_channels,
+                confirm_startup_sync_,
+                popup_confirm_startup_sync_,
+                user_request_sender_,
             )
         });
         self.processes.insert(trsync_uid, stop_signal);
