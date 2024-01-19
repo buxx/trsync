@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, time::Duration};
+use std::{fs, io, path::PathBuf, time::Duration};
 
 use mockall::automock;
 use reqwest::{
@@ -13,6 +13,8 @@ use crate::{
     instance::{ContentFileName, ContentId, RevisionId, Workspace, WorkspaceId},
     types::ContentType,
     user::UserId,
+    utils::extract_html_body,
+    HTML_DOCUMENT_LOCAL_EXTENSION,
 };
 
 pub const CONTENT_ALREADY_EXIST_ERR_CODE: u64 = 3002;
@@ -40,6 +42,8 @@ pub enum TracimClientError {
     InvalidResponse(String, Value),
     #[error("Authentication error")]
     AuthenticationError,
+    #[error("File {0} not found: {1}")]
+    FileNotFound(PathBuf, String),
 }
 
 impl TracimClientError {
@@ -407,6 +411,35 @@ impl Tracim {
         self.created_revision_id(response)
     }
 
+    fn create_note(
+        &self,
+        file_name: ContentFileName,
+        parent: Option<ContentId>,
+    ) -> Result<ContentId, TracimClientError> {
+        let url = self.workspace_url("contents");
+        let mut data = Map::new();
+
+        let file_name = file_name.0.replace(HTML_DOCUMENT_LOCAL_EXTENSION, "");
+        data.insert("label".to_string(), json!(file_name));
+        data.insert("raw_content".to_string(), json!("".to_string()));
+        data.insert(
+            "content_type".to_string(),
+            json!(ContentType::HtmlDocument.to_string()),
+        );
+        if let Some(parent_id) = parent {
+            data.insert("parent_id".to_string(), json!(parent_id.0));
+        };
+
+        let response = self
+            .client
+            .request(Method::POST, &url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .json(&data)
+            .send()?;
+
+        self.created_content_id(response)
+    }
+
     fn create_file(
         &self,
         parent: Option<ContentId>,
@@ -425,8 +458,10 @@ impl Tracim {
             ))
         })?;
 
-        let response = self
-            .client
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(600))
+            .build()?;
+        let response = client
             .request(Method::POST, url)
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .multipart(form)
@@ -462,8 +497,10 @@ impl Tracim {
             )))?;
         let url = self.workspace_url(&format!("files/{}/raw/{}", content_id, file_name));
 
-        let response = self
-            .client
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(600))
+            .build()?;
+        let response = client
             .request(Method::PUT, url)
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .multipart(form)
@@ -472,6 +509,32 @@ impl Tracim {
         self.no_content(response)?;
         let content = self.get_content(content_id)?;
         Ok(content.current_revision_id)
+    }
+
+    fn fill_content_note_with_file(
+        &self,
+        content_id: ContentId,
+        path: &PathBuf,
+    ) -> Result<RevisionId, TracimClientError> {
+        let mut data = Map::new();
+        let url = self.workspace_url(&format!("html-documents/{}", content_id));
+
+        let html_content = fs::read_to_string(path)
+            .map_err(|error| TracimClientError::FileNotFound(path.clone(), error.to_string()))?;
+        let html_part_content: String = extract_html_body(&html_content).unwrap_or_else(|error| {
+            log::debug!("Unable to extract html body content : '{}'", error);
+            html_content.to_string()
+        });
+        data.insert("raw_content".to_string(), json!(html_part_content));
+
+        let response = self
+            .client
+            .request(Method::PUT, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .json(&data)
+            .send()?;
+
+        self.created_revision_id(response)
     }
 }
 
@@ -485,7 +548,7 @@ impl TracimClient for Tracim {
     ) -> Result<ContentId, TracimClientError> {
         match type_ {
             ContentType::Folder => self.create_folder(file_name, parent),
-            ContentType::HtmlDocument => todo!(),
+            ContentType::HtmlDocument => self.create_note(file_name, parent),
             ContentType::File => self.create_file(parent, path),
         }
     }
@@ -608,33 +671,49 @@ impl TracimClient for Tracim {
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
-        _type_: ContentType,
+        type_: ContentType,
         path: &PathBuf,
     ) -> Result<(), TracimClientError> {
-        // FIXME BS NOW: html-doc
-        let mut response = self
-            .client
-            .request(
-                Method::GET,
-                self.workspace_url(&format!("files/{}/raw/_", content_id)),
-            )
-            .basic_auth(self.username.clone(), Some(self.password.clone()))
-            .send()?;
+        match type_ {
+            ContentType::File => {
+                let mut response = self
+                    .client
+                    .request(
+                        Method::GET,
+                        self.workspace_url(&format!("files/{}/raw/_", content_id)),
+                    )
+                    .basic_auth(self.username.clone(), Some(self.password.clone()))
+                    .send()?;
 
-        let mut out = std::fs::File::create(path).map_err(|error| {
-            TracimClientError::PrepareError(format!(
-                "Error when open or create file at {}: {}",
-                path.display(),
-                error
-            ))
-        })?;
-        io::copy(&mut response, &mut out).map_err(|error| {
-            TracimClientError::PrepareError(format!(
-                "Error when fill file at {}: {}",
-                path.display(),
-                error
-            ))
-        })?;
+                let mut out = std::fs::File::create(path).map_err(|error| {
+                    TracimClientError::PrepareError(format!(
+                        "Error when open or create file at {}: {}",
+                        path.display(),
+                        error
+                    ))
+                })?;
+                io::copy(&mut response, &mut out).map_err(|error| {
+                    TracimClientError::PrepareError(format!(
+                        "Error when fill file at {}: {}",
+                        path.display(),
+                        error
+                    ))
+                })?;
+            }
+            ContentType::HtmlDocument => {
+                let content = self.get_content(content_id)?;
+                std::fs::write(path, content.raw_content.unwrap_or("".to_string())).map_err(
+                    |error| {
+                        TracimClientError::PrepareError(format!(
+                            "Error when try to write file at {}: {}",
+                            path.display(),
+                            error
+                        ))
+                    },
+                )?;
+            }
+            ContentType::Folder => {}
+        };
 
         Ok(())
     }
@@ -647,8 +726,8 @@ impl TracimClient for Tracim {
     ) -> Result<RevisionId, TracimClientError> {
         match type_ {
             ContentType::File => self.fill_content_file_with_file(content_id, path),
-            ContentType::Folder => todo!(),
-            ContentType::HtmlDocument => todo!(),
+            ContentType::HtmlDocument => self.fill_content_note_with_file(content_id, path),
+            ContentType::Folder => unreachable!(),
         }
     }
 

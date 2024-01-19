@@ -33,6 +33,10 @@ impl Activity {
     fn is_job(&self) -> bool {
         matches!(self, Activity::Job(_))
     }
+
+    fn is_startup_sync(&self) -> bool {
+        matches!(self, Activity::StartupSync(_))
+    }
 }
 
 impl Display for Activity {
@@ -70,7 +74,7 @@ impl ActivityState {
 
     pub fn is_working(&self) -> bool {
         for activity in self.activities.values() {
-            if activity.is_job() {
+            if activity.is_job() || activity.is_startup_sync() {
                 return true;
             }
         }

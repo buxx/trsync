@@ -101,7 +101,8 @@ pub struct SyncChannels {
 }
 
 impl SyncChannels {
-    pub fn new(confirm_sync_sender: Sender<bool>, confirm_sync_receiver: Receiver<bool>) -> Self {
+    fn new() -> Self {
+        let (confirm_sync_sender, confirm_sync_receiver) = unbounded();
         Self {
             changes: Arc::new(Mutex::new(None)),
             confirm_sync_sender,
@@ -122,6 +123,12 @@ impl SyncChannels {
     }
 }
 
+impl Default for SyncChannels {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SyncExchanger {
     channels: HashMap<JobIdentifier, SyncChannels>,
@@ -135,8 +142,7 @@ impl SyncExchanger {
     }
 
     pub fn insert(&mut self, job_identifier: JobIdentifier) -> SyncChannels {
-        let (confirm_sync_sender, confirm_sync_receiver) = unbounded();
-        let sync_channels = SyncChannels::new(confirm_sync_sender, confirm_sync_receiver);
+        let sync_channels = SyncChannels::new();
         self.channels.insert(job_identifier, sync_channels.clone());
 
         sync_channels

@@ -37,7 +37,11 @@ impl ContentType {
     pub fn from_path(path: &Path) -> Self {
         if path.is_dir() {
             Self::Folder
-        } else if path.ends_with(HTML_DOCUMENT_LOCAL_EXTENSION) {
+        } else if path
+            .display()
+            .to_string()
+            .ends_with(HTML_DOCUMENT_LOCAL_EXTENSION)
+        {
             Self::HtmlDocument
         } else {
             Self::File

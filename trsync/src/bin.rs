@@ -7,7 +7,10 @@ use anyhow::Result;
 use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
-use trsync_core::{instance::WorkspaceId, sync::AcceptAllSyncPolitic};
+use trsync_core::{
+    instance::WorkspaceId,
+    sync::{AcceptAllSyncPolitic, SyncChannels},
+};
 extern crate notify;
 
 pub mod client;
@@ -98,8 +101,8 @@ fn main() -> Result<(), Error> {
     };
 
     let context = opt.to_context(password.clone())?;
-    let _stop_signal = Arc::new(AtomicBool::new(false));
-    if let Err(error) = run2::run(context, _stop_signal, None, Box::new(AcceptAllSyncPolitic)) {
+    let stop_signal_ = Arc::new(AtomicBool::new(false));
+    if let Err(error) = run2::run(context, stop_signal_, None, SyncChannels::default()) {
         return Err(Error::UnexpectedError(format!("{:#}", error)));
     }
     log::info!("Exit application");

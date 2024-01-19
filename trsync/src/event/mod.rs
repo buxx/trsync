@@ -65,8 +65,8 @@ impl Event {
             }
             Event::Local(event) => match &event.1 {
                 DiskEvent::Deleted(path) => format!("🖴❌ {}", path.display()),
-                DiskEvent::Created(path) => format!("⬆🆕 {}", path.display()),
-                DiskEvent::Modified(path) => format!("⬆❌ {}", path.display()),
+                DiskEvent::Created(path) => format!("🖴🆕 {}", path.display()),
+                DiskEvent::Modified(path) => format!("🖴❌ {}", path.display()),
                 DiskEvent::Renamed(before_path, after_path) => {
                     format!("🖴 {} ➡ {}", before_path.display(), after_path.display())
                 }

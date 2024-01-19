@@ -1,3 +1,5 @@
+use std::{io, path::PathBuf};
+
 use thiserror::Error;
 use trsync_core::{
     client::{TracimClient, TracimClientError},
@@ -39,4 +41,6 @@ pub enum ExecutorError {
     NotFoundAfterContentAlreadyExist(String),
     #[error("Maximum retry reached for : {0} (because time out)")]
     MaximumRetryCount(String),
+    #[error("Related file io error : {0}")]
+    RelatedLocalFileIoError(PathBuf, io::Error),
 }

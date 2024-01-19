@@ -1,3 +1,4 @@
+use minidom::Element;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -32,4 +33,20 @@ pub fn md5_file(file_path: &PathBuf) -> String {
         buf.consume(part_len);
     }
     format!("{:x}", context.compute())
+}
+
+pub fn extract_html_body(content: &str) -> Result<String, String> {
+    let root: Element = match content.parse() {
+        Ok(element_) => element_,
+        Err(error) => return Err(format!("Unable to read html content : '{}'", error)),
+    };
+
+    for element in root.children() {
+        if element.name() == "body" {
+            return Ok(String::from(element));
+        }
+    }
+
+    // If body node not found, consider given content is body content
+    Ok(content.to_string())
 }
