@@ -175,13 +175,9 @@ impl RemoteWatcher {
             let workspace_id =
                 remote_event.fields["workspace"]
                     .as_object()
-                    .ok_or(Error::UnexpectedError(format!(
-                        "Remote event workspace not appear to not be object"
-                    )))?["workspace_id"]
+                    .ok_or(Error::UnexpectedError("Remote event workspace not appear to not be object".to_string()))?["workspace_id"]
                     .as_i64()
-                    .ok_or(Error::UnexpectedError(format!(
-                        "Remote event workspace workspace_id appear to not be integer"
-                    )))?;
+                    .ok_or(Error::UnexpectedError("Remote event workspace workspace_id appear to not be integer".to_string()))?;
 
             if let Some(message) = {
                 if self.context.workspace_id.0 != workspace_id as i32 {

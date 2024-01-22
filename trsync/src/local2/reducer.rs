@@ -398,7 +398,7 @@ mod test {
         #[case] expected: Vec<DiskEventWrap>,
     ) {
         // Given
-        let (op_sender, _): (Sender<Event>, Receiver<Event>) = unbounded();
+        let (_op_sender, _): (Sender<Event>, Receiver<Event>) = unbounded();
         let (local_sender, local_receiver): (Sender<DiskEvent>, Receiver<DiskEvent>) = unbounded();
         let mut reducer = LocalReceiverReducer::new(local_receiver);
         given

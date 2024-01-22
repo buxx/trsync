@@ -35,7 +35,7 @@ trait IntoRelative {
 impl IntoRelative for PathBuf {
     fn relative(&self, prefix: &PathBuf) -> Result<PathBuf> {
         Ok(self
-            .strip_prefix(&prefix)
+            .strip_prefix(prefix)
             .context(format!(
                 "Strip path prefix {} from {}",
                 &prefix.display(),

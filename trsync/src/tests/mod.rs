@@ -97,7 +97,7 @@ pub fn apply_on_disk(operations: &Vec<OperateOnDisk>, tmpdir: &PathBuf) {
         match operation {
             OperateOnDisk::Create(file_path) => {
                 let absolute_path = tmpdir.join(file_path);
-                match content_type(&file_path) {
+                match content_type(file_path) {
                     ContentType::File => {
                         fs::File::create(&absolute_path)
                             .context(format!("Create file {}", &absolute_path.display()))
@@ -121,13 +121,13 @@ pub fn apply_on_disk(operations: &Vec<OperateOnDisk>, tmpdir: &PathBuf) {
 }
 
 pub fn disk_files(tmpdir: &PathBuf) -> Vec<String> {
-    WalkDir::new(&tmpdir)
+    WalkDir::new(tmpdir)
         .into_iter()
         .map(|entry| {
             entry
                 .unwrap()
                 .path()
-                .strip_prefix(&tmpdir)
+                .strip_prefix(tmpdir)
                 .unwrap()
                 .display()
                 .to_string()
@@ -256,7 +256,7 @@ impl MockTracimClientCase {
             }
             MockTracimClientCase::SetParent(
                 raw_content_id,
-                raw_file_name,
+                _raw_file_name,
                 raw_parent_id,
                 raw_new_revision_id,
             ) => {

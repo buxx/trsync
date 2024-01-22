@@ -35,13 +35,13 @@ impl From<&Change> for Event {
             },
             Change::Remote(change) => match change {
                 RemoteChange::New(content_id, _) => {
-                    Self::Remote(RemoteEvent::Created(content_id.clone()))
+                    Self::Remote(RemoteEvent::Created(*content_id))
                 }
                 RemoteChange::Disappear(content_id, _) => {
-                    Self::Remote(RemoteEvent::Deleted(content_id.clone()))
+                    Self::Remote(RemoteEvent::Deleted(*content_id))
                 }
                 RemoteChange::Updated(content_id, _) => {
-                    Self::Remote(RemoteEvent::Updated(content_id.clone()))
+                    Self::Remote(RemoteEvent::Updated(*content_id))
                 }
             },
         }
@@ -53,8 +53,7 @@ impl Event {
         match self {
             Event::Remote(event) => {
                 let path = client
-                    .get_content_path(event.content_id())
-                    .and_then(|v| Ok(format!("{}", v.display())))
+                    .get_content_path(event.content_id()).map(|v| format!("{}", v.display()))
                     .unwrap_or("?".to_string());
                 match event {
                     RemoteEvent::Deleted(_) => format!("☁❌ {}", path),

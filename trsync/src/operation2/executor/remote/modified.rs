@@ -76,7 +76,7 @@ impl ModifiedOnRemoteExecutor {
         ignore_events: &mut Vec<Event>,
     ) -> Result<(), TracimClientError> {
         tracim
-            .fill_content_with_file(content_id, content_type, &absolute_path)
+            .fill_content_with_file(content_id, content_type, absolute_path)
             .context(format!(
                 "Fill remote file {} with {}",
                 content_id,

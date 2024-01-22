@@ -21,9 +21,9 @@ impl ContentPath {
     }
 }
 
-impl Into<PathBuf> for ContentPath {
-    fn into(self) -> PathBuf {
-        self.to_path_buf()
+impl From<ContentPath> for PathBuf {
+    fn from(val: ContentPath) -> Self {
+        val.to_path_buf()
     }
 }
 

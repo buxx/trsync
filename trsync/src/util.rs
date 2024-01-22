@@ -50,7 +50,7 @@ impl FileInfos {
         let path_components: Vec<Component> = relative_path_path.components().collect();
         let parent_relative_path = parent_relative_path_from_path_components(
             &path_components,
-            &absolute_path,
+            absolute_path,
             &workspace_path,
         )?;
 

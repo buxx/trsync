@@ -61,6 +61,6 @@ impl Executor for AbsentFromRemoteExecutor {
             ignore_events.push(Event::Remote(RemoteEvent::Deleted(content_id)));
         }
 
-        return Ok(vec![StateModification::Forgot(content_id)]);
+        Ok(vec![StateModification::Forgot(content_id)])
     }
 }

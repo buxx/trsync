@@ -186,11 +186,11 @@ impl<'d> DatabaseOperation<'d> {
     }
 
     pub fn get_last_modified_timestamp(&self, relative_path: &str) -> Result<u64, rusqlite::Error> {
-        Ok(self.connection.query_row::<u64, _, _>(
+        self.connection.query_row::<u64, _, _>(
             "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![relative_path],
             |row| row.get(0),
-        )?)
+        )
     }
 
     pub fn update_revision_id(
@@ -240,7 +240,7 @@ impl<'d> DatabaseOperation<'d> {
     pub fn get_relative_paths(&self) -> Result<Vec<String>, rusqlite::Error> {
         let mut relative_paths = vec![];
         let mut stmt = self.connection.prepare("SELECT relative_path FROM file")?;
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        let local_iter = stmt.query_map([], |row| row.get(0))?;
         for result in local_iter {
             let relative_path: String = result?;
             relative_paths.push(relative_path);
@@ -251,7 +251,7 @@ impl<'d> DatabaseOperation<'d> {
     pub fn get_content_ids(&self) -> Result<Vec<ContentId>, rusqlite::Error> {
         let mut content_ids = vec![];
         let mut stmt = self.connection.prepare("SELECT content_id FROM file")?;
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        let local_iter = stmt.query_map([], |row| row.get(0))?;
         for result in local_iter {
             let content_id: i32 = result?;
             content_ids.push(content_id)

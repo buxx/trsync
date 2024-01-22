@@ -5,11 +5,11 @@ use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
 use trsync_core::activity::WrappedActivity;
-use trsync_core::control::{RemoteControl, RemoteControlBuilder};
+use trsync_core::control::{RemoteControlBuilder};
 use trsync_core::error::ErrorExchanger;
 use trsync_core::job::JobIdentifier;
 use trsync_core::sync::{
-    AcceptAllSyncPolitic, ConfirmationSyncPolitic, SyncExchanger, SyncPolitic,
+    SyncExchanger,
 };
 use trsync_core::user::UserRequest;
 

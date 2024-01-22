@@ -97,8 +97,7 @@ impl NamedOnRemoteExecutor {
         Ok(state
             .get(content_id)?
             .context(format!("Get content {}", content_id))?
-            .revision_id()
-            .clone())
+            .revision_id())
     }
 
     fn after_parent(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
