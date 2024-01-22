@@ -432,7 +432,7 @@ impl Tracim {
 
         let response = self
             .client
-            .request(Method::POST, &url)
+            .request(Method::POST, url)
             .basic_auth(self.username.clone(), Some(self.password.clone()))
             .json(&data)
             .send()?;
@@ -535,6 +535,64 @@ impl Tracim {
             .send()?;
 
         self.created_revision_id(response)
+    }
+
+    pub async fn get_user_live_messages_response(
+        &self,
+        user_id: i32,
+    ) -> Result<reqwest::Response, TracimClientError> {
+        let url = format!("{}users/{}/live_messages", self.base_address, user_id);
+        let response = reqwest::Client::new()
+            .request(Method::GET, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .send()
+            .await?;
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => Ok(response),
+            _ => {
+                let text = response.text().await?;
+                Err(TracimClientError::Unknown(format!(
+                    "Unexpected response status {} : '{}'",
+                    response_status_code, text,
+                )))
+            }
+        }
+    }
+
+    pub fn get_user_id(&self) -> Result<i32, TracimClientError> {
+        let url = format!("{}auth/whoami", self.base_address);
+        let response = self
+            .client
+            .request(Method::GET, url)
+            .basic_auth(self.username.clone(), Some(self.password.clone()))
+            .send()?;
+
+        let response_status_code = response.status().as_u16();
+        match response_status_code {
+            200 => {
+                let value = &response.json::<Value>()?;
+                let data = value.as_object().ok_or(TracimClientError::InvalidResponse(
+                    "Response content not appear to be an object".to_string(),
+                    value.clone(),
+                ))?;
+                let user_id =
+                    data["user_id"]
+                        .as_i64()
+                        .ok_or(TracimClientError::InvalidResponse(
+                            "Response content object do not contains a integer user_id".to_string(),
+                            data["user_id"].clone(),
+                        ))?;
+                Ok(user_id as i32)
+            }
+            _ => {
+                let text = response.text()?;
+                Err(TracimClientError::Unknown(format!(
+                    "Unexpected response status {} : '{}'",
+                    response_status_code, text,
+                )))
+            }
+        }
     }
 }
 

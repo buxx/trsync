@@ -165,19 +165,19 @@ impl ManagerConfig {
     }
 }
 
-impl Into<Ini> for ManagerConfig {
-    fn into(self) -> Ini {
+impl From<ManagerConfig> for Ini {
+    fn from(val: ManagerConfig) -> Self {
         let mut conf = Ini::new();
 
-        let instances_ids = self
+        let instances_ids = val
             .instances
             .iter()
             .map(|i| i.name.to_string())
             .collect::<Vec<String>>()
             .join(",");
-        let local_folder = self.local_folder.clone();
-        let confirm_startup_sync = self.confirm_startup_sync.to_string();
-        let popup_confirm_startup_sync = self.popup_confirm_startup_sync.to_string();
+        let local_folder = val.local_folder.clone();
+        let confirm_startup_sync = val.confirm_startup_sync.to_string();
+        let popup_confirm_startup_sync = val.popup_confirm_startup_sync.to_string();
 
         conf.with_section(Some("server"))
             .set("instances", instances_ids)
@@ -185,12 +185,12 @@ impl Into<Ini> for ManagerConfig {
             .set("confirm_startup_sync", confirm_startup_sync)
             .set("popup_confirm_startup_sync", popup_confirm_startup_sync);
 
-        if let Some(icons_path) = self.icons_path {
+        if let Some(icons_path) = val.icons_path {
             conf.with_section(Some("server"))
                 .set("icons_path", icons_path);
         }
 
-        for instance in &self.instances {
+        for instance in &val.instances {
             let address = instance.address.clone();
             let username = instance.username.clone();
             let unsecure = instance.unsecure.to_string();

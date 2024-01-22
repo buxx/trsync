@@ -73,7 +73,7 @@ impl Display for RevisionId {
 pub struct ContentFileName(pub String);
 impl ContentFileName {
     pub fn label(&self, type_: &ContentType) -> String {
-        let splitted = self.0.split(".").collect::<Vec<&str>>();
+        let splitted = self.0.split('.').collect::<Vec<&str>>();
         if splitted.len() > 1 {
             splitted[splitted.len() - type_.label_minus_pos()].to_string()
         } else {
