@@ -52,7 +52,7 @@ pub fn build_memory_state(
     let mut timestamps: HashMap<ContentId, DiskTimestamp> = HashMap::new();
     if let Some(tmpdir) = tmpdir {
         for content in state.contents().unwrap() {
-            let content_path = state.path(content.id()).unwrap().unwrap();
+            let content_path = state.path(content.id()).unwrap();
             let absolute_path = tmpdir.join(content_path.to_path_buf());
             let timestamp = last_modified_timestamp(&absolute_path).unwrap();
             contents.insert(content.id(), content.clone());
@@ -75,7 +75,7 @@ pub fn ensure_state_on_disk(state: &Box<dyn State>, tmpdir: &PathBuf) {
         .context("Read all contents from state")
         .unwrap()
     {
-        let content_path: PathBuf = state.path(content.id()).unwrap().unwrap().into();
+        let content_path: PathBuf = state.path(content.id()).unwrap().into();
         let absolute_path = tmpdir.join(content_path);
         match content.type_() {
             ContentType::Folder => {
@@ -141,7 +141,7 @@ pub fn state_files(state: &Box<dyn State>) -> Vec<String> {
         .contents()
         .unwrap()
         .into_iter()
-        .map(|content| state.path(content.id()).unwrap().unwrap())
+        .map(|content| state.path(content.id()).unwrap())
         .map(|path| path.to_string())
         .collect::<Vec<String>>()
 }

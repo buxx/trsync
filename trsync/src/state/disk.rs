@@ -350,7 +350,7 @@ mod test {
         insert_content(&connection(&tmpdir_), "a.txt", 1, 2, None, 0);
 
         // When
-        let path = state.path(ContentId(1)).unwrap().unwrap();
+        let path = state.path(ContentId(1)).unwrap();
 
         // Then
         assert_eq!(path.to_string(), "a.txt".to_string());
@@ -366,7 +366,7 @@ mod test {
         insert_content(&connection(&tmpdir_), "a.txt", 3, 4, Some(1), 0);
 
         // When
-        let path = state.path(ContentId(3)).unwrap().unwrap();
+        let path = state.path(ContentId(3)).unwrap();
 
         // Then
         assert_eq!(path.to_string(), "Folder/a.txt".to_string());

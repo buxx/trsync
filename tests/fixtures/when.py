@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import signal
 from pytest_bdd import when, parsers
 
 from tests.fixtures.base import (

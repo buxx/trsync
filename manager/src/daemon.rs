@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
 use trsync_core::activity::WrappedActivity;
+use trsync_core::control::{RemoteControl, RemoteControlBuilder};
 use trsync_core::error::ErrorExchanger;
 use trsync_core::job::JobIdentifier;
 use trsync_core::sync::{
@@ -246,23 +247,17 @@ impl Daemon {
             .insert(job_identifier);
 
         let stop_signal = Arc::new(AtomicBool::new(false));
-        let thread_stop_signal = stop_signal.clone();
-        let thread_activity_sender = self.activity_sender.clone();
-        let confirm_startup_sync_ = self.config.confirm_startup_sync;
-        let popup_confirm_startup_sync_ = self.config.popup_confirm_startup_sync;
-        let user_request_sender_ = self.user_request_sender.clone();
-        thread::spawn(move || {
-            trsync::run2::run(
-                trsync_context,
-                thread_stop_signal,
-                Some(thread_activity_sender),
-                sync_channels,
-                error_channels,
-                confirm_startup_sync_,
-                popup_confirm_startup_sync_,
-                user_request_sender_,
-            )
-        });
+        let remote = RemoteControlBuilder::default()
+            .stop_signal(stop_signal.clone())
+            .activity_sender(Some(self.activity_sender.clone()))
+            .confirm_startup_sync(self.config.confirm_startup_sync)
+            .popup_confirm_startup_sync(self.config.popup_confirm_startup_sync)
+            .user_request_sender(Some(self.user_request_sender.clone()))
+            .error_channels(Some(error_channels))
+            .sync_channels(Some(sync_channels))
+            .build();
+
+        thread::spawn(move || trsync::run2::run(trsync_context, remote));
         self.processes.insert(trsync_uid, stop_signal);
         Ok(())
     }

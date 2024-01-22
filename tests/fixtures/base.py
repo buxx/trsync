@@ -1,18 +1,16 @@
 import json
 import os
-from pickle import DEFAULT_PROTOCOL
 import signal
 import subprocess
 import time
 from pathlib import Path
 import typing
-from unicodedata import name
 import docker
 import pytest
 import requests
 import psutil
 
-from tests.fixtures.model import Content, User, Workspace
+from tests.fixtures.model import User, Workspace
 
 
 TRACIM_VERSION = "4.1.3"

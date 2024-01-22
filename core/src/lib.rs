@@ -3,6 +3,7 @@ pub mod change;
 pub mod client;
 pub mod config;
 pub mod content;
+pub mod control;
 pub mod error;
 pub mod instance;
 pub mod job;

@@ -8,6 +8,7 @@ use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
 use trsync_core::{
+    control::{RemoteControl, RemoteControlBuilder},
     instance::WorkspaceId,
     sync::{AcceptAllSyncPolitic, SyncChannels},
 };
@@ -101,8 +102,7 @@ fn main() -> Result<(), Error> {
     };
 
     let context = opt.to_context(password.clone())?;
-    let stop_signal_ = Arc::new(AtomicBool::new(false));
-    if let Err(error) = run2::run(context, stop_signal_, None, SyncChannels::default()) {
+    if let Err(error) = run2::run(context, RemoteControlBuilder::default().build()) {
         return Err(Error::UnexpectedError(format!("{:#}", error)));
     }
     log::info!("Exit application");

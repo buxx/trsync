@@ -1,7 +1,6 @@
 from pathlib import Path
 import pathlib
 from pytest import FixtureRequest
-import pytest
 from pytest_bdd import parsers, given
 
 from tests.fixtures.model import User, Workspace

@@ -25,31 +25,23 @@ use trsync_core::change::local::LocalChange;
 use trsync_core::change::remote::RemoteChange;
 use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
-use trsync_core::error::{Decision, ErrorChannels};
-use trsync_core::sync::{AcceptAllSyncPolitic, ConfirmationSyncPolitic, SyncChannels, SyncPolitic};
-use trsync_core::user::UserRequest;
+use trsync_core::control::RemoteControl;
+use trsync_core::error::Decision;
 
 struct Runner {
     context: TrSyncContext,
-    stop_signal: Arc<AtomicBool>,
+    remote_control: RemoteControl,
     restart_signal: Arc<AtomicBool>,
-    activity_sender: Option<Sender<WrappedActivity>>,
     operational_sender: Sender<Event>,
     operational_receiver: Receiver<Event>,
     remote_sender: Sender<RemoteEvent>,
     remote_receiver: Receiver<RemoteEvent>,
     local_sender: Sender<DiskEvent>,
     local_receiver_reducer: LocalReceiverReducer,
-    sync_politic: Box<dyn SyncPolitic>,
 }
 
 impl Runner {
-    fn new(
-        context: TrSyncContext,
-        stop_signal: Arc<AtomicBool>,
-        activity_sender: Option<Sender<WrappedActivity>>,
-        sync_politic: Box<dyn SyncPolitic>,
-    ) -> Self {
+    fn new(context: TrSyncContext, remote_control: RemoteControl) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
             unbounded();
@@ -60,16 +52,14 @@ impl Runner {
 
         Self {
             context,
-            stop_signal,
+            remote_control,
             restart_signal,
-            activity_sender,
             operational_sender,
             operational_receiver,
             remote_sender,
             remote_receiver,
             local_sender,
             local_receiver_reducer,
-            sync_politic,
         }
     }
 
@@ -92,7 +82,7 @@ impl Runner {
 
     fn remote_watcher(&self) -> Result<()> {
         let remote_watcher_context = self.context.clone();
-        let remote_watcher_stop_signal = self.stop_signal.clone();
+        let remote_watcher_stop_signal = self.remote_control.stop_signal().clone();
         let remote_watcher_restart_signal = self.restart_signal.clone();
         let remote_watcher_operational_sender = self.remote_sender.clone();
         let remote_watcher_connection = connection(&PathBuf::from(&self.context.folder_path))?;
@@ -117,7 +107,7 @@ impl Runner {
     fn local_watcher(&self) -> Result<()> {
         let local_watcher_context = self.context.clone();
         let local_watcher_operational_sender = self.local_sender.clone();
-        let local_watcher_stop_signal = self.stop_signal.clone();
+        let local_watcher_stop_signal = self.remote_control.stop_signal().clone();
         let local_watcher_restart_signal = self.restart_signal.clone();
 
         let mut local_watcher = LocalWatcher::new(
@@ -137,7 +127,7 @@ impl Runner {
     }
 
     fn set_activity(&self, activity: Activity) -> Result<()> {
-        if let Some(activity_sender) = &self.activity_sender {
+        if let Some(activity_sender) = self.remote_control.activity_sender() {
             log::info!(
                 "[{}::{}] Set activity to {}",
                 self.context.instance_name,
@@ -178,7 +168,8 @@ impl Runner {
         if !remote_changes.is_empty() || !local_changes.is_empty() {
             self.set_activity(Activity::WaitingStartupSyncConfirmation)?;
             if !self
-                .sync_politic
+                .remote_control
+                .sync_politic()?
                 .deal(remote_changes.clone(), local_changes.clone())?
             {
                 bail!("TODO")
@@ -192,7 +183,7 @@ impl Runner {
             .collect();
         OperateChanges::new(
             self.context.clone(),
-            self.activity_sender.clone(),
+            self.remote_control.activity_sender().cloned(),
             remote_changes,
         )
         .operate(operator)?;
@@ -203,7 +194,7 @@ impl Runner {
             .collect();
         OperateChanges::new(
             self.context.clone(),
-            self.activity_sender.clone(),
+            self.remote_control.activity_sender().cloned(),
             local_changes,
         )
         .operate(operator)?;
@@ -268,7 +259,7 @@ impl Runner {
     }
 
     fn is_stop_requested(&self) -> bool {
-        self.stop_signal.load(Ordering::Relaxed)
+        self.remote_control.stop_signal().load(Ordering::Relaxed)
     }
 
     fn is_restart_requested(&self) -> bool {
@@ -462,59 +453,38 @@ impl OperateChanges {
     }
 }
 
-pub fn run(
-    context: TrSyncContext,
-    stop_signal: Arc<AtomicBool>,
-    activity_sender: Option<Sender<WrappedActivity>>,
-    sync_channels: SyncChannels,
-    error_channels: ErrorChannels,
-    // FIXME BS NOW: these parameters are manager specific, drop them.
-    confirm_startup_sync: bool,
-    popup_confirm_startup_sync: bool,
-    // FIXME BS NOW: this parameter is systray specific, drop it
-    user_request_sender: Sender<UserRequest>,
-) -> Result<()> {
+pub fn run(context: TrSyncContext, remote: RemoteControl) -> Result<()> {
     loop {
-        let sync_politic: Box<dyn SyncPolitic> = match confirm_startup_sync {
-            true => Box::new(ConfirmationSyncPolitic::new(
-                sync_channels.clone(),
-                user_request_sender.clone(),
-                popup_confirm_startup_sync,
-            )),
-            false => Box::new(AcceptAllSyncPolitic),
-        };
-
-        let mut runner = Runner::new(
-            context.clone(),
-            stop_signal.clone(),
-            activity_sender.clone(),
-            sync_politic,
-        );
+        let mut runner = Runner::new(context.clone(), remote.clone());
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);
 
             // FIXME BS NOW : absolutely ugly. I think we should drop anyhow !!
             if let Some(error) = error.chain().last() {
-                dbg!(format!("{}", &error));
                 if format!("{}", error).to_lowercase().contains("connection") {
                     log::info!("Connection error, retry in 30s.");
                     thread::sleep(Duration::from_secs(30));
                     continue;
                 }
             }
-            runner.set_activity(Activity::Error)?;
-            *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
-            match error_channels.decision_receiver().recv() {
-                Ok(Decision::RestartSpaceSync) => {}
-                Err(_) => {
-                    log::error!("Unable to communicate from trsync run to error decision receiver");
-                    break;
+
+            if let Some(error_channels) = remote.error_channels() {
+                runner.set_activity(Activity::Error)?;
+                *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
+                match error_channels.decision_receiver().recv() {
+                    Ok(Decision::RestartSpaceSync) => {}
+                    Err(_) => {
+                        log::error!(
+                            "Unable to communicate from trsync run to error decision receiver"
+                        );
+                        break;
+                    }
                 }
+                runner.set_activity(Activity::Idle)?;
             }
-            runner.set_activity(Activity::Idle)?;
         }
-        if stop_signal.load(Ordering::Relaxed) {
-            stop_signal.swap(false, Ordering::Relaxed);
+        if remote.stop_signal().load(Ordering::Relaxed) {
+            remote.stop_signal().swap(false, Ordering::Relaxed);
             break;
         }
     }
