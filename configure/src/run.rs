@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 
 use crossbeam_channel::{Receiver, Sender};
-use eframe::epaint::vec2;
 use trsync_core::{config::ManagerConfig, user::UserRequest};
 use trsync_manager::message::DaemonMessage;
 

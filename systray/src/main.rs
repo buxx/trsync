@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use anyhow::Result;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
 use env_logger::Env;
 use error::Error;
 use std::{
@@ -124,7 +124,7 @@ fn run() -> Result<()> {
     // TODO : See if we can use multiple viewports (https://github.com/emilk/egui/tree/master/examples/multiple_viewports)
     loop {
         match user_request_receiver.recv_timeout(Duration::from_millis(150)) {
-            Err(RecvTimeoutError) => {}
+            Err(RecvTimeoutError::Timeout) => {}
             Err(_) => break,
             Ok(request) => match request {
                 UserRequest::OpenMonitorWindow(panel) => {

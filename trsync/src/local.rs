@@ -199,7 +199,7 @@ impl LocalWatcher {
             match self.operational_sender.send(message) {
                 Ok(_) => (),
                 Err(err) => {
-                    // FIXME BS NOW : channel closed after restart after error/lost connection ?
+                    // FIXME BS NOW : channel closed after restart after error/lost connection ? But didn't break local sync ...
                     log::error!(
                         "Error when send operational message from local watcher : '{}'",
                         err

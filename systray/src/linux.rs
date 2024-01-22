@@ -3,13 +3,12 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    thread,
     time::Duration,
 };
 
 use crossbeam_channel::Sender;
 use trsync_core::{
-    activity::{ActivityState, State},
+    activity::ActivityState,
     error::ErrorExchanger,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
@@ -29,13 +28,10 @@ pub fn run_tray(
     sync_exchanger: Arc<Mutex<SyncExchanger>>,
     error_exchanger: Arc<Mutex<ErrorExchanger>>,
 ) -> Result<(), String> {
-    match gtk::init() {
-        Err(error) => return Err(format!("Unable to initialize gtk : '{}'", error)),
-        _ => {}
+    if let Err(error) = gtk::init() {
+        return Err(format!("Unable to initialize gtk : '{}'", error));
     };
 
-    let main_sender_monitor = main_sender.clone();
-    let main_sender_configure = main_sender.clone();
     let main_sender_quit = main_sender.clone();
 
     // Icon
@@ -49,47 +45,46 @@ pub fn run_tray(
     };
 
     // Monitor item
-    let activity_state_ = activity_state.clone();
     let window_sender_ = user_request_sender.clone();
-    match tray.add_menu_item("Moniteur", move || {
-        let activity_state__ = activity_state_.clone();
+    if let Err(error) = tray.add_menu_item("Moniteur", move || {
         log::info!("Request monitor window open");
-        if let Err(_) =
-            window_sender_.send(UserRequest::OpenMonitorWindow(MonitorWindowPanel::Root))
-        {}
+        if window_sender_
+            .send(UserRequest::OpenMonitorWindow(MonitorWindowPanel::Root))
+            .is_err()
+        {
+            log::error!("Unable to send monitor window open request")
+        }
     }) {
-        Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
-        _ => {}
+        return Err(format!("Unable to add menu item : '{:?}'", error));
     };
 
     // Configure item
     let window_sender_ = user_request_sender.clone();
-    match tray.add_menu_item("Configurer", move || {
+    if let Err(error) = tray.add_menu_item("Configurer", move || {
         log::info!("Request configure window open");
-        if let Err(_) = window_sender_.send(UserRequest::OpenConfigurationWindow) {}
-        let main_sender_ = main_sender_configure.clone();
-        // thread::spawn(move || {
-        //     if let Err(error) = run_configure(main_sender_) {
-        //         log::error!("Unable to run configure window : '{}'", error)
-        //     }
-        // });
+        if window_sender_
+            .send(UserRequest::OpenConfigurationWindow)
+            .is_err()
+        {
+            log::error!("Unable to send configure window open request")
+        }
     }) {
-        Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
-        _ => {}
+        return Err(format!("Unable to add menu item : '{:?}'", error));
     };
 
     // Quit item
     let menu_stop_signal = stop_signal.clone();
     let main_sender_ = main_sender_quit.clone();
     let window_sender_ = user_request_sender.clone();
-    match tray.add_menu_item("Quitter", move || {
+    if let Err(error) = tray.add_menu_item("Quitter", move || {
         main_sender_.send(DaemonMessage::Stop).unwrap_or(());
         menu_stop_signal.store(true, Ordering::Relaxed);
-        if let Err(_) = window_sender_.send(UserRequest::Quit) {}
+        if window_sender_.send(UserRequest::Quit).is_err() {
+            log::error!("Unable to send exit request")
+        }
         gtk::main_quit();
     }) {
-        Err(error) => return Err(format!("Unable to add menu item : '{:?}'", error)),
-        _ => {}
+        return Err(format!("Unable to add menu item : '{:?}'", error));
     };
 
     let glib_stop_signal = stop_signal.clone();

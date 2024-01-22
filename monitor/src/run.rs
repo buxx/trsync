@@ -6,7 +6,6 @@ use crossbeam_channel::Receiver;
 use eframe::epaint::vec2;
 use trsync_core::{
     activity::ActivityState,
-    config::ManagerConfig,
     error::ErrorExchanger,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
