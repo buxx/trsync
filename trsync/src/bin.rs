@@ -1,6 +1,5 @@
 use std::{
     env,
-    sync::{atomic::AtomicBool, Arc},
 };
 
 use anyhow::Result;
@@ -8,19 +7,16 @@ use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
 use trsync_core::{
-    control::{RemoteControl, RemoteControlBuilder},
+    control::{RemoteControlBuilder},
     instance::WorkspaceId,
-    sync::{AcceptAllSyncPolitic, SyncChannels},
 };
 extern crate notify;
 
-pub mod client;
 pub mod conflict;
 pub mod context;
 pub mod database;
 pub mod error;
 pub mod event;
-pub mod knowledge;
 pub mod local;
 pub mod local2;
 pub mod message;

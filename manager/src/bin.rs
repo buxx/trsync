@@ -14,7 +14,7 @@ fn main_() -> Result<()> {
 
     // As standalone server (no systray), we never send daemon messages
     // TODO : listen to SIG_HUP signal to send reload daemon message
-    let (_, main_channel_receiver): (
+    let (_, _main_channel_receiver): (
         Sender<message::DaemonMessage>,
         Receiver<message::DaemonMessage>,
     ) = unbounded();
@@ -23,8 +23,8 @@ fn main_() -> Result<()> {
     let config = ManagerConfig::from_env(true)?;
 
     log::info!("Start daemon");
-    let config_ = config.clone();
-    let (activity_sender, activity_receiver): (Sender<WrappedActivity>, Receiver<WrappedActivity>) =
+    let _config_ = config.clone();
+    let (_activity_sender, activity_receiver): (Sender<WrappedActivity>, Receiver<WrappedActivity>) =
         unbounded();
     std::thread::spawn(move || while activity_receiver.recv().is_ok() {});
     // FIXME BS NOW

@@ -6,6 +6,12 @@ const CONFIGURATION_GRID_ID: &str = "configuration";
 
 pub struct ConfigurationPainter;
 
+impl Default for ConfigurationPainter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigurationPainter {
     pub fn new() -> Self {
         Self {}
