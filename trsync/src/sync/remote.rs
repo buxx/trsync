@@ -107,13 +107,14 @@ impl RemoteSync {
 
         let mut current = remote_content;
         while let Some(parent_id) = current.parent_id {
-            current = all_remote_contents
+            current = match all_remote_contents
                 .iter()
                 .find(|c| c.content_id == ContentId(parent_id))
-                .context(format!(
-                    "Find parent {} of content {}",
-                    parent_id, current.content_id
-                ))?;
+            {
+                Some(content) => content,
+                // If not found, consider content as deleted because no parent
+                None => return Ok(true),
+            };
 
             if current.is_deleted || current.is_archived {
                 return Ok(true);
