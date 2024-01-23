@@ -112,8 +112,8 @@ impl<'a> Operator<'a> {
                 DiskEventWrap(_, DiskEvent::Created(disk_path)) => {
                     Box::new(self.created_on_remote_executor(disk_path.clone()))
                 }
-                DiskEventWrap(db_path, DiskEvent::Modified(disk_path)) => {
-                    Box::new(self.modified_on_remote_executor(db_path.clone(), disk_path.clone()))
+                DiskEventWrap(db_path, DiskEvent::Modified(_)) => {
+                    Box::new(self.modified_on_remote_executor(db_path.clone()))
                 }
                 DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => Box::new(
                     self.named_on_remote_executor(db_path.clone(), after_disk_path.clone()),
@@ -139,12 +139,8 @@ impl<'a> Operator<'a> {
             .avoid_same_sums(self.avoid_same_sums)
     }
 
-    fn modified_on_remote_executor(
-        &self,
-        db_path: PathBuf,
-        disk_path: PathBuf,
-    ) -> ModifiedOnRemoteExecutor {
-        ModifiedOnRemoteExecutor::new(self.workspace_folder.clone(), db_path, disk_path)
+    fn modified_on_remote_executor(&self, db_path: PathBuf) -> ModifiedOnRemoteExecutor {
+        ModifiedOnRemoteExecutor::new(self.workspace_folder.clone(), db_path)
     }
 
     fn updated_on_disk_executor(

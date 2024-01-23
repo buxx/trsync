@@ -290,7 +290,7 @@ impl App {
         Ok(())
     }
 
-    fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &Vec<Workspace>) {
+    fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &[Workspace]) {
         let selected_workspaces = self
             .state
             .instances
@@ -310,7 +310,7 @@ impl App {
             })
             .find(|i| &i.name == id)
         {
-            gui_instance.workspaces = Some(workspaces.clone());
+            gui_instance.workspaces = Some(workspaces.to_vec());
             gui_instance.rebuild_workspaces_ids_checkboxes(&selected_workspaces);
         };
     }

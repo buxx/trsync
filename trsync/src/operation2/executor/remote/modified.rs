@@ -19,15 +19,13 @@ use crate::{
 pub struct ModifiedOnRemoteExecutor {
     workspace_folder: PathBuf,
     db_path: PathBuf,
-    disk_path: PathBuf,
 }
 
 impl ModifiedOnRemoteExecutor {
-    pub fn new(workspace_folder: PathBuf, db_path: PathBuf, disk_path: PathBuf) -> Self {
+    pub fn new(workspace_folder: PathBuf, db_path: PathBuf) -> Self {
         Self {
             workspace_folder,
             db_path,
-            disk_path,
         }
     }
 
