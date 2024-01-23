@@ -7,6 +7,7 @@ use reqwest::{
 };
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::str::FromStr;
 use thiserror::Error;
 
 use crate::{
@@ -720,7 +721,7 @@ impl TracimClient for Tracim {
                 .json::<Paginated<Vec<RemoteContent>>>()?
                 .items
                 .into_iter()
-                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_some())
+                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_ok())
                 .collect::<Vec<RemoteContent>>()),
             _ => Err(self.response_error(response)?),
         }
@@ -820,7 +821,7 @@ impl TracimClient for Tracim {
                 .json::<Paginated<Vec<RemoteContent>>>()?
                 .items
                 .into_iter()
-                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_some())
+                .filter(|c| ContentType::from_str(c.content_type.as_str()).is_ok())
                 .find(|c| c.filename == file_name.0)
                 .map(|c| c.content_id)),
             _ => Err(self.response_error(response)?),

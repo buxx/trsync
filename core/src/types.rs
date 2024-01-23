@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::{fmt::Display, path::Path, str::FromStr};
+
+use thiserror::Error;
 
 use crate::HTML_DOCUMENT_LOCAL_EXTENSION;
 
@@ -16,24 +18,39 @@ pub enum ContentType {
     HtmlDocument,
 }
 
-impl ContentType {
-    pub fn from_str(str_: &str) -> Option<Self> {
-        match str_ {
-            "file" => Some(Self::File),
-            "folder" => Some(Self::Folder),
-            "html-document" => Some(Self::HtmlDocument),
-            _ => None,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ContentType::File => "file".to_string(),
-            ContentType::Folder => "folder".to_string(),
-            ContentType::HtmlDocument => "html-document".to_string(),
+            ContentType::File => f.write_str("file"),
+            ContentType::Folder => f.write_str("folder"),
+            ContentType::HtmlDocument => f.write_str("html-document"),
         }
     }
+}
 
+#[derive(Error, Debug)]
+pub struct ParseContentTypeStrError(String);
+
+impl Display for ParseContentTypeStrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("Unknown content type '{}'", self.0))
+    }
+}
+
+impl FromStr for ContentType {
+    type Err = ParseContentTypeStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "file" => Ok(Self::File),
+            "folder" => Ok(Self::Folder),
+            "html-document" => Ok(Self::HtmlDocument),
+            _ => Err(ParseContentTypeStrError(s.to_string())),
+        }
+    }
+}
+
+impl ContentType {
     pub fn from_path(path: &Path) -> Self {
         if path.is_dir() {
             Self::Folder
