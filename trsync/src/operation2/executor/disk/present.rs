@@ -82,7 +82,7 @@ impl Executor for PresentOnDiskExecutor {
                     }
                 }
             }
-            ContentType::File => {
+            ContentType::File | ContentType::HtmlDocument => {
                 let exist = absolute_path.exists();
                 fs::File::create(&absolute_path)
                     .context(format!("Create file {}", absolute_path.display()))?;
@@ -101,7 +101,6 @@ impl Executor for PresentOnDiskExecutor {
                     DiskEvent::Modified(content_path_buf.clone()),
                 )))
             }
-            ContentType::HtmlDocument => todo!(),
         }
 
         let disk_timestamp = last_modified_timestamp(&absolute_path)
