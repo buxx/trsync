@@ -1,15 +1,10 @@
-use std::{
-    env,
-};
+use std::env;
 
 use anyhow::Result;
 use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
-use trsync_core::{
-    control::{RemoteControlBuilder},
-    instance::WorkspaceId,
-};
+use trsync_core::{control::RemoteControlBuilder, instance::WorkspaceId};
 extern crate notify;
 
 pub mod conflict;
@@ -56,9 +51,6 @@ struct Opt {
 
     #[structopt(name = "--exit-after-sync", long)]
     exit_after_sync: bool,
-
-    #[structopt(name = "--prevent-delete-sync", long)]
-    prevent_delete_sync: bool,
 }
 
 impl Opt {

@@ -3,11 +3,11 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use env_logger::Env;
 use trsync_core::{activity::WrappedActivity, config::ManagerConfig};
 
-mod client;
-mod daemon;
-mod error;
-mod message;
-mod types;
+pub mod client;
+pub mod daemon;
+pub mod error;
+pub mod message;
+pub mod types;
 
 fn main_() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -24,8 +24,10 @@ fn main_() -> Result<()> {
 
     log::info!("Start daemon");
     let _config_ = config.clone();
-    let (_activity_sender, activity_receiver): (Sender<WrappedActivity>, Receiver<WrappedActivity>) =
-        unbounded();
+    let (_activity_sender, activity_receiver): (
+        Sender<WrappedActivity>,
+        Receiver<WrappedActivity>,
+    ) = unbounded();
     std::thread::spawn(move || while activity_receiver.recv().is_ok() {});
     // FIXME BS NOW
     // daemon::Daemon::new(config_, main_channel_receiver, activity_sender).run()?;

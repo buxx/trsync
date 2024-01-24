@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
-use trsync_core::{
-    change::local::LocalChange,
-    instance::{ContentId, DiskTimestamp},
-};
+use trsync_core::{change::local::LocalChange, instance::DiskTimestamp};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::util::{ignore_file, last_modified_timestamp};
@@ -123,20 +120,6 @@ impl LocalSync {
                 bail!("No row found for {}", path.display())
             }
             Err(error) => bail!("Read path {} from db but : {}", path.display(), error),
-        }
-    }
-
-    fn previously_known_content_id(&self, path: &PathBuf) -> Result<ContentId> {
-        match self.connection.query_row::<i32, _, _>(
-            "SELECT content_id FROM file WHERE relative_path = ?",
-            params![path.display().to_string()],
-            |row| Ok(row.get(0).unwrap()),
-        ) {
-            Ok(content_id) => Ok(ContentId(content_id)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                bail!("No row found for {}", path.display())
-            }
-            Err(error) => bail!("Read content_id {} from db but : {}", path.display(), error),
         }
     }
 
