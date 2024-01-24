@@ -93,9 +93,11 @@ impl SyncPolitic for ConfirmationSyncPolitic {
     }
 }
 
+pub type SyncChanges = Arc<Mutex<Option<(Vec<RemoteChange>, Vec<LocalChange>)>>>;
+
 #[derive(Debug, Clone)]
 pub struct SyncChannels {
-    changes: Arc<Mutex<Option<(Vec<RemoteChange>, Vec<LocalChange>)>>>,
+    changes: SyncChanges,
     confirm_sync_sender: Sender<bool>,
     confirm_sync_receiver: Receiver<bool>,
 }

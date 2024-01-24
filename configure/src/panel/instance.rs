@@ -181,7 +181,7 @@ impl GuiInstance {
         self_
     }
 
-    pub fn rebuild_workspaces_ids_checkboxes(&mut self, selected_workspaces: &Vec<WorkspaceId>) {
+    pub fn rebuild_workspaces_ids_checkboxes(&mut self, selected_workspaces: &[WorkspaceId]) {
         self.workspaces_ids_checkboxes = vec![];
         if let Some(workspaces) = &self.workspaces {
             for workspace in workspaces {

@@ -145,12 +145,14 @@ pub trait TracimClient {
     ) -> Result<Option<ContentId>, TracimClientError>;
     // FIXME BS NOW : Iterable
     fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError>;
+    #[allow(clippy::ptr_arg)]
     fn fill_file_with_content(
         &self,
         content_id: ContentId,
         type_: ContentType,
         path: &PathBuf,
     ) -> Result<(), TracimClientError>;
+    #[allow(clippy::ptr_arg)]
     fn fill_content_with_file(
         &self,
         content_id: ContentId,

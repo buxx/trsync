@@ -65,7 +65,7 @@ impl<'a> Operator<'a> {
 
         log::info!("Proceed event : {:?}", &event);
         let mut retry_count = 0;
-        let mut state_changes = vec![];
+        let state_changes;
         loop {
             if retry_count >= RETRY_COUNT_MAX {
                 return Err(ExecutorError::MaximumRetryCount(

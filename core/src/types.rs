@@ -96,22 +96,33 @@ pub enum RemoteEventType {
     Deleted,
 }
 
-impl RemoteEventType {
-    pub fn from_str(str_: &str) -> Option<Self> {
-        match str_ {
-            "content.modified.file" => Some(Self::Modified),
-            "content.modified.html-document" => Some(Self::Modified),
-            "content.modified.folder" => Some(Self::Modified),
-            "content.created.file" => Some(Self::Created),
-            "content.created.html-document" => Some(Self::Created),
-            "content.created.folder" => Some(Self::Created),
-            "content.deleted.html-document" => Some(Self::Deleted),
-            "content.deleted.file" => Some(Self::Deleted),
-            "content.deleted.folder" => Some(Self::Deleted),
-            "content.undeleted.html-document" => Some(Self::Created),
-            "content.undeleted.file" => Some(Self::Created),
-            "content.undeleted.folder" => Some(Self::Created),
-            _ => None,
+#[derive(Error, Debug)]
+pub struct ParseRemoteEventTypeError(String);
+
+impl Display for ParseRemoteEventTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("Unknown remote event type '{}'", self.0))
+    }
+}
+
+impl FromStr for RemoteEventType {
+    type Err = ParseRemoteEventTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "content.modified.file" => Ok(Self::Modified),
+            "content.modified.html-document" => Ok(Self::Modified),
+            "content.modified.folder" => Ok(Self::Modified),
+            "content.created.file" => Ok(Self::Created),
+            "content.created.html-document" => Ok(Self::Created),
+            "content.created.folder" => Ok(Self::Created),
+            "content.deleted.html-document" => Ok(Self::Deleted),
+            "content.deleted.file" => Ok(Self::Deleted),
+            "content.deleted.folder" => Ok(Self::Deleted),
+            "content.undeleted.html-document" => Ok(Self::Created),
+            "content.undeleted.file" => Ok(Self::Created),
+            "content.undeleted.folder" => Ok(Self::Created),
+            _ => Err(ParseRemoteEventTypeError(value.to_string())),
         }
     }
 }

@@ -4,6 +4,7 @@ use async_std::task;
 use bytes::Bytes;
 use crossbeam_channel::Sender;
 use std::{
+    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -161,7 +162,7 @@ impl RemoteWatcher {
     fn proceed_remote_event(&self, remote_event: TracimLiveEvent) -> Result<(), Error> {
         log::debug!("Proceed remote event {:?}", remote_event);
 
-        if RemoteEventType::from_str(&remote_event.event_type).is_some() {
+        if RemoteEventType::from_str(&remote_event.event_type).is_ok() {
             let content_id =
                 remote_event.fields["content"]
                     .as_object()
@@ -175,9 +176,13 @@ impl RemoteWatcher {
             let workspace_id =
                 remote_event.fields["workspace"]
                     .as_object()
-                    .ok_or(Error::UnexpectedError("Remote event workspace not appear to not be object".to_string()))?["workspace_id"]
+                    .ok_or(Error::UnexpectedError(
+                        "Remote event workspace not appear to not be object".to_string(),
+                    ))?["workspace_id"]
                     .as_i64()
-                    .ok_or(Error::UnexpectedError("Remote event workspace workspace_id appear to not be integer".to_string()))?;
+                    .ok_or(Error::UnexpectedError(
+                        "Remote event workspace workspace_id appear to not be integer".to_string(),
+                    ))?;
 
             if let Some(message) = {
                 if self.context.workspace_id.0 != workspace_id as i32 {
