@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection};
 
@@ -33,7 +33,7 @@ pub struct DatabaseOperation<'d> {
 }
 
 impl<'d> DatabaseOperation<'d> {
-    pub fn new<'a>(connection: &'d Connection) -> Self {
+    pub fn new(connection: &'d Connection) -> Self {
         Self { connection }
     }
 
@@ -260,11 +260,11 @@ impl<'d> DatabaseOperation<'d> {
     }
 }
 
-pub fn db_path(workspace_path: &PathBuf) -> PathBuf {
+pub fn db_path(workspace_path: &Path) -> PathBuf {
     workspace_path.join(DB_NAME)
 }
 
-pub fn connection(workspace_path: &PathBuf) -> Result<Connection> {
+pub fn connection(workspace_path: &Path) -> Result<Connection> {
     let db_path = db_path(workspace_path);
     Connection::open(&db_path).context(format!("Open database connection on {}", db_path.display()))
 }

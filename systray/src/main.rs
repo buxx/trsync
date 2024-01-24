@@ -155,7 +155,7 @@ fn run() -> Result<()> {
     stop_signal.swap(true, Ordering::Relaxed);
     main_sender
         .send(DaemonMessage::Stop)
-        .map_err(|e| Error::UnexpectedError(format!("Unable to ask manager to stop : '{}'", e)))?;
+        .map_err(|e| Error::Unexpected(format!("Unable to ask manager to stop : '{}'", e)))?;
     log::info!("Finished");
 
     Ok(())

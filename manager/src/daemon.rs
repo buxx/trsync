@@ -96,11 +96,8 @@ impl Daemon {
         }
 
         for process_to_start in processes_to_start {
-            match self.start_process(process_to_start) {
-                Err(error) => {
-                    log::error!("Failed to spawn new process : '{:?}'", error)
-                }
-                _ => {}
+            if let Err(error) = self.start_process(process_to_start) {
+                log::error!("Failed to spawn new process : '{:?}'", error)
             };
         }
 

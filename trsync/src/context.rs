@@ -25,6 +25,7 @@ pub struct Context {
 }
 
 impl Context {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ssl: bool,
         address: String,
