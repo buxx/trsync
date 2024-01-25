@@ -34,7 +34,7 @@ impl NamedOnRemoteExecutor {
         }
     }
 
-    fn content_id(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+    fn content_id(&self, state: &dyn State) -> Result<Option<ContentId>> {
         state
             .content_id_for_path(self.previous_db_path.clone())
             .context(format!(
@@ -43,7 +43,7 @@ impl NamedOnRemoteExecutor {
             ))
     }
 
-    fn before_absolute_path(&self, state: &Box<dyn State>) -> Result<PathBuf> {
+    fn before_absolute_path(&self, state: &dyn State) -> Result<PathBuf> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.previous_db_path.display()
@@ -77,7 +77,7 @@ impl NamedOnRemoteExecutor {
         ))
     }
 
-    fn before_file_name(&self, state: &Box<dyn State>) -> Result<ContentFileName> {
+    fn before_file_name(&self, state: &dyn State) -> Result<ContentFileName> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.previous_db_path.display()
@@ -89,7 +89,7 @@ impl NamedOnRemoteExecutor {
             .clone())
     }
 
-    fn before_revision_id(&self, state: &Box<dyn State>) -> Result<RevisionId> {
+    fn before_revision_id(&self, state: &dyn State) -> Result<RevisionId> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.previous_db_path.display()
@@ -100,7 +100,7 @@ impl NamedOnRemoteExecutor {
             .revision_id())
     }
 
-    fn after_parent(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+    fn after_parent(&self, state: &dyn State) -> Result<Option<ContentId>> {
         if let Some(parent_path) = self.after_disk_path.parent() {
             return state
                 .content_id_for_path(parent_path.to_path_buf())
@@ -114,11 +114,11 @@ impl NamedOnRemoteExecutor {
         Ok(None)
     }
 
-    fn before_content_type(&self, state: &Box<dyn State>) -> Result<ContentType> {
+    fn before_content_type(&self, state: &dyn State) -> Result<ContentType> {
         Ok(ContentType::from_path(&self.before_absolute_path(state)?))
     }
 
-    fn after_content_type(&self, _state: &Box<dyn State>) -> Result<ContentType> {
+    fn after_content_type(&self, _state: &dyn State) -> Result<ContentType> {
         Ok(ContentType::from_path(&self.after_absolute_path()?))
     }
 
@@ -132,8 +132,8 @@ impl NamedOnRemoteExecutor {
 impl Executor for NamedOnRemoteExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let mut state_modifications = vec![];

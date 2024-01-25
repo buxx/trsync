@@ -74,8 +74,8 @@ impl<'a> Operator<'a> {
             }
 
             let state_changes_ = match self.executor(event).execute(
-                self.state,
-                &self.tracim,
+                self.state.as_ref(),
+                self.tracim.as_ref(),
                 &mut self.ignore_events,
             ) {
                 Ok(state_changes_) => state_changes_,

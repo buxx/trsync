@@ -51,7 +51,7 @@ impl CreatedOnRemoteExecutor {
             .to_string())
     }
 
-    fn parent(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+    fn parent(&self, state: &dyn State) -> Result<Option<ContentId>> {
         if let Some(parent_path) = self.path.parent() {
             return state
                 .content_id_for_path(parent_path.to_path_buf())
@@ -69,8 +69,8 @@ impl CreatedOnRemoteExecutor {
 impl Executor for CreatedOnRemoteExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let absolute_path = self.absolute_path();

@@ -35,8 +35,8 @@ impl UpdatedOnDiskExecutor {
 impl Executor for UpdatedOnDiskExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let local_content_path = state

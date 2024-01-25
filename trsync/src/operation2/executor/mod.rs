@@ -17,8 +17,8 @@ pub mod remote;
 pub trait Executor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError>;
 }

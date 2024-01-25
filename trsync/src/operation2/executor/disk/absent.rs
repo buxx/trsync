@@ -29,8 +29,8 @@ impl AbsentFromDiskExecutor {
 impl Executor for AbsentFromDiskExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        _tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        _tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let content = state

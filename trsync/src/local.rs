@@ -74,8 +74,8 @@ impl LocalWatcher {
 
         loop {
             match inotify_receiver.recv_timeout(Duration::from_millis(250)) {
-                Ok(event) => match self.digest_event(&event, &workspace_folder_path) {
-                    Err(error) => {
+                Ok(event) => {
+                    if let Err(error) = self.digest_event(&event, &workspace_folder_path) {
                         log::error!(
                             "[{}::{}] Error when digest event {:?} : {:?}",
                             self.context.instance_name,
@@ -84,8 +84,7 @@ impl LocalWatcher {
                             &event,
                         )
                     }
-                    _ => {}
-                },
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     if self.stop_signal.load(Ordering::Relaxed) {
                         log::info!(
@@ -118,7 +117,7 @@ impl LocalWatcher {
         Ok(())
     }
 
-    pub fn digest_event(&self, event: &DebouncedEvent, workspace: &PathBuf) -> Result<()> {
+    pub fn digest_event(&self, event: &DebouncedEvent, workspace: &Path) -> Result<()> {
         log::debug!(
             "[{}::{}] Local event received: {:?}",
             self.context.instance_name,

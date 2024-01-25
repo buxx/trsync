@@ -34,8 +34,8 @@ impl PresentOnDiskExecutor {
 impl Executor for PresentOnDiskExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let content = Content::from_remote(

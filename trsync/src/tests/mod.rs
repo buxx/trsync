@@ -69,7 +69,7 @@ pub fn ensure_disk(raw_contents: &Vec<(i32, i32, &str, Option<i32>)>, tmpdir: &P
     ensure_state_on_disk(&hybrid_state, tmpdir);
 }
 
-pub fn ensure_state_on_disk(state: &Box<dyn State>, tmpdir: &PathBuf) {
+pub fn ensure_state_on_disk(state: &dyn State, tmpdir: &PathBuf) {
     for content in state
         .contents()
         .context("Read all contents from state")
@@ -136,7 +136,7 @@ pub fn disk_files(tmpdir: &PathBuf) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-pub fn state_files(state: &Box<dyn State>) -> Vec<String> {
+pub fn state_files(state: &dyn State) -> Vec<String> {
     state
         .contents()
         .unwrap()

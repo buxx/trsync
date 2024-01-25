@@ -29,13 +29,13 @@ impl ModifiedOnRemoteExecutor {
         }
     }
 
-    fn content_id(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+    fn content_id(&self, state: &dyn State) -> Result<Option<ContentId>> {
         state
             .content_id_for_path(self.db_path.clone())
             .context(format!("Get content_id for {}", self.db_path.display()))
     }
 
-    fn absolute_path(&self, state: &Box<dyn State>) -> Result<PathBuf> {
+    fn absolute_path(&self, state: &dyn State) -> Result<PathBuf> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.db_path.display()
@@ -47,7 +47,7 @@ impl ModifiedOnRemoteExecutor {
         Ok(self.workspace_folder.join(content_path))
     }
 
-    fn content_type(&self, state: &Box<dyn State>) -> Result<ContentType> {
+    fn content_type(&self, state: &dyn State) -> Result<ContentType> {
         let content_id = self.content_id(state)?.context(format!(
             "Path {} must match to a content_id",
             self.db_path.display()
@@ -59,7 +59,7 @@ impl ModifiedOnRemoteExecutor {
         Ok(*content.type_())
     }
 
-    fn last_modified(&self, state: &Box<dyn State>) -> Result<DiskTimestamp> {
+    fn last_modified(&self, state: &dyn State) -> Result<DiskTimestamp> {
         let absolute_path = self.absolute_path(state)?;
         let since_epoch = last_modified_timestamp(&absolute_path)?;
         Ok(DiskTimestamp(since_epoch.as_millis() as u64))
@@ -67,7 +67,7 @@ impl ModifiedOnRemoteExecutor {
 
     fn update_content(
         &self,
-        tracim: &Box<dyn TracimClient>,
+        tracim: &dyn TracimClient,
         content_id: ContentId,
         content_type: ContentType,
         absolute_path: &PathBuf,
@@ -86,7 +86,7 @@ impl ModifiedOnRemoteExecutor {
 
     fn restore_content(
         &self,
-        tracim: &Box<dyn TracimClient>,
+        tracim: &dyn TracimClient,
         content_id: ContentId,
         ignore_events: &mut Vec<Event>,
     ) -> Result<(), TracimClientError> {
@@ -101,8 +101,8 @@ impl ModifiedOnRemoteExecutor {
 impl Executor for ModifiedOnRemoteExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let absolute_path = self.absolute_path(state)?;

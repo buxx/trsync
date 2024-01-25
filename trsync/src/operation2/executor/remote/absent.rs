@@ -22,7 +22,7 @@ impl AbsentFromRemoteExecutor {
         Self { db_path }
     }
 
-    fn content_id(&self, state: &Box<dyn State>) -> Result<Option<ContentId>> {
+    fn content_id(&self, state: &dyn State) -> Result<Option<ContentId>> {
         state
             .content_id_for_path(self.db_path.clone())
             .context(format!("Get content_id for {}", self.db_path.display()))
@@ -32,8 +32,8 @@ impl AbsentFromRemoteExecutor {
 impl Executor for AbsentFromRemoteExecutor {
     fn execute(
         &self,
-        state: &Box<dyn State>,
-        tracim: &Box<dyn TracimClient>,
+        state: &dyn State,
+        tracim: &dyn TracimClient,
         ignore_events: &mut Vec<Event>,
     ) -> Result<Vec<StateModification>, ExecutorError> {
         let content_id = self.content_id(state)?.context(format!(
