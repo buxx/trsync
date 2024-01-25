@@ -38,7 +38,7 @@ impl Context {
     ) -> Result<Self, Error> {
         let protocol = if ssl { "https" } else { "http" };
         let base_address = format!("{}://{}/api/", protocol, address);
-        let database_path = util::path_to_string(&Path::new(&folder_path).join(DB_NAME))?;
+        let database_path = Path::new(&folder_path).join(DB_NAME).display().to_string();
         Ok(Self {
             instance_name: address,
             base_address,

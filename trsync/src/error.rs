@@ -5,23 +5,8 @@ use thiserror::Error;
 // FIXME BS NOW : supprimer cet enum ?
 #[derive(Debug, Error, Display)]
 pub enum Error {
-    FailToCreateContentOnRemote(String),
-    FailToCreateContentOnLocal(String),
     UnIndexedRelativePath(String),
     UnexpectedError(String),
-    PathCastingError(String),
-    PathManipulationError(String),
-    StartupError(String),
-    NotRelevant(String),
-}
-
-impl Error {
-    pub fn level(&self) -> log::Level {
-        match self {
-            Error::NotRelevant(_) => log::Level::Debug,
-            _ => log::Level::Error,
-        }
-    }
 }
 
 impl From<io::Error> for Error {
