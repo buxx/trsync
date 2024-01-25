@@ -69,7 +69,7 @@ impl<'a> Operator<'a> {
         loop {
             if retry_count >= RETRY_COUNT_MAX {
                 return Err(ExecutorError::MaximumRetryCount(
-                    event.display(&self.tracim),
+                    event.display(self.tracim.as_ref()),
                 ));
             }
 

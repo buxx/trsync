@@ -34,9 +34,7 @@ impl From<&Change> for Event {
                 )),
             },
             Change::Remote(change) => match change {
-                RemoteChange::New(content_id, _) => {
-                    Self::Remote(RemoteEvent::Created(*content_id))
-                }
+                RemoteChange::New(content_id, _) => Self::Remote(RemoteEvent::Created(*content_id)),
                 RemoteChange::Disappear(content_id, _) => {
                     Self::Remote(RemoteEvent::Deleted(*content_id))
                 }
@@ -49,11 +47,12 @@ impl From<&Change> for Event {
 }
 
 impl Event {
-    pub fn display(&self, client: &Box<dyn TracimClient>) -> String {
+    pub fn display(&self, client: &dyn TracimClient) -> String {
         match self {
             Event::Remote(event) => {
                 let path = client
-                    .get_content_path(event.content_id()).map(|v| format!("{}", v.display()))
+                    .get_content_path(event.content_id())
+                    .map(|v| format!("{}", v.display()))
                     .unwrap_or("?".to_string());
                 match event {
                     RemoteEvent::Deleted(_) => format!("☁❌ {}", path),

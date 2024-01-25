@@ -4,7 +4,7 @@ use crossbeam_channel::Sender;
 use notify::DebouncedEvent;
 use notify::{watcher, RecursiveMode, Watcher};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::Arc;
@@ -29,11 +29,11 @@ pub struct LocalWatcher {
 }
 
 trait IntoRelative {
-    fn relative(&self, prefix: &PathBuf) -> Result<PathBuf>;
+    fn relative(&self, prefix: &Path) -> Result<PathBuf>;
 }
 
 impl IntoRelative for PathBuf {
-    fn relative(&self, prefix: &PathBuf) -> Result<PathBuf> {
+    fn relative(&self, prefix: &Path) -> Result<PathBuf> {
         Ok(self
             .strip_prefix(prefix)
             .context(format!(

@@ -319,7 +319,7 @@ impl Runner {
                     }
 
                     log::info!("Proceed event {:?}", &event);
-                    let event_display = event.display(&client);
+                    let event_display = event.display(client.as_ref());
                     let context_message = format!("Operate on event '{}'", &event_display);
                     self.set_activity(Activity::Job(event_display.to_string()))?;
                     operator.operate(&event).context(context_message)?;
