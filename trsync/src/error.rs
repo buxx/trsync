@@ -2,7 +2,6 @@ use std::{io, str::Utf8Error};
 use strum_macros::Display;
 use thiserror::Error;
 
-// FIXME BS NOW : supprimer cet enum ?
 #[derive(Debug, Error, Display)]
 pub enum Error {
     UnIndexedRelativePath(String),
