@@ -1,11 +1,10 @@
 use std::{
-    io,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     time::{Duration, UNIX_EPOCH},
 };
 
 use anyhow::Result as AnyHowResult;
-use minidom::Element;
+
 
 use std::fs;
 
@@ -46,6 +45,16 @@ pub fn ignore_file(relative_path: &Path) -> bool {
         }
     }
     false
+}
+
+pub fn canonicalize_to_string(path: &PathBuf) -> Result<String, Error> {
+    Ok(fs::canonicalize(path)?
+        .to_str()
+        .ok_or(Error::PathCastingError(format!(
+            "Error when interpreting path '{:?}'",
+            path
+        )))?
+        .to_string())
 }
 
 // FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes: test rename in offline mode (or all other changes ?) and do the "waiting changes) operations"

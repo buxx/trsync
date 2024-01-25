@@ -9,7 +9,7 @@ use trsync_core::job::JobIdentifier;
 
 use crate::database::DB_NAME;
 use crate::error::Error;
-use crate::util;
+
 
 #[derive(Clone)]
 pub struct Context {

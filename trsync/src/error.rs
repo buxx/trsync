@@ -6,6 +6,7 @@ use thiserror::Error;
 pub enum Error {
     UnIndexedRelativePath(String),
     UnexpectedError(String),
+    PathCastingError(String),
 }
 
 impl From<io::Error> for Error {
