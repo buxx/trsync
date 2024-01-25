@@ -22,7 +22,7 @@ pub trait State {
     fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>>;
     // Path must be build on demand because parent hierarchy can change
     fn path(&self, id: ContentId) -> Result<ContentPath, StateError>;
-    // FIXME BS NOW : Iter
+    // TODO : Iter
     // pub trait Trait {
     //     type Iter<'a>: Iterator<Item = &'a Content> + 'a
     //     where

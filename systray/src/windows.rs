@@ -60,7 +60,6 @@ pub fn run_tray(
                 }
 
                 let activity_icon = {
-                    // FIXME BS NOW: mettre ce Arc Mutex SyncExchanger dans une struct container pour simplifier
                     let is_waiting_spaces = sync_exchanger
                         .lock()
                         .unwrap()

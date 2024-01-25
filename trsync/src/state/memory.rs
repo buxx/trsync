@@ -97,7 +97,7 @@ impl State for MemoryState {
         Ok(contents)
     }
 
-    // FIXME BS NOW : Iter
+    // TODO : Iter
     fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>> {
         Ok(self
             .contents
