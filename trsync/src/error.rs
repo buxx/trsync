@@ -58,6 +58,7 @@ impl fmt::Display for ClientError {
     }
 }
 
+// FIXME BS NOW : supprimer cet enum ?
 #[derive(Debug, Error, Display)]
 pub enum Error {
     FailToCreateContentOnRemote(String),

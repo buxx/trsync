@@ -17,8 +17,6 @@ pub enum State {
     Working,
 }
 
-// FIXME BS NOW : use activities on right places (ex. WaitingStartupSyncConfirmation not send).
-// Then change linux.rs and window.rs to simplify their algorithms
 #[derive(Debug, Clone)]
 pub enum Activity {
     Idle,

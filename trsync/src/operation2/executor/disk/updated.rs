@@ -48,7 +48,6 @@ impl Executor for UpdatedOnDiskExecutor {
                 .get_content(self.content_id)
                 .context(format!("Get remote content {}", self.content_id))?,
         )?;
-        // FIXME BS NOW : How to be sure than parent is always already present ?!
         let remote_content_path: PathBuf = if let Some(parent_id) = remote_content.parent_id() {
             state
                 .path(parent_id)

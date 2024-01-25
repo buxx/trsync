@@ -6,7 +6,6 @@ pub mod event;
 pub mod local;
 pub mod local2;
 pub mod message;
-pub mod operation;
 pub mod operation2;
 mod path;
 pub mod reader;

@@ -84,7 +84,7 @@ impl State for MemoryState {
         Ok(ContentPath::new(parts))
     }
 
-    // FIXME BS NOW : Iter
+    // TODO : Iter
     fn contents(&self) -> Result<Vec<Content>> {
         // TODO : Risky for memory overload
         let mut contents = self.contents.values().cloned().collect::<Vec<Content>>();

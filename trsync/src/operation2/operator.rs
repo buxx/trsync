@@ -104,7 +104,6 @@ impl<'a> Operator<'a> {
                 RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(*id, true)),
                 RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(*id, false)),
             },
-            // FIXME BS NOW : add test on case where db_path and disk_path are not the same
             Event::Local(disk_event) => match disk_event {
                 DiskEventWrap(db_path, DiskEvent::Deleted(_)) => {
                     Box::new(self.absent_from_remote_executor(db_path.clone()))

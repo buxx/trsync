@@ -62,12 +62,10 @@ impl TracimClientError {
 
 impl From<reqwest::Error> for TracimClientError {
     fn from(error: reqwest::Error) -> Self {
-        // FIXME BS NOW : TrSync must switch into offline mode or something
         if error.is_connect() {
             return Self::ConnectionError;
         }
 
-        // FIXME BS NOW : retry ?
         if error.is_timeout() {
             return Self::TimeoutError;
         }
@@ -143,7 +141,7 @@ pub trait TracimClient {
         file_name: &ContentFileName,
         parent_id: ParentIdParameter,
     ) -> Result<Option<ContentId>, TracimClientError>;
-    // FIXME BS NOW : Iterable
+    // TODO : Iterable
     fn get_contents(&self) -> Result<Vec<RemoteContent>, TracimClientError>;
     #[allow(clippy::ptr_arg)]
     fn fill_file_with_content(

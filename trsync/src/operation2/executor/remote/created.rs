@@ -109,7 +109,6 @@ impl Executor for CreatedOnRemoteExecutor {
         };
 
         if content_type.fillable() {
-            // FIXME BS NOW: this works with notes ?
             let do_update = if previously_exist {
                 match content_type {
                     ContentType::File => {

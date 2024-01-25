@@ -263,7 +263,6 @@ mod test {
             DiskEvent::Renamed(PathBuf::from("b.txt"), PathBuf::from("c.txt")),
         ],
         vec![
-            // FIXME BS NOW : Dans le cas de Create, on s'en fiche de verifier si les deux path sont les meme
             DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Created(PathBuf::from("c.txt"))),
         ],
     )]

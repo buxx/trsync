@@ -459,7 +459,7 @@ pub fn run(context: TrSyncContext, remote: RemoteControl) -> Result<()> {
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);
 
-            // FIXME BS NOW : absolutely ugly. I think we should drop anyhow !!
+            // TODO : absolutely ugly. I think we should drop anyhow !!
             if let Some(error) = error.chain().last() {
                 if format!("{}", error).to_lowercase().contains("connection") {
                     log::info!("Connection error, retry in 30s.");

@@ -153,7 +153,7 @@ impl State for DiskState {
         Ok(ContentPath::new(parts))
     }
 
-    // FIXME BS NOW : Iter
+    // TODO : Iter
     fn contents(&self) -> Result<Vec<Content>> {
         let mut contents = vec![];
 

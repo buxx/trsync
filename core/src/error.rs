@@ -9,10 +9,7 @@ use crate::job::JobIdentifier;
 
 #[derive(Debug, Clone)]
 pub enum Decision {
-    // DisableSpaceSync,
     RestartSpaceSync,
-    // FIXME BS NOW
-    // MakeCompleteResync,
 }
 
 #[derive(Debug, Clone)]

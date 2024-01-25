@@ -29,8 +29,6 @@ fn main_() -> Result<()> {
         Receiver<WrappedActivity>,
     ) = unbounded();
     std::thread::spawn(move || while activity_receiver.recv().is_ok() {});
-    // FIXME BS NOW
-    // daemon::Daemon::new(config_, main_channel_receiver, activity_sender).run()?;
     log::info!("Daemon finished, exit");
 
     Ok(())

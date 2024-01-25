@@ -206,13 +206,14 @@ pub fn ignore_file(relative_path: &Path) -> bool {
             let file_name_as_str = file_name_.to_string();
             if file_name_as_str.starts_with('.')
                 || file_name_as_str.starts_with('~')
+                || file_name_as_str.ends_with('~')
                 || file_name_as_str.starts_with('#')
             {
                 return true;
             }
         }
     }
-
-    // FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes
     false
 }
+
+// FIXME BS NOW : a dir rename in offline will be lost : store on disk seen changes: test rename in offline mode (or all other changes ?) and do the "waiting changes) operations"
