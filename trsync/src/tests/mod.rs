@@ -64,12 +64,12 @@ pub fn build_memory_state(
     Box::new(state)
 }
 
-pub fn ensure_disk(raw_contents: &Vec<(i32, i32, &str, Option<i32>)>, tmpdir: &PathBuf) {
+pub fn ensure_disk(raw_contents: &Vec<(i32, i32, &str, Option<i32>)>, tmpdir: &Path) {
     let hybrid_state = build_memory_state(raw_contents, None);
-    ensure_state_on_disk(&hybrid_state, tmpdir);
+    ensure_state_on_disk(hybrid_state.as_ref(), tmpdir);
 }
 
-pub fn ensure_state_on_disk(state: &dyn State, tmpdir: &PathBuf) {
+pub fn ensure_state_on_disk(state: &dyn State, tmpdir: &Path) {
     for content in state
         .contents()
         .context("Read all contents from state")
@@ -92,7 +92,7 @@ pub fn ensure_state_on_disk(state: &dyn State, tmpdir: &PathBuf) {
     }
 }
 
-pub fn apply_on_disk(operations: &Vec<OperateOnDisk>, tmpdir: &PathBuf) {
+pub fn apply_on_disk(operations: &Vec<OperateOnDisk>, tmpdir: &Path) {
     for operation in operations {
         match operation {
             OperateOnDisk::Create(file_path) => {
@@ -157,17 +157,13 @@ pub enum MockTracimClientCase {
 }
 
 impl MockTracimClientCase {
-    pub fn apply_multiples(
-        workspace_folder: &PathBuf,
-        mock: &mut MockTracimClient,
-        cases: Vec<Self>,
-    ) {
+    pub fn apply_multiples(workspace_folder: &Path, mock: &mut MockTracimClient, cases: Vec<Self>) {
         for case in cases {
             case.apply(workspace_folder, mock)
         }
     }
 
-    pub fn apply(self, workspace_folder: &PathBuf, mock: &mut MockTracimClient) {
+    pub fn apply(self, workspace_folder: &Path, mock: &mut MockTracimClient) {
         match self {
             MockTracimClientCase::TrashOk(id) => {
                 mock.expect_trash_content()
@@ -293,7 +289,7 @@ pub fn insert_content(
         ]).unwrap();
 }
 
-pub fn connection(workspace_path: &PathBuf) -> Connection {
+pub fn connection(workspace_path: &Path) -> Connection {
     Connection::open(workspace_path.join(DB_NAME)).unwrap()
 }
 

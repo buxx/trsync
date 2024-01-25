@@ -95,7 +95,7 @@ impl FileInfos {
     }
 }
 
-pub fn last_modified_timestamp(path: &PathBuf) -> AnyHowResult<Duration> {
+pub fn last_modified_timestamp(path: &Path) -> AnyHowResult<Duration> {
     let metadata = path.metadata()?;
     let modified = metadata.modified()?;
     Ok(modified.duration_since(UNIX_EPOCH)?)
@@ -199,7 +199,7 @@ impl<T> TryRemove<T> for Vec<T> {
     }
 }
 
-pub fn ignore_file(relative_path: &PathBuf) -> bool {
+pub fn ignore_file(relative_path: &Path) -> bool {
     // TODO : patterns from config object
     if let Some(file_name) = relative_path.file_name() {
         if let Some(file_name_) = file_name.to_str() {

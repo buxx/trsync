@@ -4,6 +4,7 @@ use async_std::task;
 use bytes::Bytes;
 use crossbeam_channel::Sender;
 use std::{
+    fmt::Display,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -11,6 +12,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use thiserror::Error;
 use trsync_core::instance::ContentId as ContentId2;
 use trsync_core::types::{ContentId, RemoteEventType, RevisionId};
 
@@ -33,14 +35,26 @@ pub struct TracimLiveEvent {
     fields: Value,
 }
 
-impl TracimLiveEvent {
-    pub fn from_str(json_as_str: &str) -> Result<Self, serde_json::Error> {
-        let event: Self = match serde_json::from_str(json_as_str) {
-            Ok(event) => event,
-            Err(error) => return Err(error),
-        };
+#[derive(Error, Debug)]
+pub struct ParseTracimLiveEventError(String, serde_json::Error);
 
-        Ok(event)
+impl Display for ParseTracimLiveEventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!(
+            "Error when parsing Tracim live event '{}' : {}",
+            self.0, self.1
+        ))
+    }
+}
+
+impl FromStr for TracimLiveEvent {
+    type Err = ParseTracimLiveEventError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match serde_json::from_str(value) {
+            Ok(event) => Ok(event),
+            Err(error) => Err(ParseTracimLiveEventError(value.to_string(), error)),
+        }
     }
 }
 
@@ -98,15 +112,14 @@ impl RemoteWatcher {
                     Ok(Some(things)) => {
                         last_activity = Instant::now();
                         match &things {
-                            Ok(lines) => match self.proceed_event_lines(lines) {
-                                Err(error) => {
+                            Ok(lines) => {
+                                if let Err(error) = self.proceed_event_lines(lines) {
                                     log::error!(
                                         "Error when proceed remote event lines: {:?}",
                                         error
                                     )
                                 }
-                                _ => {}
-                            },
+                            }
                             Err(err) => {
                                 log::error!("Error when reading remote TLM : {:?}", err);
                                 // TODO : What to do here ?
@@ -137,6 +150,7 @@ impl RemoteWatcher {
         Ok(())
     }
 
+    #[allow(clippy::manual_strip)]
     fn proceed_event_lines(&self, lines: &Bytes) -> Result<(), Error> {
         if lines.starts_with(b"event: message") {
             for line in str::from_utf8(lines)?.lines() {
@@ -162,7 +176,7 @@ impl RemoteWatcher {
     fn proceed_remote_event(&self, remote_event: TracimLiveEvent) -> Result<(), Error> {
         log::debug!("Proceed remote event {:?}", remote_event);
 
-        if RemoteEventType::from_str(&remote_event.event_type).is_ok() {
+        if RemoteEventType::from_str(&remote_event.event_type).is_err() {
             let content_id =
                 remote_event.fields["content"]
                     .as_object()
@@ -261,194 +275,3 @@ pub struct RemoteContent {
     pub is_archived: bool,
     pub sub_content_types: Vec<String>,
 }
-
-// pub struct RemoteSync {
-//     _context: Context,
-//     connection: Connection,
-//     client: Client,
-//     operational_sender: Sender<OperationalMessage>,
-// }
-
-// impl RemoteSync {
-//     pub fn new(
-//         context: Context,
-//         connection: Connection,
-//         operational_sender: Sender<OperationalMessage>,
-//     ) -> Result<Self, Error> {
-//         Ok(Self {
-//             _context: context.clone(),
-//             connection,
-//             client: Client::new(context)?,
-//             operational_sender,
-//         })
-//     }
-
-//     pub fn sync(&mut self) -> Result<(), Error> {
-//         let contents = self.client.get_remote_contents(None)?;
-//         let remote_content_ids: Vec<i32> = contents.iter().map(|c| c.content_id).collect();
-
-//         for content in &contents {
-//             match DatabaseOperation::new(&self.connection)
-//                 .get_revision_id_from_content_id(content.content_id)
-//             {
-//                 Ok(known_revision_id) => {
-//                     // File is known but have been modified ?
-//                     if known_revision_id != content.current_revision_id {
-//                         // Remote change can be a move. Compare paths
-//                         let local_content_relative_path = match DatabaseOperation::new(
-//                             &self.connection,
-//                         )
-//                         .get_path_from_content_id(content.content_id)
-//                         {
-//                             Ok(relative_path) => relative_path,
-//                             Err(error) => {
-//                                 log::error!("Error when trying to get local relative path of content {} : {}", content.content_id, error);
-//                                 continue;
-//                             }
-//                         };
-//                         let remote_content_relative_path = match self
-//                             .client
-//                             .build_relative_path(content)
-//                         {
-//                             Ok(relative_path) => relative_path,
-//                             Err(error) => {
-//                                 log::error!("Error when trying to build remote relative path of content {} : {}", content.content_id, error);
-//                                 continue;
-//                             }
-//                         };
-
-//                         if remote_content_relative_path != local_content_relative_path {
-//                             // If local file exist, it is a modification
-//                             let operational_message = if Path::new(&self._context.folder_path)
-//                                 .join(&remote_content_relative_path)
-//                                 .exists()
-//                             {
-//                                 OperationalMessage::ModifiedRemoteFile(content.content_id)
-//                             } else {
-//                                 OperationalMessage::NewRemoteFile(content.content_id)
-//                             };
-
-//                             match self.operational_sender.send(operational_message) {
-//                                 Err(error) => {
-//                                     log::error!(
-//                                     "Error when send operational message from remote sync : '{}'",
-//                                     error
-//                                 )
-//                                 }
-//                                 _ => {}
-//                             }
-//                         } else {
-//                             match self
-//                                 .operational_sender
-//                                 .send(OperationalMessage::ModifiedRemoteFile(content.content_id))
-//                             {
-//                                 Err(error) => {
-//                                     log::error!(
-//                                     "Error when send operational message from remote sync : '{}'",
-//                                     error
-//                                 )
-//                                 }
-//                                 _ => {}
-//                             }
-//                         }
-//                     }
-//                 }
-//                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-//                     match self
-//                         .operational_sender
-//                         .send(OperationalMessage::NewRemoteFile(content.content_id))
-//                     {
-//                         Err(error) => {
-//                             log::error!(
-//                                 "Error when send operational message from remote sync : '{}'",
-//                                 error
-//                             )
-//                         }
-//                         _ => {}
-//                     }
-//                 }
-//                 Err(error) => {
-//                     log::error!("Error when comparing revision : '{}'", error)
-//                 }
-//             }
-//         }
-
-//         // Search for remote deleted files
-//         let content_ids = DatabaseOperation::new(&self.connection).get_content_ids()?;
-//         for content_id in &content_ids {
-//             if !remote_content_ids.contains(content_id) {
-//                 match self
-//                     .operational_sender
-//                     .send(OperationalMessage::DeletedRemoteFile(*content_id))
-//                 {
-//                     Err(error) => {
-//                         log::error!(
-//                             "Error when send operational message from remote sync : '{}'",
-//                             error
-//                         )
-//                     }
-//                     _ => {}
-//                 }
-//             }
-//         }
-
-//         Ok(())
-//     }
-// }
-
-// pub fn start_remote_sync(
-//     context: &Context,
-//     operational_sender: &Sender<OperationalMessage>,
-// ) -> JoinHandle<Result<(), Error>> {
-//     let remote_sync_context = context.clone();
-//     let remote_sync_operational_sender = operational_sender.clone();
-
-//     thread::spawn(move || {
-//         Database::new(remote_sync_context.database_path.clone()).with_new_connection(
-//             |connection| {
-//                 RemoteSync::new(
-//                     remote_sync_context,
-//                     connection,
-//                     remote_sync_operational_sender,
-//                 )?
-//                 .sync()?;
-//                 Ok(())
-//             },
-//         )?;
-
-//         Ok(())
-//     })
-// }
-
-// pub fn start_remote_watch(
-//     context: &Context,
-//     operational_sender: &Sender<OperationalMessage>,
-//     stop_signal: &Arc<AtomicBool>,
-//     restart_signal: &Arc<AtomicBool>,
-// ) -> Result<JoinHandle<Result<(), Error>>, Error> {
-//     let exit_after_sync = context.exit_after_sync;
-//     let remote_watcher_context = context.clone();
-//     let remote_watcher_stop_signal = stop_signal.clone();
-//     let remote_watcher_restart_signal = restart_signal.clone();
-//     let remote_watcher_operational_sender = operational_sender.clone();
-
-//     Ok(thread::spawn(move || {
-//         if !exit_after_sync {
-//             Database::new(remote_watcher_context.database_path.clone()).with_new_connection(
-//                 |connection| {
-//                     let mut remote_watcher = RemoteWatcher::new(
-//                         connection,
-//                         remote_watcher_context,
-//                         remote_watcher_stop_signal,
-//                         remote_watcher_restart_signal,
-//                         remote_watcher_operational_sender,
-//                     );
-//                     Ok(remote_watcher.listen()?)
-//                 },
-//             )?;
-//             Ok(())
-//         } else {
-//             Ok(())
-//         }
-//     }))
-// }

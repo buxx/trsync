@@ -318,7 +318,7 @@ mod test {
         assert_eq!(result.is_err(), error);
         let disk_files = disk_files(&tmpdir_);
         assert_eq!(disk_files, expected_on_disk);
-        let state_files = state_files(&state);
+        let state_files = state_files(state.as_ref());
         assert_eq!(state_files, expected_state);
     }
 
@@ -490,7 +490,7 @@ mod test {
 
         // Then
         assert_eq!(result.is_err(), error);
-        let state_files = state_files(&previous_event_state);
+        let state_files = state_files(previous_event_state.as_ref());
         assert_eq!(state_files, expected_state);
     }
 }

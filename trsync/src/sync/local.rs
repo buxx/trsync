@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection};
@@ -27,7 +27,7 @@ impl LocalSync {
         // Read from disk to see changes or new
         for entry in WalkDir::new(&self.workspace_path)
             .into_iter()
-            .filter_entry(|e| !ignore_file(&e.path().to_path_buf()))
+            .filter_entry(|e| !ignore_file(e.path()))
         {
             let entry_debug = format!("{:?}", &entry);
             let entry = entry.context(format!("Read disk entry {:?}", entry_debug))?;
@@ -97,7 +97,7 @@ impl LocalSync {
         }
     }
 
-    fn previously_known(&self, path: &PathBuf) -> Result<bool> {
+    fn previously_known(&self, path: &Path) -> Result<bool> {
         match self.connection.query_row::<u64, _, _>(
             "SELECT 1 FROM file WHERE relative_path = ?",
             params![path.display().to_string()],
@@ -109,7 +109,7 @@ impl LocalSync {
         }
     }
 
-    fn previously_known_disk_timestamp(&self, path: &PathBuf) -> Result<DiskTimestamp> {
+    fn previously_known_disk_timestamp(&self, path: &Path) -> Result<DiskTimestamp> {
         match self.connection.query_row::<u64, _, _>(
             "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![path.display().to_string()],
