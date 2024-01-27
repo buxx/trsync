@@ -64,29 +64,34 @@ impl<'a> Operator<'a> {
         };
 
         log::info!("Proceed event : {:?}", &event);
+        let executors = self.executors(event);
         let mut retry_count = 0;
-        let state_changes;
-        loop {
-            if retry_count >= RETRY_COUNT_MAX {
-                return Err(ExecutorError::MaximumRetryCount(
-                    event.display(self.tracim.as_ref()),
-                ));
-            }
+        let mut state_changes = vec![];
 
-            let state_changes_ = match self.executor(event).execute(
-                self.state.as_ref(),
-                self.tracim.as_ref(),
-                &mut self.ignore_events,
-            ) {
-                Ok(state_changes_) => state_changes_,
-                Err(ExecutorError::Tracim(TracimClientError::TimeoutError)) => {
-                    retry_count += 1;
-                    continue;
+        for executor in &executors {
+            loop {
+                if retry_count >= RETRY_COUNT_MAX {
+                    // TODO: keep event to proceed it when connection is back
+                    return Err(ExecutorError::MaximumRetryCount(
+                        event.display(self.tracim.as_ref()),
+                    ));
                 }
-                Err(err) => return Err(err),
-            };
-            state_changes = state_changes_;
-            break;
+                match executor.execute(
+                    self.state.as_ref(),
+                    self.tracim.as_ref(),
+                    &mut self.ignore_events,
+                ) {
+                    Ok(state_changes_) => {
+                        state_changes.extend(state_changes_);
+                        break;
+                    }
+                    Err(ExecutorError::Tracim(TracimClientError::TimeoutError)) => {
+                        retry_count += 1;
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                };
+            }
         }
 
         for state_change in state_changes {
@@ -96,27 +101,40 @@ impl<'a> Operator<'a> {
         Ok(())
     }
 
-    fn executor(&self, event: &Event) -> Box<dyn Executor> {
+    fn executors(&self, event: &Event) -> Vec<Box<dyn Executor>> {
         match event {
             Event::Remote(event) => match event {
-                RemoteEvent::Deleted(id) => Box::new(self.absent_from_disk_executor(*id)),
-                RemoteEvent::Created(id) => Box::new(self.present_on_disk_executor(*id)),
-                RemoteEvent::Updated(id) => Box::new(self.updated_on_disk_executor(*id, true)),
-                RemoteEvent::Renamed(id) => Box::new(self.updated_on_disk_executor(*id, false)),
+                RemoteEvent::Deleted(id) => vec![Box::new(self.absent_from_disk_executor(*id))],
+                RemoteEvent::Created(id) => vec![Box::new(self.present_on_disk_executor(*id))],
+                RemoteEvent::Updated(id) => {
+                    vec![Box::new(self.updated_on_disk_executor(*id, true))]
+                }
+                RemoteEvent::Renamed(id) => {
+                    vec![Box::new(self.updated_on_disk_executor(*id, false))]
+                }
             },
             Event::Local(disk_event) => match disk_event {
                 DiskEventWrap(db_path, DiskEvent::Deleted(_)) => {
-                    Box::new(self.absent_from_remote_executor(db_path.clone()))
+                    vec![Box::new(self.absent_from_remote_executor(db_path.clone()))]
                 }
                 DiskEventWrap(_, DiskEvent::Created(disk_path)) => {
-                    Box::new(self.created_on_remote_executor(disk_path.clone()))
+                    vec![Box::new(self.created_on_remote_executor(disk_path.clone()))]
                 }
-                DiskEventWrap(db_path, DiskEvent::Modified(_)) => {
-                    Box::new(self.modified_on_remote_executor(db_path.clone()))
+                DiskEventWrap(db_path, DiskEvent::Modified(disk_path)) => {
+                    let mut executors: Vec<Box<dyn Executor>> =
+                        vec![Box::new(self.modified_on_remote_executor(db_path.clone()))];
+
+                    if db_path != disk_path {
+                        executors.push(Box::new(
+                            self.named_on_remote_executor(db_path.clone(), disk_path.clone()),
+                        ));
+                    }
+
+                    executors
                 }
-                DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => Box::new(
+                DiskEventWrap(db_path, DiskEvent::Renamed(_, after_disk_path)) => vec![Box::new(
                     self.named_on_remote_executor(db_path.clone(), after_disk_path.clone()),
-                ),
+                )],
             },
         }
     }
