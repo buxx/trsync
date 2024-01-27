@@ -60,16 +60,17 @@ impl Executor for UpdatedOnDiskExecutor {
         let previous_absolute_path = self.workspace_folder.join(&local_content_path);
         let new_absolute_path = self.workspace_folder.join(&remote_content_path);
 
-        // FIXME BS NOW: rename only if change !!
-        fs::rename(&previous_absolute_path, &new_absolute_path).context(format!(
-            "Move {} to {}",
-            previous_absolute_path.display(),
-            new_absolute_path.display()
-        ))?;
-        ignore_events.push(Event::Local(DiskEventWrap::new(
-            local_content_path.clone(),
-            DiskEvent::Renamed(local_content_path.clone(), remote_content_path.clone()),
-        )));
+        if previous_absolute_path != new_absolute_path {
+            fs::rename(&previous_absolute_path, &new_absolute_path).context(format!(
+                "Move {} to {}",
+                previous_absolute_path.display(),
+                new_absolute_path.display()
+            ))?;
+            ignore_events.push(Event::Local(DiskEventWrap::new(
+                local_content_path.clone(),
+                DiskEvent::Renamed(local_content_path.clone(), remote_content_path.clone()),
+            )));
+        }
 
         if self.download {
             tracim

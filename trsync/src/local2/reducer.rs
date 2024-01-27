@@ -291,7 +291,6 @@ mod test {
             DiskEvent::Renamed(PathBuf::from("b.txt"), PathBuf::from("c.txt")),
         ],
         vec![
-            // FIXME BS NOW : il faut dans operator, interpreter cette diff de path comme un Rename !!
             DiskEventWrap::new(PathBuf::from("a.txt"), DiskEvent::Modified(PathBuf::from("c.txt"))),
         ],
     )]
