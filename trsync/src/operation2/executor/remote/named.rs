@@ -168,7 +168,6 @@ impl Executor for NamedOnRemoteExecutor {
             revision_id = match tracim.set_parent(content_id, after_parent, None) {
                 Ok(revision_id) => revision_id,
                 Err(TracimClientError::ContentAlreadyExist) => {
-                    // FIXME BS NOW : test unit/e2e when move into root (and file already exist)
                     let content_id_to_replace = match tracim
                         .find_one(&after_file_name, ParentIdParameter::from(after_parent))?
                     {
