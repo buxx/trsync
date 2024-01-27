@@ -10,7 +10,6 @@ use trsync_core::job::JobIdentifier;
 use crate::database::DB_NAME;
 use crate::error::Error;
 
-
 #[derive(Clone)]
 pub struct Context {
     pub instance_name: String,

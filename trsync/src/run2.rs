@@ -483,7 +483,7 @@ pub fn run(context: TrSyncContext, remote: RemoteControl) -> Result<()> {
                 runner.set_activity(Activity::Idle)?;
             }
         }
-        if remote.stop_signal().load(Ordering::Relaxed) {
+        if remote.stop_signal().load(Ordering::Relaxed) || context.exit_after_sync {
             remote.stop_signal().swap(false, Ordering::Relaxed);
             break;
         }
