@@ -6,8 +6,8 @@ Feature: SynchronizeWorkspace
         And I'm the user "user1"
         And I own the workspace "MyWorskpace1"
 
-        When I start and wait the end of synchronization
+        When For workspace "MyWorskpace1", I start and wait the end of synchronization
 
-        Then I should see the trsync database file
-        And Local folder is empty
-        And Remote workspace is empty
+        Then In workspace "MyWorskpace1", I should see the trsync database file
+        And In workspace "MyWorskpace1", Local folder is empty
+        And In workspace "MyWorskpace1", Remote workspace is empty

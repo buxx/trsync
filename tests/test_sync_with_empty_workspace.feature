@@ -6,11 +6,11 @@ Feature: SynchronizeWithWorkspace
         And I'm the user "user1"
         And I own the workspace "MyWorskpace1"
 
-        When I start synchronization
-        And create local file at "/toto.txt" with content "toto"
-        And create local folder at "/MyFolder"
-        And create local file at "/MyFolder/toto2.txt" with content "toto2"
+        When For workspace "MyWorskpace1", I start synchronization
+        And In workspace "MyWorskpace1", create local file at "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", create local folder at "/MyFolder"
+        And In workspace "MyWorskpace1", create local file at "/MyFolder/toto2.txt" with content "toto2"
 
-        Then I should see remote file at "/toto.txt"
-        And I should see remote folder at "/MyFolder"
-        And I should see remote file at "/MyFolder/toto2.txt"
+        Then In workspace "MyWorskpace1", I should see remote file at "/toto.txt"
+        And In workspace "MyWorskpace1", I should see remote folder at "/MyFolder"
+        And In workspace "MyWorskpace1", I should see remote file at "/MyFolder/toto2.txt"

@@ -109,6 +109,23 @@ def create_workspace(container_port: int, owner: User, name: str) -> Workspace:
     )
 
 
+def get_workspace_by_name(container_port: int, user: User, name: str) -> Workspace:
+    response = requests.get(
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces",
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 200
+    for workspace_raw in response.json():
+        if workspace_raw["label"] == name:
+            id_ = workspace_raw["workspace_id"]
+            return Workspace(
+                id=id_,
+                name=name,
+            )
+
+    raise Exception(f"Workspace '{name}' not found")
+
+
 def execute_trsync_and_wait_finished(
     container_port: int,
     folder: Path,
@@ -159,6 +176,7 @@ def setup(request):
     request.addfinalizer(end)
 
 
+# FIXME BS NOW : when its stop ?
 def execute_trsync(
     container_port: int,
     folder: Path,

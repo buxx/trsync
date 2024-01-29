@@ -28,32 +28,43 @@ def current_user(username: str) -> User:
     parsers.cfparse('I own the workspace "{name}"'),
     target_fixture="workspace",
 )
-def workspace(user: User, name: str, container_port: int) -> Workspace:
-    return base.create_workspace(container_port, user, name)
+def owned_workspace(user: User, name: str, container_port: int) -> None:
+    base.create_workspace(container_port, user, name)
 
 
-@given(parsers.cfparse('The workspace is filled with contents called "{set_name}"'))
+@given(
+    parsers.cfparse(
+        'For workspace "{workspace_name}", '
+        'The workspace is filled with contents called "{set_name}"'
+    )
+)
 def workspace_filled_with_set(
     container_port: int,
     user: User,
-    workspace: Workspace,
+    workspace_name: str,
     set_name: str,
 ) -> None:
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     create_set_on_remote(container_port, user, workspace, set_name)
 
 
 @given(
-    parsers.cfparse('I create remote file "{file_name}" with content "{content}"'),
+    parsers.cfparse(
+        'In workspace "{workspace_name}", '
+        'I create remote file "{file_name}" '
+        'with content "{content}"'
+    ),
     target_fixture="content_ids",
 )
 def create_remote_file(
     user: User,
-    workspace: Workspace,
+    workspace_name: str,
     file_name: str,
     content: str,
     container_port: int,
 ) -> None:
     content_ids = {}
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     create_remote(
         container_port,
         user,
@@ -65,13 +76,19 @@ def create_remote_file(
     return content_ids
 
 
-@given("I start and wait the end of synchronization")
+@given(
+    parsers.cfparse(
+        'For workspace "{workspace_name}", '
+        "I start and wait the end of synchronization"
+    )
+)
 def sync_and_wait(
     user: User,
-    workspace: Workspace,
+    workspace_name: str,
     tmp_path: Path,
     container_port: int,
 ):
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     with open(tmp_path / "trsync.log", "a+") as trsync_logs:
         base.execute_trsync_and_wait_finished(
             container_port=container_port,
@@ -82,16 +99,23 @@ def sync_and_wait(
         )
 
 
-@given(parsers.cfparse('I update remote file "{file_name}" with content "{content}"'))
+@given(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", '
+        'I update remote file "{file_name}" '
+        'with content "{content}"'
+    )
+)
 def update_remote_file(
     container_port: int,
     user: User,
-    workspace: Workspace,
     content_ids: dict,
+    workspace_name: str,
     file_name: str,
     content: str,
 ) -> None:
     content_id = content_ids[file_name]
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     update_file(
         container_port,
         user,
@@ -102,17 +126,31 @@ def update_remote_file(
     )
 
 
-@given(parsers.cfparse('I update local file "{file_name}" with content "{content}"'))
+@given(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", '
+        'I update local file "{file_name}" '
+        'with content "{content}"'
+    )
+)
 def update_local_file(
-    tmp_path: Path, workspace: Workspace, file_name: str, content: str
+    container_port: int,
+    user: User,
+    tmp_path: Path,
+    workspace_name: str,
+    file_name: str,
+    content: str,
 ) -> None:
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     (
         tmp_path / workspace.folder(tmp_path) / pathlib.Path(file_name.strip("/"))
     ).write_bytes(content.encode())
 
 
-@given(parsers.cfparse('I delete local file "{file_name}"'))
-def delete_local_file(tmp_path: Path, workspace: Workspace, file_name: str) -> None:
-    (
-        tmp_path / workspace.folder(tmp_path) / pathlib.Path(file_name.strip("/"))
-    ).unlink()
+@given(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", I delete local file "{file_name}"'
+    )
+)
+def delete_local_file(tmp_path: Path, workspace_name: str, file_name: str) -> None:
+    (tmp_path / workspace_name / pathlib.Path(file_name.strip("/"))).unlink()
