@@ -97,9 +97,8 @@ def workspace_contains_file(
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
 
     def check():
-        assert path in list(
-            get_workspace_listing(container_port, user, workspace).keys()
-        )
+        keys = get_workspace_listing(container_port, user, workspace).keys()
+        assert path in list(keys), f"{path} should be in {keys}"
 
     check_until(check)
 

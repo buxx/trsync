@@ -60,6 +60,37 @@ def update_file(
     assert response.status_code == 204
 
 
+def change_file_workspace(
+    container_port: int,
+    user: User,
+    content_id: int,
+    current_workspace_id: int,
+    new_workspace_id: int,
+) -> None:
+    response = requests.put(
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{current_workspace_id}/contents/{content_id}/move",
+        # FIXME BS NOW: determine new_parent_id
+        json={"new_parent_id": 0, "new_workspace_id": new_workspace_id},
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 200
+
+
+def rename_file(
+    container_port: int,
+    user: User,
+    content_id: int,
+    workspace_id: int,
+    new_label: str,
+) -> None:
+    response = requests.put(
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace_id}/files/{content_id}",
+        json={"label": new_label},
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 200
+
+
 def create_folder(
     container_port: int,
     user: User,
