@@ -7,7 +7,7 @@ use crate::local::{DiskEvent, LocalWatcher};
 use crate::local2::reducer::LocalReceiverReducer;
 use crate::operation2::executor::ExecutorError;
 use crate::operation2::operator::Operator;
-use crate::remote::RemoteWatcher;
+use crate::remote2::watcher::RemoteWatcher;
 use crate::state::disk::DiskState;
 use crate::state::State;
 use crate::sync::local::LocalSync;

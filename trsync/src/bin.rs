@@ -17,7 +17,7 @@ pub mod local2;
 pub mod message;
 pub mod operation2;
 pub mod path;
-pub mod remote;
+pub mod remote2;
 pub mod run;
 pub mod run2;
 pub mod state;

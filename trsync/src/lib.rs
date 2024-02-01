@@ -9,7 +9,6 @@ pub mod message;
 pub mod operation2;
 mod path;
 pub mod reader;
-pub mod remote;
 pub mod remote2;
 pub mod run;
 pub mod run2;
