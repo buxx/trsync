@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import typing
 from pytest_bdd import when, parsers
 import tests.fixtures.base as base
 
@@ -8,6 +9,7 @@ from tests.fixtures.base import (
     execute_trsync_and_wait_finished,
 )
 from tests.fixtures.model import User, Workspace
+from tests.fixtures.sets import create_remote
 
 
 @when(
@@ -67,6 +69,54 @@ def create_local_file(
 ) -> Workspace:
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     (workspace.folder(tmp_path) / str(path)[1:]).write_text(content)
+
+
+@when(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", create remote file "{path}" with content "{content}"'
+    ),
+)
+def create_remote_folder(
+    user: User,
+    workspace_name: str,
+    path: str,
+    content: str,
+    tmp_path: Path,
+    container_port: int,
+    content_ids: typing.Dict[str, int],
+) -> Workspace:
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+    create_remote(
+        container_port=container_port,
+        user=user,
+        workspace=workspace,
+        file_path=path,
+        content_ids=content_ids,
+        content=content,
+    )
+
+
+@when(
+    parsers.cfparse('In workspace "{workspace_name}", create remote folder "{path}"'),
+)
+def create_remote_folder(
+    user: User,
+    workspace_name: str,
+    path: str,
+    content: str,
+    tmp_path: Path,
+    container_port: int,
+    content_ids: typing.Dict[str, int],
+) -> Workspace:
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+    create_remote(
+        container_port=container_port,
+        user=user,
+        workspace=workspace,
+        file_path=path,
+        content_ids=content_ids,
+        content=content,
+    )
 
 
 @when(

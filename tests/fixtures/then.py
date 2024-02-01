@@ -189,8 +189,50 @@ def local_file_with_content(
 
     def check():
         path_ = tmp_path / workspace.folder(tmp_path) / path.strip("/")
-        assert path_.exists()
-        assert path_.read_bytes() == content.encode()
+        assert path_.exists(), f"{path_} file should exist"
+        assert (
+            path_.read_bytes() == content.encode()
+        ), f"{path_} should contain '{content}', not '{path_.read_bytes().decode()}'"
+
+    check_until(check)
+
+
+@then(
+    parsers.cfparse('In workspace "{workspace_name}", I should see local file "{path}"')
+)
+def local_file(
+    user: User,
+    container_port: int,
+    tmp_path: Path,
+    workspace_name: str,
+    path: str,
+):
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+
+    def check():
+        path_ = tmp_path / workspace.folder(tmp_path) / path.strip("/")
+        assert path_.exists(), f"{path_} file should exist"
+
+    check_until(check)
+
+
+@then(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", I should see local folder "{path}"'
+    )
+)
+def local_file(
+    user: User,
+    container_port: int,
+    tmp_path: Path,
+    workspace_name: str,
+    path: str,
+):
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+
+    def check():
+        path_ = tmp_path / workspace.folder(tmp_path) / path.strip("/")
+        assert path_.exists(), f"{path_} folder should exist"
 
     check_until(check)
 

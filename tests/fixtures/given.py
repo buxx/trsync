@@ -6,11 +6,11 @@ from pytest_bdd import parsers, given
 from tests.fixtures.model import User, Workspace
 import tests.fixtures.base as base
 from tests.fixtures.sets import (
-    change_file_workspace,
+    change_remote_file_workspace,
     create_set_on_remote,
     create_remote,
-    rename_file,
-    update_file,
+    rename_remote_file,
+    update_remote_file,
 )
 
 
@@ -122,7 +122,7 @@ def update_remote_file(
 ) -> None:
     content_id = content_ids[file_name]
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
-    update_file(
+    update_remote_file(
         container_port,
         user,
         workspace,
@@ -154,7 +154,7 @@ def move_remote_file_in_workspace(
     workspace1 = base.get_workspace_by_name(container_port, user, workspace_name1)
     workspace2 = base.get_workspace_by_name(container_port, user, workspace_name2)
 
-    change_file_workspace(
+    change_remote_file_workspace(
         container_port,
         user,
         content_id,
@@ -163,7 +163,7 @@ def move_remote_file_in_workspace(
     )
 
     if file_name1 != file_name2:
-        rename_file(
+        rename_remote_file(
             container_port,
             user,
             content_id,

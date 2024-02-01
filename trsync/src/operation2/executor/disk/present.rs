@@ -1,4 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use trsync_core::{
@@ -68,11 +71,9 @@ impl Executor for PresentOnDiskExecutor {
 
         match content.type_() {
             ContentType::Folder => {
-                fs::create_dir_all(&absolute_path)
-                    .context(format!("Create folder {}", absolute_path.display()))?;
-
                 let mut current = content_path_buf.clone();
                 while let Some(parent) = current.parent() {
+                    // FIXME BS NOW : qd pas de parent obtient chaine vide !!
                     current = parent.to_path_buf();
                     if !current.exists() {
                         ignore_events.push(Event::Local(DiskEventWrap::new(
@@ -81,6 +82,20 @@ impl Executor for PresentOnDiskExecutor {
                         )))
                     }
                 }
+
+                match fs::create_dir_all(&absolute_path) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        // TODO : Seems difficult to ensure which type of error
+                        if !Path::new(&absolute_path).exists() {
+                            return Err(ExecutorError::Unexpected2(format!(
+                                "Error during folder '{}' creation: {}",
+                                absolute_path.display(),
+                                error
+                            )));
+                        }
+                    }
+                };
             }
             ContentType::File | ContentType::HtmlDocument => {
                 let exist = absolute_path.exists();

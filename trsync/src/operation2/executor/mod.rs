@@ -27,6 +27,8 @@ pub trait Executor {
 pub enum ExecutorError {
     #[error("Unexpected error: {0:#}")]
     Unexpected(#[from] anyhow::Error),
+    #[error("Unexpected error: {0}")]
+    Unexpected2(String),
     #[error("Tracim error: {0}")]
     Tracim(#[from] TracimClientError),
     #[error("State manipulation error: {0}")]

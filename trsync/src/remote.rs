@@ -176,7 +176,7 @@ impl RemoteWatcher {
     fn proceed_remote_event(&self, remote_event: TracimLiveEvent) -> Result<(), Error> {
         log::debug!("Proceed remote event {:?}", remote_event);
 
-        if RemoteEventType::from_str(&remote_event.event_type).is_err() {
+        if RemoteEventType::from_str(&remote_event.event_type).is_ok() {
             let content_id =
                 remote_event.fields["content"]
                     .as_object()

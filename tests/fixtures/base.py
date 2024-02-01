@@ -176,7 +176,7 @@ def setup(request):
     request.addfinalizer(end)
 
 
-# FIXME BS NOW : when its stop ?
+# FIXME BS NOW : when its stop ? Its not :'(
 def execute_trsync(
     container_port: int,
     folder: Path,
@@ -311,3 +311,8 @@ def setup(request):
         stopped_tracim_instance(container_name)
 
     request.addfinalizer(stop_container)
+
+
+@pytest.fixture(scope="function")
+def content_ids() -> typing.Dict[str, int]:
+    return {}

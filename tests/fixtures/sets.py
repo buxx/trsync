@@ -22,7 +22,7 @@ FILE_CONTENTS = {
 }
 
 
-def create_file(
+def create_remote_file(
     container_port: int,
     user: User,
     workspace: Workspace,
@@ -44,7 +44,7 @@ def create_file(
     return response_json["content_id"]
 
 
-def update_file(
+def update_remote_file(
     container_port: int,
     user: User,
     workspace: Workspace,
@@ -60,7 +60,7 @@ def update_file(
     assert response.status_code == 204
 
 
-def change_file_workspace(
+def change_remote_file_workspace(
     container_port: int,
     user: User,
     content_id: int,
@@ -76,7 +76,7 @@ def change_file_workspace(
     assert response.status_code == 200
 
 
-def rename_file(
+def rename_remote_file(
     container_port: int,
     user: User,
     content_id: int,
@@ -91,7 +91,7 @@ def rename_file(
     assert response.status_code == 200
 
 
-def create_folder(
+def create_remote_folder(
     container_port: int,
     user: User,
     workspace: Workspace,
@@ -132,31 +132,31 @@ def create_remote(
     workspace: Workspace,
     file_path: str,
     content_ids: dict,
-    contents: dict,
+    content: str,
 ) -> None:
     # Create only the last part (set must be ordered correctly)
     splitted = file_path[1:].split("/")
-    concerned_part = splitted[-1]
+    file_name = splitted[-1]
     parent_id = None
 
     if len(splitted) > 1:
         parent_id = content_ids["/" + "/".join(splitted[:-1])]
 
-    if concerned_part.startswith("file_"):
-        id = create_file(
+    if file_name.endswith(".txt"):
+        id = create_remote_file(
             container_port,
             user,
             workspace,
-            concerned_part,
-            content=contents[file_path],
+            file_name,
+            content=content,
             parent_id=parent_id,
         )
-    elif concerned_part.startswith("folder_"):
-        id = create_folder(
+    else:
+        id = create_remote_folder(
             container_port,
             user,
             workspace,
-            concerned_part,
+            file_name,
             parent_id=parent_id,
         )
 
