@@ -11,7 +11,7 @@ use crate::{
     event::Event,
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
-    operation2::executor::{Executor, ExecutorError},
+    operation::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };

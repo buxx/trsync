@@ -4,7 +4,7 @@ use crate::{
     event::{remote::RemoteEvent, Event},
     local::DiskEvent,
     local2::reducer::DiskEventWrap,
-    operation2::executor::ExecutorError,
+    operation::executor::ExecutorError,
     state::State,
 };
 use trsync_core::{

@@ -12,7 +12,7 @@ use trsync_core::{
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    operation2::executor::{Executor, ExecutorError},
+    operation::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
