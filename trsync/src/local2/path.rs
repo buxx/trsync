@@ -1,6 +1,6 @@
 // use std::path::PathBuf;
 
-// use crate::remote2::path::RemotePath;
+// use crate::remote::path::RemotePath;
 
 // #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 // pub struct LocalPath {
