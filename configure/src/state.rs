@@ -17,13 +17,15 @@ pub struct State {
 
 impl State {
     pub fn from_config(config: &ManagerConfig) -> Self {
-        let available_panels = [vec![Panel::Root],
+        let available_panels = [
+            vec![Panel::Root],
             config
                 .instances
                 .iter()
                 .map(|i| Panel::Instance(i.into()))
                 .collect(),
-            vec![Panel::AddInstance(GuiInstance::default())]]
+            vec![Panel::AddInstance(GuiInstance::default())],
+        ]
         .concat();
 
         Self {
