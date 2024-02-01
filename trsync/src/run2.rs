@@ -481,6 +481,9 @@ pub fn run(context: TrSyncContext, remote: RemoteControl) -> Result<()> {
                     }
                 }
                 runner.set_activity(Activity::Idle)?;
+            } else {
+                // interrupt process (avoid loop on same error indefinitively)
+                bail!(error)
             }
         }
         if remote.stop_signal().load(Ordering::Relaxed) || context.exit_after_sync {
