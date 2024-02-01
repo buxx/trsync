@@ -217,7 +217,7 @@ mod test {
     use std::path::PathBuf;
 
     use crate::event::Event;
-    use crate::local2::watcher::DiskEvent;
+    use crate::local::watcher::DiskEvent;
     use crossbeam_channel::{unbounded, Receiver, Sender};
     use rstest::*;
 

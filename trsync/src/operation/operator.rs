@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    local2::reducer::DiskEventWrap,
-    local2::watcher::DiskEvent,
+    local::reducer::DiskEventWrap,
+    local::watcher::DiskEvent,
     operation::executor::ExecutorError,
     state::State,
 };
@@ -183,7 +183,7 @@ impl<'a> Operator<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::local2::reducer::DiskEventWrap;
+    use crate::local::reducer::DiskEventWrap;
     use mockall::predicate::*;
     use trsync_core::client::MockTracimClient;
     use trsync_core::instance::ContentId;

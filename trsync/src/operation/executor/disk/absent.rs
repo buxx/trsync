@@ -6,8 +6,8 @@ use trsync_core::{client::TracimClient, instance::ContentId, types::ContentType}
 
 use crate::{
     event::Event,
-    local2::reducer::DiskEventWrap,
-    local2::watcher::DiskEvent,
+    local::reducer::DiskEventWrap,
+    local::watcher::DiskEvent,
     operation::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State},
 };
