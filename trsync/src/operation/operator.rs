@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    local::DiskEvent,
     local2::reducer::DiskEventWrap,
+    local2::watcher::DiskEvent,
     operation::executor::ExecutorError,
     state::State,
 };

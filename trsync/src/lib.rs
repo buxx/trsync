@@ -3,7 +3,6 @@ pub mod context;
 pub mod database;
 pub mod error;
 pub mod event;
-pub mod local;
 pub mod local2;
 pub mod message;
 pub mod operation;

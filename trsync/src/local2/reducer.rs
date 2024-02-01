@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use crossbeam_channel::Receiver;
 
-use crate::{local::DiskEvent, util::TryRemove};
+use crate::util::TryRemove;
+
+use super::watcher::DiskEvent;
 
 #[derive(Clone)]
 pub struct LocalReceiverReducer {
@@ -215,7 +217,7 @@ mod test {
     use std::path::PathBuf;
 
     use crate::event::Event;
-    use crate::local::DiskEvent;
+    use crate::local2::watcher::DiskEvent;
     use crossbeam_channel::{unbounded, Receiver, Sender};
     use rstest::*;
 

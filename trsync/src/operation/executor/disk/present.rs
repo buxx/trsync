@@ -13,8 +13,8 @@ use trsync_core::{
 
 use crate::{
     event::Event,
-    local::DiskEvent,
     local2::reducer::DiskEventWrap,
+    local2::watcher::DiskEvent,
     operation::executor::{Executor, ExecutorError},
     state::{modification::StateModification, State, StateError},
     util::last_modified_timestamp,

@@ -3,7 +3,7 @@ use trsync_core::{
     client::TracimClient,
 };
 
-use crate::{local::DiskEvent, local2::reducer::DiskEventWrap};
+use crate::{local2::reducer::DiskEventWrap, local2::watcher::DiskEvent};
 
 use self::remote::RemoteEvent;
 
