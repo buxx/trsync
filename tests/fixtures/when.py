@@ -41,17 +41,19 @@ def start_sync(
     workspace_name: str,
     tmp_path: Path,
     container_port: int,
+    request,
 ):
     log_path = os.environ.get("TRSYNC_LOG_PATH", tmp_path / "trsync.log")
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     with open(log_path, "w+") as trsync_logs:
-        execute_trsync(
+        trsync_pids = execute_trsync(
             container_port=container_port,
             folder=workspace.folder(tmp_path),
             workspace_id=workspace.id,
             user=user,
             stdout=trsync_logs,
         )
+    request.node.user_properties.append(("trsync_pid", trsync_pids))
 
 
 @when(

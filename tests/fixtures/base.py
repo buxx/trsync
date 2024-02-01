@@ -176,16 +176,16 @@ def setup(request):
     request.addfinalizer(end)
 
 
-# FIXME BS NOW : when its stop ? Its not :'(
 def execute_trsync(
     container_port: int,
     folder: Path,
     workspace_id: int,
     user: User,
     stdout,
-):
+) -> int:
+    cargo_bin_path = f"{Path.home()}/.cargo/bin/cargo"
     args = [
-        f"{Path.home()}/.cargo/bin/cargo",
+        cargo_bin_path,
         "run",
         "--bin",
         "trsync",
@@ -204,6 +204,17 @@ def execute_trsync(
         env={"PASSWORD": user.password, "RUST_LOG": log_level},
         shell=True,
     )
+
+    # Search trsync pid launch through shell
+    pids = []
+    for pid in psutil.pids():
+        process = psutil.Process(pid)
+        cmdline = " ".join(process.cmdline())
+        if cargo_bin_path in cmdline and str(folder) in cmdline:
+            pids.append(pid)
+
+    assert pids, "Programmatic error : trsync pid not found"
+    return pids
 
 
 def get_folder_listing(path: Path) -> typing.List[str]:
@@ -310,7 +321,16 @@ def setup(request):
         container_name = f"{TRACIM_CONTAINER_NAME}-{request.node.name}"
         stopped_tracim_instance(container_name)
 
+    def stop_trsync():
+        for trsync_pid in next(
+            prop for prop in request.node.user_properties if prop[0] == "trsync_pid"
+        )[1]:
+            trsync_process = psutil.Process(trsync_pid)
+            trsync_process.kill()
+            trsync_process.wait()
+
     request.addfinalizer(stop_container)
+    request.addfinalizer(stop_trsync)
 
 
 @pytest.fixture(scope="function")
