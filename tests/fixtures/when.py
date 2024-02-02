@@ -63,7 +63,7 @@ def start_sync(
 
 @when(
     parsers.cfparse(
-        'In workspace "{workspace_name}", create local file at "{path}" with content "{content}"'
+        'In workspace "{workspace_name}", create local file "{path}" with content "{content}"'
     ),
 )
 def create_local_file(

@@ -26,5 +26,5 @@ Feature: SynchronizeWithConflicts
 
         When For workspace "MyWorskpace1", I start and wait the end of synchronization
 
-        Then In workspace "MyWorskpace1", I should not see remote file at "/file_toto.txt"
-        And In workspace "MyWorskpace1", I should not see local file at "/file_toto.txt"
+        Then In workspace "MyWorskpace1", I should not see remote file "/file_toto.txt"
+        And In workspace "MyWorskpace1", I should not see local file "/file_toto.txt"

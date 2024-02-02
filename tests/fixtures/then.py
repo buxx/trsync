@@ -85,7 +85,7 @@ def workspace_contains_remove_contents1(
 
 @then(
     parsers.cfparse(
-        'In workspace "{workspace_name}", I should see remote file at "{path}"'
+        'In workspace "{workspace_name}", I should see remote file "{path}"'
     )
 )
 def workspace_contains_file(
@@ -105,7 +105,7 @@ def workspace_contains_file(
 
 @then(
     parsers.cfparse(
-        'In workspace "{workspace_name}", I should not see remote file at "{path}"'
+        'In workspace "{workspace_name}", I should not see remote file "{path}"'
     )
 )
 def workspace_not_contains_file(
@@ -239,7 +239,7 @@ def local_file(
 
 @then(
     parsers.cfparse(
-        'In workspace "{workspace_name}", I should not see local file at "{path}"'
+        'In workspace "{workspace_name}", I should not see local file "{path}"'
     )
 )
 def local_file_not_here(
@@ -260,7 +260,7 @@ def local_file_not_here(
 
 @then(
     parsers.cfparse(
-        'In workspace "{workspace_name}", I should not see local file at "{path}" during {during} seconds'
+        'In workspace "{workspace_name}", I should not see local file "{path}" during {during} seconds'
     )
 )
 def local_file_not_here(
