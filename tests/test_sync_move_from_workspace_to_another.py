@@ -7,3 +7,11 @@ from pytest_bdd import scenario
 )
 def test_sync_move_from_workspace_to_another__when_offline():
     pass
+
+
+@scenario(
+    "test_sync_move_from_workspace_to_another.feature",
+    "Moved file from workspace to another what I own, when online",
+)
+def test_sync_move_from_workspace_to_another__when_online():
+    pass

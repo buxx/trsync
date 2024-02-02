@@ -77,7 +77,7 @@ def create_remote_file(
         workspace,
         file_name,
         content_ids,
-        contents={file_name: content},
+        content=content,
     )
     return content_ids
 

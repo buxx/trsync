@@ -14,3 +14,16 @@ Feature: MoveFromWorkspaceToAnother
 
         Then In workspace "MyWorskpace1", I should not see remote file at "/file_toto.txt"
         And In workspace "MyWorskpace2", I should see remote file at "/file_toto.txt"
+
+    Scenario: Moved file from workspace to another what I own, when online
+        Given I have a fresh Tracim instance
+        And I'm the user "user1"
+        And I own the workspace "MyWorskpace1"
+        And I own the workspace "MyWorskpace2"
+        And In workspace "MyWorskpace1", I create remote file "/file_toto.txt" with content "Hello World"
+
+        When For workspace "MyWorskpace1", I start synchronization
+        And In workspace "MyWorskpace1", I rename remote file "/file_toto.txt" into "/file_toto.txt" in "MyWorskpace2"
+
+        Then In workspace "MyWorskpace1", I should not see remote file at "/file_toto.txt"
+        And In workspace "MyWorskpace2", I should see remote file at "/file_toto.txt"

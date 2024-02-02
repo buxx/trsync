@@ -9,7 +9,12 @@ from tests.fixtures.base import (
     execute_trsync_and_wait_finished,
 )
 from tests.fixtures.model import User, Workspace
-from tests.fixtures.sets import create_remote, delete_remote
+from tests.fixtures.sets import (
+    change_remote_file_workspace,
+    create_remote,
+    delete_remote,
+    rename_remote_file,
+)
 
 
 @when(
@@ -153,3 +158,43 @@ def create_local_folder(
 ) -> Workspace:
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     (workspace.folder(tmp_path) / str(path)[1:]).mkdir(parents=True)
+
+
+@when(
+    parsers.cfparse(
+        'In workspace "{workspace_name1}", '
+        'I rename remote file "{file_name1}" '
+        'into "{file_name2}" '
+        'in "{workspace_name2}"'
+    )
+)
+def move_remote_file_in_workspace(
+    container_port: int,
+    user: User,
+    content_ids: dict,
+    workspace_name1: str,
+    workspace_name2: str,
+    file_name1: str,
+    file_name2: str,
+    content: str,
+) -> None:
+    content_id = content_ids[file_name1]
+    workspace1 = base.get_workspace_by_name(container_port, user, workspace_name1)
+    workspace2 = base.get_workspace_by_name(container_port, user, workspace_name2)
+
+    change_remote_file_workspace(
+        container_port,
+        user,
+        content_id,
+        workspace1.id,
+        workspace2.id,
+    )
+
+    if file_name1 != file_name2:
+        rename_remote_file(
+            container_port,
+            user,
+            content_id,
+            workspace2.id,
+            file_name2,
+        )
