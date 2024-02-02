@@ -303,14 +303,21 @@ def get_workspace_listing(
     return paths
 
 
-def check_until(callback, duration=10.0):
+def check_until(callback, timeout=10.0, during=0.0, sleep=0.250):
     start = time.time()
+    success_since = None
     while True:
         try:
             callback()
-            return
+
+            if success_since is None:
+                success_since = time.time()
+
+            if time.time() - success_since > during:
+                return
         except AssertionError as exc:
-            if time.time() - start > duration:
+            success_since = None
+            if time.time() - start > timeout:
                 raise exc
             time.sleep(0.250)
 

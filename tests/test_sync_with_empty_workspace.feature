@@ -28,3 +28,28 @@ Feature: SynchronizeWithWorkspace
         Then In workspace "MyWorskpace1", I should see local file "/toto.txt"
         And In workspace "MyWorskpace1", I should see local folder "/MyFolder"
         And In workspace "MyWorskpace1", I should see local file "/MyFolder/toto2.txt"
+
+    Scenario: Synchronize from existing empty workspace and create then remove file in repetition on remote
+        Given I have a fresh Tracim instance
+        And I'm the user "user1"
+        And I own the workspace "MyWorskpace1"
+
+        When For workspace "MyWorskpace1", I start synchronization
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+        And In workspace "MyWorskpace1", create remote file "/toto.txt" with content "toto"
+        And In workspace "MyWorskpace1", delete remote file "/toto.txt"
+
+        Then In workspace "MyWorskpace1", I should not see local file at "/toto.txt" during 10 seconds

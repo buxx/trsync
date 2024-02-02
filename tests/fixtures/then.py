@@ -256,3 +256,25 @@ def local_file_not_here(
         assert not path_.exists()
 
     check_until(check)
+
+
+@then(
+    parsers.cfparse(
+        'In workspace "{workspace_name}", I should not see local file at "{path}" during {during} seconds'
+    )
+)
+def local_file_not_here(
+    user: User,
+    container_port: int,
+    tmp_path: Path,
+    workspace_name: str,
+    path: str,
+    during: int,
+):
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+
+    def check():
+        path_ = tmp_path / workspace.folder(tmp_path) / path.strip("/")
+        assert not path_.exists(), f"Path {path_} should not exist"
+
+    check_until(check, during=during)

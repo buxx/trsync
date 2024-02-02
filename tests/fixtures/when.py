@@ -9,7 +9,7 @@ from tests.fixtures.base import (
     execute_trsync_and_wait_finished,
 )
 from tests.fixtures.model import User, Workspace
-from tests.fixtures.sets import create_remote
+from tests.fixtures.sets import create_remote, delete_remote
 
 
 @when(
@@ -95,6 +95,26 @@ def create_remote_folder(
         file_path=path,
         content_ids=content_ids,
         content=content,
+    )
+
+
+@when(
+    parsers.cfparse('In workspace "{workspace_name}", delete remote file "{path}"'),
+)
+def delete_remote_file(
+    user: User,
+    workspace_name: str,
+    path: str,
+    container_port: int,
+    content_ids: typing.Dict[str, int],
+) -> Workspace:
+    workspace = base.get_workspace_by_name(container_port, user, workspace_name)
+    delete_remote(
+        container_port=container_port,
+        user=user,
+        workspace=workspace,
+        file_path=path,
+        content_ids=content_ids,
     )
 
 

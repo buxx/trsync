@@ -126,6 +126,22 @@ def create_set_on_remote(
         )
 
 
+def delete_remote(
+    container_port: int,
+    user: User,
+    workspace: Workspace,
+    file_path: str,
+    content_ids: dict,
+) -> None:
+    content_id = content_ids[file_path]
+    response = requests.put(
+        f"http://{TRACIM_HOST}:{container_port}/api/workspaces/{workspace.id}/contents/{content_id}/trashed",
+        auth=(user.username, user.password),
+    )
+    assert response.status_code == 204
+    return None
+
+
 def create_remote(
     container_port: int,
     user: User,
