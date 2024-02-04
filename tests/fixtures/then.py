@@ -253,7 +253,7 @@ def local_file_not_here(
 
     def check():
         path_ = tmp_path / workspace.folder(tmp_path) / path.strip("/")
-        assert not path_.exists()
+        assert not path_.exists(), f"path '{path_}' should not exist"
 
     check_until(check)
 

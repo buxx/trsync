@@ -64,7 +64,9 @@ impl<'a> Operator<'a> {
         };
 
         log::info!("Proceed event : {:?}", &event);
-        let executors = self.executors(event);
+        let event = self.qualify(event)?;
+
+        let executors = self.executors(&event);
         let mut retry_count = 0;
         let mut state_changes = vec![];
 
@@ -99,6 +101,18 @@ impl<'a> Operator<'a> {
         }
 
         Ok(())
+    }
+
+    fn qualify(&self, event: &Event) -> Result<Event, ExecutorError> {
+        if let Event::Remote(RemoteEvent::Updated(content_id)) = event {
+            // When content is moved from workspace to another, Tracim indicate an update.
+            // But for trsync its a creation. So, consider unknown modified content id as a creation
+            if !self.state.known(*content_id)? {
+                return Ok(Event::Remote(RemoteEvent::Created(*content_id)));
+            }
+        }
+
+        Ok(event.clone())
     }
 
     fn executors(&self, event: &Event) -> Vec<Box<dyn Executor>> {

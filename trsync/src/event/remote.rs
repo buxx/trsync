@@ -1,6 +1,6 @@
 use trsync_core::instance::ContentId;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum RemoteEvent {
     Deleted(ContentId),
     Created(ContentId),

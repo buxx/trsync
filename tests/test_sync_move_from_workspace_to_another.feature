@@ -53,7 +53,7 @@ Feature: MoveFromWorkspaceToAnother
         And In workspace "MyWorskpace1", I create remote file "/file_toto.txt" with content "Hello World"
 
         When For workspace "MyWorskpace1", I start synchronization
-        And For workspace "MyWorskpace2", I start synchronization !!!!!!!!!!!!!!!!!!!!!!!!! Gérer plusueirs trsync_id !!!!!!!!!!!!!!!!!!
+        And For workspace "MyWorskpace2", I start synchronization
         And In workspace "MyWorskpace1", I rename remote file "/file_toto.txt" into "/file_toto.txt" in "MyWorskpace2"
 
         Then In workspace "MyWorskpace1", I should not see remote file "/file_toto.txt"
