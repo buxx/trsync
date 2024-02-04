@@ -208,7 +208,10 @@ def execute_trsync(
     # Search trsync pid launch through shell
     pids = []
     for pid in psutil.pids():
-        process = psutil.Process(pid)
+        try:
+            process = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            continue
         cmdline = " ".join(process.cmdline())
         if cargo_bin_path in cmdline and str(folder) in cmdline:
             pids.append(pid)
@@ -329,12 +332,16 @@ def setup(request):
         stopped_tracim_instance(container_name)
 
     def stop_trsync():
-        for trsync_pid in next(
+        for prop in (
             prop for prop in request.node.user_properties if prop[0] == "trsync_pid"
-        )[1]:
-            trsync_process = psutil.Process(trsync_pid)
-            trsync_process.kill()
-            trsync_process.wait()
+        ):
+            for trsync_pid in prop[1]:
+                try:
+                    trsync_process = psutil.Process(trsync_pid)
+                    trsync_process.kill()
+                    trsync_process.wait()
+                except psutil.NoSuchProcess:
+                    pass
 
     request.addfinalizer(stop_container)
     request.addfinalizer(stop_trsync)
