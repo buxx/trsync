@@ -30,7 +30,7 @@ def sync_and_wait(
     container_port: int,
 ):
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
-    with open(tmp_path / "trsync.log", "w+") as trsync_logs:
+    with open(tmp_path / f"{workspace_name}_trsync.log", "w+") as trsync_logs:
         execute_trsync_and_wait_finished(
             container_port=container_port,
             folder=workspace.folder(tmp_path),
@@ -48,7 +48,9 @@ def start_sync(
     container_port: int,
     request,
 ):
-    log_path = os.environ.get("TRSYNC_LOG_PATH", tmp_path / "trsync.log")
+    log_path = os.environ.get(
+        "TRSYNC_LOG_PATH", tmp_path / f"{workspace_name}_trsync.log"
+    )
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
     with open(log_path, "w+") as trsync_logs:
         trsync_pids = execute_trsync(

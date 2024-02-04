@@ -95,7 +95,7 @@ def sync_and_wait(
     container_port: int,
 ):
     workspace = base.get_workspace_by_name(container_port, user, workspace_name)
-    with open(tmp_path / "trsync.log", "a+") as trsync_logs:
+    with open(tmp_path / f"{workspace_name}_trsync.log", "a+") as trsync_logs:
         base.execute_trsync_and_wait_finished(
             container_port=container_port,
             folder=workspace.folder(tmp_path),
