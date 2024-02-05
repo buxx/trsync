@@ -122,7 +122,7 @@ def create_set_on_remote(
             workspace,
             file_path,
             content_ids,
-            contents=FILE_CONTENTS,
+            content=FILE_CONTENTS[file_path] if file_path in FILE_CONTENTS else None,
         )
 
 

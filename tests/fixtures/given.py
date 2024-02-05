@@ -112,7 +112,7 @@ def sync_and_wait(
         'with content "{content}"'
     )
 )
-def update_remote_file(
+def update_remote_file_with_content(
     container_port: int,
     user: User,
     content_ids: dict,
