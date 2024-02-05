@@ -14,12 +14,16 @@ pub enum Icon {
     Working6,
     Working7,
     Working8,
+    Ask,
+    Error,
 }
 
 impl Icon {
     fn file_name(&self) -> &str {
         match self {
             Icon::Idle => "trsync_idle.png",
+            Icon::Ask => "trsync_ask.png",
+            Icon::Error => "trsync_error.png",
             Icon::Working1 => "trsync_idle.png",
             Icon::Working2 => "trsync_working1_v2.png",
             Icon::Working3 => "trsync_working2_v2.png",

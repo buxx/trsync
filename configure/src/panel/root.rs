@@ -2,9 +2,15 @@ use eframe::egui::{Grid, Ui};
 
 use crate::{event::Event, state::State, utils::label_with_help};
 
-const CONFIGURATION_GRID_ID: &'static str = "configuration";
+const CONFIGURATION_GRID_ID: &str = "configuration";
 
 pub struct ConfigurationPainter;
+
+impl Default for ConfigurationPainter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ConfigurationPainter {
     pub fn new() -> Self {
@@ -54,13 +60,25 @@ impl ConfigurationPainter {
         let mut events = vec![];
 
         ui.add(label_with_help(
-            "Pas de suppression distante au démarrage",
+            "Confirmer les opérations au démarrage",
             "Lorsque TrSync effectue une synchronisation de départ \
             (au démarrage ou après une interruption de connexion) \
-            aucune suppression de fichier distante ne sera effectué.",
+            une confirmation des opérations vous sera demandé dans la fenêtre \
+            du moniteur.",
+        ));
+        if ui.checkbox(&mut state.confirm_startup_sync, "").changed() {
+            events.push(Event::GlobalConfigurationUpdated);
+        }
+
+        ui.end_row();
+
+        ui.add(label_with_help(
+            "Popup de confirmation des opérations au démarrage",
+            "Affiche la fenêtre de confirmation de la synchronization de départ \
+            lorsque elle est disponible.",
         ));
         if ui
-            .checkbox(&mut state.prevent_startup_remote_delete, "")
+            .checkbox(&mut state.popup_confirm_startup_sync, "")
             .changed()
         {
             events.push(Event::GlobalConfigurationUpdated);

@@ -1,10 +1,14 @@
 use std::fmt;
 use std::path::Path;
+use std::time::Duration;
 
+use anyhow::Result;
+use trsync_core::client::{Tracim, DEFAULT_CLIENT_TIMEOUT};
 use trsync_core::instance::WorkspaceId;
+use trsync_core::job::JobIdentifier;
 
+use crate::database::DB_NAME;
 use crate::error::Error;
-use crate::util;
 
 #[derive(Clone)]
 pub struct Context {
@@ -15,11 +19,12 @@ pub struct Context {
     pub folder_path: String,
     pub database_path: String,
     pub workspace_id: WorkspaceId,
+    pub workspace_name: String,
     pub exit_after_sync: bool,
-    pub prevent_delete_sync: bool,
 }
 
 impl Context {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ssl: bool,
         address: String,
@@ -27,12 +32,12 @@ impl Context {
         password: String,
         folder_path: String,
         workspace_id: WorkspaceId,
+        workspace_name: String,
         exit_after_sync: bool,
-        prevent_delete_sync: bool,
     ) -> Result<Self, Error> {
         let protocol = if ssl { "https" } else { "http" };
         let base_address = format!("{}://{}/api/", protocol, address);
-        let database_path = util::path_to_string(&Path::new(&folder_path).join(".trsync.db"))?;
+        let database_path = Path::new(&folder_path).join(DB_NAME).display().to_string();
         Ok(Self {
             instance_name: address,
             base_address,
@@ -41,8 +46,8 @@ impl Context {
             folder_path,
             database_path,
             workspace_id,
+            workspace_name,
             exit_after_sync,
-            prevent_delete_sync,
         })
     }
 
@@ -50,6 +55,27 @@ impl Context {
         format!(
             "{}workspaces/{}/{}",
             self.base_address, self.workspace_id, suffix
+        )
+    }
+
+    pub fn client(&self) -> Result<Tracim> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(DEFAULT_CLIENT_TIMEOUT))
+            .build()?;
+        Ok(Tracim::new(
+            self.base_address.clone(),
+            self.workspace_id,
+            client,
+            self.username.clone(),
+            self.password.clone(),
+        ))
+    }
+
+    pub fn job_identifier(&self) -> JobIdentifier {
+        JobIdentifier::new(
+            self.instance_name.clone(),
+            self.workspace_id.0,
+            self.workspace_name.clone(),
         )
     }
 }
@@ -63,7 +89,6 @@ impl fmt::Debug for Context {
             .field("base_address", &self.base_address)
             .field("workspace_id", &self.workspace_id)
             .field("exit_after_sync", &self.exit_after_sync)
-            .field("prevent_delete_sync", &self.prevent_delete_sync)
             .finish()
     }
 }

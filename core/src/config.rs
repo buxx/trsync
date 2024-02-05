@@ -16,7 +16,8 @@ pub struct ManagerConfig {
     pub icons_path: Option<String>,
     pub instances: Vec<Instance>,
     pub allow_raw_passwords: bool,
-    pub prevent_delete_sync: bool,
+    pub confirm_startup_sync: bool,
+    pub popup_confirm_startup_sync: bool,
 }
 impl ManagerConfig {
     fn path() -> Result<PathBuf> {
@@ -48,23 +49,19 @@ impl ManagerConfig {
             .section(Some("server"))
             .context("Missing \"server\" section in config")?;
 
-        let prevent_delete_sync = strbool(server.get("prevent_delete_sync").unwrap_or("1"));
+        let confirm_startup_sync = strbool(server.get("confirm_startup_sync").unwrap_or("1"));
+        let popup_confirm_startup_sync =
+            strbool(server.get("popup_confirm_startup_sync").unwrap_or("1"));
         let local_folder = server
             .get("local_folder")
-            .and_then(|v| Some(v.to_string()))
-            .unwrap_or_else(|| {
-                if cfg!(target_os = "windows") {
-                    user_home_folder_path.join("Tracim").display().to_string()
-                } else {
-                    user_home_folder_path.join("Tracim").display().to_string()
-                }
-            })
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| user_home_folder_path.join("Tracim").display().to_string())
             .to_string();
-        let icons_path = server.get("icons_path").and_then(|v| Some(v.to_string()));
+        let icons_path = server.get("icons_path").map(|v| v.to_string());
         let instances_ids: Vec<InstanceId> = server
             .get("instances")
             .unwrap_or("")
-            .split(",")
+            .split(',')
             .filter(|v| !v.trim().is_empty())
             .map(|v| InstanceId(v.to_string()))
             .collect();
@@ -93,12 +90,11 @@ impl ManagerConfig {
             let (workspaces_ids, errors): (Vec<_>, Vec<_>) = instance_config
                 .get("workspaces_ids")
                 .unwrap_or("")
-                .split(",")
-                .into_iter()
+                .split(',')
                 .filter(|v| !v.trim().is_empty())
                 .map(|v| v.parse::<i32>())
                 .partition(Result::is_ok);
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 return Result::Err(Error::msg(format!(
                     "Some workspaces ids are invalid in '{}' section",
                     &section_name
@@ -110,7 +106,7 @@ impl ManagerConfig {
                     Ok(v) => Some(v),
                     Err(_) => None,
                 })
-                .map(|v| WorkspaceId(v))
+                .map(WorkspaceId)
                 .collect();
 
             // try to get password from keyring
@@ -155,7 +151,8 @@ impl ManagerConfig {
             icons_path,
             instances,
             allow_raw_passwords,
-            prevent_delete_sync,
+            confirm_startup_sync,
+            popup_confirm_startup_sync,
         })
     }
 
@@ -168,30 +165,32 @@ impl ManagerConfig {
     }
 }
 
-impl Into<Ini> for ManagerConfig {
-    fn into(self) -> Ini {
+impl From<ManagerConfig> for Ini {
+    fn from(val: ManagerConfig) -> Self {
         let mut conf = Ini::new();
 
-        let instances_ids = self
+        let instances_ids = val
             .instances
             .iter()
             .map(|i| i.name.to_string())
             .collect::<Vec<String>>()
             .join(",");
-        let local_folder = self.local_folder.clone();
-        let prevent_delete_sync = self.prevent_delete_sync.to_string();
+        let local_folder = val.local_folder.clone();
+        let confirm_startup_sync = val.confirm_startup_sync.to_string();
+        let popup_confirm_startup_sync = val.popup_confirm_startup_sync.to_string();
 
         conf.with_section(Some("server"))
             .set("instances", instances_ids)
             .set("local_folder", local_folder)
-            .set("prevent_delete_sync", prevent_delete_sync);
+            .set("confirm_startup_sync", confirm_startup_sync)
+            .set("popup_confirm_startup_sync", popup_confirm_startup_sync);
 
-        if let Some(icons_path) = self.icons_path {
+        if let Some(icons_path) = val.icons_path {
             conf.with_section(Some("server"))
                 .set("icons_path", icons_path);
         }
 
-        for instance in &self.instances {
+        for instance in &val.instances {
             let address = instance.address.clone();
             let username = instance.username.clone();
             let unsecure = instance.unsecure.to_string();

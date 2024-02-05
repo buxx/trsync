@@ -1,6 +1,8 @@
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Display;
 
+use crate::types::ContentType;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct InstanceId(pub String);
 
@@ -12,11 +14,11 @@ impl Display for InstanceId {
 
 impl InstanceId {
     pub fn is_new(&self) -> bool {
-        self.0 == ""
+        self.0.is_empty()
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct WorkspaceId(pub i32);
 
 impl Display for WorkspaceId {
@@ -47,4 +49,50 @@ impl Instance {
 pub struct Workspace {
     pub label: String,
     pub workspace_id: WorkspaceId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct ContentId(pub i32);
+
+impl Display for ContentId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{}", self.0))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct RevisionId(pub i32);
+
+impl Display for RevisionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{}", self.0))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct ContentFileName(pub String);
+impl ContentFileName {
+    pub fn label(&self, type_: &ContentType) -> String {
+        let splitted = self.0.split('.').collect::<Vec<&str>>();
+        if splitted.len() > 1 {
+            splitted[splitted.len() - type_.label_minus_pos()].to_string()
+        } else {
+            self.0.clone()
+        }
+    }
+}
+
+impl Display for ContentFileName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct DiskTimestamp(pub u64);
+
+impl Display for DiskTimestamp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{}", self.0))
+    }
 }

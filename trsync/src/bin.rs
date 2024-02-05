@@ -1,27 +1,30 @@
-use std::{
-    env,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::env;
 
+use anyhow::Result;
 use env_logger::Env;
 use error::Error;
 use structopt::StructOpt;
-use trsync_core::instance::WorkspaceId;
+use trsync_core::{control::RemoteControlBuilder, instance::WorkspaceId};
 extern crate notify;
 
-pub mod client;
 pub mod conflict;
 pub mod context;
 pub mod database;
 pub mod error;
-pub mod knowledge;
+pub mod event;
 pub mod local;
 pub mod message;
 pub mod operation;
+pub mod path;
 pub mod remote;
 pub mod run;
-pub mod types;
+pub mod run2;
+pub mod state;
+pub mod sync;
 pub mod util;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -46,23 +49,22 @@ struct Opt {
 
     #[structopt(name = "--exit-after-sync", long)]
     exit_after_sync: bool,
-
-    #[structopt(name = "--prevent-delete-sync", long)]
-    prevent_delete_sync: bool,
 }
 
 impl Opt {
     fn to_context(&self, password: String) -> Result<context::Context, Error> {
-        Ok(context::Context::new(
+        // TODO: no unwrap ...
+        let workspace_name = self.path.file_name().unwrap().to_str().unwrap().to_string();
+        context::Context::new(
             !self.no_ssl,
             self.tracim_address.clone(),
             self.username.clone(),
             password.clone(),
             util::canonicalize_to_string(&self.path)?,
             WorkspaceId(self.workspace_id),
+            workspace_name,
             self.exit_after_sync,
-            self.prevent_delete_sync,
-        )?)
+        )
     }
 }
 
@@ -72,7 +74,7 @@ fn main() -> Result<(), Error> {
 
     // Ask password by input or get it from env var
     let password = if let Some(env_var_pass) = &opt.env_var_pass {
-        match env::var(&env_var_pass) {
+        match env::var(env_var_pass) {
             Ok(password) => password,
             Err(_) => {
                 return Err(Error::UnexpectedError(format!(
@@ -86,8 +88,9 @@ fn main() -> Result<(), Error> {
     };
 
     let context = opt.to_context(password.clone())?;
-    let _stop_signal = Arc::new(AtomicBool::new(false));
-    run::run(context, _stop_signal, None)?;
+    if let Err(error) = run2::run(context, RemoteControlBuilder::default().build()) {
+        return Err(Error::UnexpectedError(format!("{:#}", error)));
+    }
     log::info!("Exit application");
     Ok(())
 }

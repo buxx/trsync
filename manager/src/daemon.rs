@@ -1,11 +1,16 @@
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, path::Path};
 use std::{fs, thread};
-use trsync;
-use trsync::operation::Job;
+use trsync_core::activity::WrappedActivity;
+use trsync_core::control::RemoteControlBuilder;
+use trsync_core::error::ErrorExchanger;
+use trsync_core::job::JobIdentifier;
+use trsync_core::sync::SyncExchanger;
+use trsync_core::user::UserRequest;
+
 use trsync_core::config::ManagerConfig;
 
 use crate::{client::Client, error::Error, message::DaemonMessage, types::*};
@@ -14,25 +19,36 @@ pub struct Daemon {
     config: ManagerConfig,
     processes: HashMap<TrsyncUid, Arc<AtomicBool>>,
     main_receiver: Receiver<DaemonMessage>,
-    activity_sender: Sender<Job>,
+    activity_sender: Sender<WrappedActivity>,
+    user_request_sender: Sender<UserRequest>,
+    sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
 }
 
 impl Daemon {
     pub fn new(
         config: ManagerConfig,
         main_receiver: Receiver<DaemonMessage>,
-        activity_sender: Sender<Job>,
+        activity_sender: Sender<WrappedActivity>,
+        user_request_sender: Sender<UserRequest>,
+        sync_exchanger: Arc<Mutex<SyncExchanger>>,
+        error_exchanger: Arc<Mutex<ErrorExchanger>>,
     ) -> Self {
         Self {
             config,
             processes: HashMap::new(),
             main_receiver,
             activity_sender,
+            user_request_sender,
+            sync_exchanger,
+            error_exchanger,
         }
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
+        // TODO : this is a too much generic reason to restart every 30s !
         while let Err(error) = self.ensure_processes() {
+            // TODO : do not log in error when error is UnavailableNetwork
             log::error!("Startup error : '{}', retry in 30s", error);
             std::thread::sleep(Duration::from_secs(30))
         }
@@ -43,7 +59,7 @@ impl Daemon {
                 Ok(DaemonMessage::Reload(new_config)) => {
                     self.config = new_config;
                     while let Err(error) = self.ensure_processes() {
-                        if self.main_receiver.len() > 0 {
+                        if !self.main_receiver.is_empty() {
                             log::error!("Startup error : '{}', main message received, skip", error);
                             continue;
                         }
@@ -80,11 +96,8 @@ impl Daemon {
         }
 
         for process_to_start in processes_to_start {
-            match self.start_process(process_to_start) {
-                Err(error) => {
-                    log::error!("Failed to spawn new process : '{:?}'", error)
-                }
-                _ => {}
+            if let Err(error) = self.start_process(process_to_start) {
+                log::error!("Failed to spawn new process : '{:?}'", error)
             };
         }
 
@@ -97,7 +110,7 @@ impl Daemon {
         for instance in self.config.instances.iter() {
             let client = Client::new(instance.clone())?;
             for workspace_id in &instance.workspaces_ids {
-                match client.get_workspace(workspace_id.clone()) {
+                match client.get_workspace(*workspace_id) {
                     Ok(workspace) => {
                         let process_uid =
                             TrsyncUid::new(instance.address.clone(), workspace.workspace_id);
@@ -124,7 +137,7 @@ impl Daemon {
 
         for instance in self.config.instances.iter() {
             for workspace_id in &instance.workspaces_ids {
-                let process_uid = TrsyncUid::new(instance.address.clone(), workspace_id.clone());
+                let process_uid = TrsyncUid::new(instance.address.clone(), *workspace_id);
                 expected_processes.push(process_uid);
             }
         }
@@ -147,7 +160,7 @@ impl Daemon {
             .find(|instance| instance.address == trsync_uid.instance_address())
             .expect("Start process imply its instance exists");
         let workspace =
-            match Client::new(instance.clone())?.get_workspace(trsync_uid.workspace_id().clone()) {
+            match Client::new(instance.clone())?.get_workspace(*trsync_uid.workspace_id()) {
                 Ok(workspace) => workspace,
                 Err(error) => {
                     return Err(Error::UnexpectedError(format!(
@@ -175,6 +188,13 @@ impl Daemon {
                 )))
             }
         };
+        // TODO: no unwrap ...
+        let workspace_name = folder_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let folder_path = match folder_path.to_str() {
             Some(folder_path) => folder_path,
             None => {
@@ -192,8 +212,8 @@ impl Daemon {
             instance.password.clone(),
             folder_path.to_string(),
             workspace.workspace_id,
+            workspace_name,
             false,
-            self.config.prevent_delete_sync,
         ) {
             Ok(context_) => context_,
             Err(error) => {
@@ -204,16 +224,35 @@ impl Daemon {
             }
         };
 
+        //
+        let job_identifier = JobIdentifier::new(
+            trsync_context.instance_name.clone(),
+            trsync_context.workspace_id.0,
+            trsync_context.workspace_name.clone(),
+        );
+        let sync_channels = self
+            .sync_exchanger
+            .lock()
+            .unwrap() // TODO unwrap ...
+            .insert(job_identifier.clone());
+        let error_channels = self
+            .error_exchanger
+            .lock()
+            .unwrap() // TODO unwrap ...
+            .insert(job_identifier);
+
         let stop_signal = Arc::new(AtomicBool::new(false));
-        let thread_stop_signal = stop_signal.clone();
-        let thread_activity_sender = self.activity_sender.clone();
-        thread::spawn(move || {
-            trsync::run::run(
-                trsync_context,
-                thread_stop_signal,
-                Some(thread_activity_sender),
-            )
-        });
+        let remote = RemoteControlBuilder::default()
+            .stop_signal(stop_signal.clone())
+            .activity_sender(Some(self.activity_sender.clone()))
+            .confirm_startup_sync(self.config.confirm_startup_sync)
+            .popup_confirm_startup_sync(self.config.popup_confirm_startup_sync)
+            .user_request_sender(Some(self.user_request_sender.clone()))
+            .error_channels(Some(error_channels))
+            .sync_channels(Some(sync_channels))
+            .build();
+
+        thread::spawn(move || trsync::run2::run(trsync_context, remote));
         self.processes.insert(trsync_uid, stop_signal);
         Ok(())
     }

@@ -1,9 +1,12 @@
+use anyhow::{Context, Result};
+use std::path::{Path, PathBuf};
+
 use rusqlite::{params, Connection};
 
-use crate::{
-    error::Error,
-    types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId},
-};
+use crate::error::Error;
+use trsync_core::types::{ContentId, LastModifiedTimestamp, RelativeFilePath, RevisionId};
+
+pub const DB_NAME: &str = ".trsync.db";
 
 pub struct Database {
     database_file_path: String,
@@ -30,7 +33,7 @@ pub struct DatabaseOperation<'d> {
 }
 
 impl<'d> DatabaseOperation<'d> {
-    pub fn new<'a>(connection: &'d Connection) -> Self {
+    pub fn new(connection: &'d Connection) -> Self {
         Self { connection }
     }
 
@@ -111,11 +114,11 @@ impl<'d> DatabaseOperation<'d> {
         &self,
         content_id: ContentId,
     ) -> Result<String, rusqlite::Error> {
-        Ok(self.connection.query_row::<String, _, _>(
+        self.connection.query_row::<String, _, _>(
             "SELECT relative_path FROM file WHERE content_id = ?",
             params![content_id],
             |row| row.get(0),
-        )?)
+        )
     }
 
     pub fn insert_new_file(
@@ -183,11 +186,11 @@ impl<'d> DatabaseOperation<'d> {
     }
 
     pub fn get_last_modified_timestamp(&self, relative_path: &str) -> Result<u64, rusqlite::Error> {
-        Ok(self.connection.query_row::<u64, _, _>(
+        self.connection.query_row::<u64, _, _>(
             "SELECT last_modified_timestamp FROM file WHERE relative_path = ?",
             params![relative_path],
             |row| row.get(0),
-        )?)
+        )
     }
 
     pub fn update_revision_id(
@@ -237,7 +240,7 @@ impl<'d> DatabaseOperation<'d> {
     pub fn get_relative_paths(&self) -> Result<Vec<String>, rusqlite::Error> {
         let mut relative_paths = vec![];
         let mut stmt = self.connection.prepare("SELECT relative_path FROM file")?;
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        let local_iter = stmt.query_map([], |row| row.get(0))?;
         for result in local_iter {
             let relative_path: String = result?;
             relative_paths.push(relative_path);
@@ -248,11 +251,20 @@ impl<'d> DatabaseOperation<'d> {
     pub fn get_content_ids(&self) -> Result<Vec<ContentId>, rusqlite::Error> {
         let mut content_ids = vec![];
         let mut stmt = self.connection.prepare("SELECT content_id FROM file")?;
-        let local_iter = stmt.query_map([], |row| Ok(row.get(0)?))?;
+        let local_iter = stmt.query_map([], |row| row.get(0))?;
         for result in local_iter {
             let content_id: i32 = result?;
             content_ids.push(content_id)
         }
         Ok(content_ids)
     }
+}
+
+pub fn db_path(workspace_path: &Path) -> PathBuf {
+    workspace_path.join(DB_NAME)
+}
+
+pub fn connection(workspace_path: &Path) -> Result<Connection> {
+    let db_path = db_path(workspace_path);
+    Connection::open(&db_path).context(format!("Open database connection on {}", db_path.display()))
 }

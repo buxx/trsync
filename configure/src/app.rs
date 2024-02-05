@@ -10,6 +10,7 @@ use eframe::{
 use trsync_core::{
     instance::{Instance, InstanceId, Workspace},
     security::set_password,
+    user::UserRequest,
 };
 use trsync_manager::message::DaemonMessage;
 
@@ -36,10 +37,11 @@ pub struct App {
     event_sender: Sender<Event>,
     updating: Vec<InstanceId>,
     delete_instance: Option<InstanceId>,
+    user_request_receiver: Receiver<UserRequest>,
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &EguiContext, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &EguiContext, frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(PIXELS_PER_POINT);
         let mut events: Vec<Event> = self.event_receiver.try_iter().collect();
 
@@ -60,11 +62,20 @@ impl eframe::App for App {
         if let Err(error) = self.deletion_window(ctx) {
             self.windowed_error = Some(format!("{:#}", error))
         };
+
+        // Exit window if user request something from systray
+        if !self.user_request_receiver.is_empty() {
+            frame.close()
+        }
     }
 }
 
 impl App {
-    pub fn new(state: State, main_sender: Sender<DaemonMessage>) -> Self {
+    pub fn new(
+        state: State,
+        main_sender: Sender<DaemonMessage>,
+        user_request_receiver: Receiver<UserRequest>,
+    ) -> Self {
         let (event_sender, event_receiver) = unbounded();
         Self {
             state,
@@ -75,6 +86,7 @@ impl App {
             event_sender,
             updating: vec![],
             delete_instance: None,
+            user_request_receiver,
         }
     }
 
@@ -86,7 +98,7 @@ impl App {
             let instance_: GuiInstance = instance.into();
             let instance_name = instance.name.clone();
             thread::Builder::new()
-                .name(format!("workspace_grabber"))
+                .name("workspace_grabber".to_string())
                 .spawn(|| WorkspacesGrabber::new(event_sender, instance_).execute())
                 .context(format!(
                     "Start workspace grabber for '{}'",
@@ -174,7 +186,7 @@ impl App {
                     let event_sender = self.event_sender.clone();
                     let instance_name = instance.name.clone();
                     thread::Builder::new()
-                        .name(format!("workspace_grabber"))
+                        .name("workspace_grabber".to_string())
                         .spawn(|| WorkspacesGrabber::new(event_sender, instance).execute())
                         .context(format!(
                             "Start workspace grabber for '{}'",
@@ -278,7 +290,7 @@ impl App {
         Ok(())
     }
 
-    fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &Vec<Workspace>) {
+    fn update_gui_instance_workspaces(&mut self, id: &InstanceId, workspaces: &[Workspace]) {
         let selected_workspaces = self
             .state
             .instances
@@ -286,7 +298,7 @@ impl App {
             .filter(|i| &i.name == id)
             .collect::<Vec<&Instance>>()
             .first()
-            .and_then(|i| Some(i.workspaces_ids.clone()))
+            .map(|i| i.workspaces_ids.clone())
             .unwrap_or(vec![]);
         if let Some(gui_instance) = self
             .state
@@ -298,7 +310,7 @@ impl App {
             })
             .find(|i| &i.name == id)
         {
-            gui_instance.workspaces = Some(workspaces.clone());
+            gui_instance.workspaces = Some(workspaces.to_vec());
             gui_instance.rebuild_workspaces_ids_checkboxes(&selected_workspaces);
         };
     }
@@ -414,7 +426,7 @@ impl App {
         let event_sender = self.event_sender.clone();
         let instance_name = instance.name.clone();
         thread::Builder::new()
-            .name(format!("credential_updater"))
+            .name("credential_updater".to_string())
             .spawn(|| CredentialUpdater::new(event_sender, instance).execute())
             .context(format!(
                 "Start credential updater for '{}'",

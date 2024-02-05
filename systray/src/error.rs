@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Unexpected error : '{0}'")]
-    UnexpectedError(String),
+    Unexpected(String),
     #[error("Unable to determine use home path")]
     UnableToFindHomeUser,
     #[error("Read config error : '{0}'")]

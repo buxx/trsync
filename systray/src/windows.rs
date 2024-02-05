@@ -18,6 +18,8 @@ pub fn run_tray(
     main_sender: Sender<DaemonMessage>,
     activity_state: Arc<Mutex<ActivityState>>,
     stop_signal: Arc<AtomicBool>,
+    sync_exchanger: Arc<Mutex<SyncExchanger>>,
+    error_exchanger: Arc<Mutex<ErrorExchanger>>,
 ) -> Result<(), String> {
     let mut tray = match TrayItem::new("Tracim", "trsync_idle") {
         Ok(tray_) => tray_,
@@ -57,20 +59,52 @@ pub fn run_tray(
                     break;
                 }
 
-                let activity_icon = match activity_state.lock().unwrap().activity() {
-                    Activity::Idle => Icon::Idle,
-                    Activity::Working => match current_icon {
-                        Icon::Idle => Icon::Working1,
-                        Icon::Working1 => Icon::Working2,
-                        Icon::Working2 => Icon::Working3,
-                        Icon::Working3 => Icon::Working4,
-                        Icon::Working4 => Icon::Working5,
-                        Icon::Working5 => Icon::Working6,
-                        Icon::Working6 => Icon::Working7,
-                        Icon::Working7 => Icon::Working8,
-                        Icon::Working8 => Icon::Working1,
-                    },
+                let activity_icon = {
+                    let is_waiting_spaces = sync_exchanger
+                        .lock()
+                        .unwrap()
+                        .channels()
+                        .iter()
+                        .any(|channel| channel.1.changes().lock().unwrap().is_some());
+                    let is_error_spaces =
+                        error_exchanger
+                            .lock()
+                            .unwrap()
+                            .channels()
+                            .iter()
+                            .any(|channel| {
+                                channel.1.error().lock().unwrap().is_some() && !channel.1.seen()
+                            });
+                    if is_error_spaces {
+                        match current_icon {
+                            Icon::Idle => Icon::Error,
+                            Icon::Error => Icon::Idle,
+                            _ => Icon::Idle,
+                        }
+                    } else if is_waiting_spaces {
+                        match current_icon {
+                            Icon::Idle => Icon::Ask,
+                            Icon::Ask => Icon::Idle,
+                            _ => Icon::Idle,
+                        }
+                    } else if activity_state_.lock().unwrap().is_working() {
+                        match current_icon {
+                            Icon::Idle => Icon::Working1,
+                            Icon::Working1 => Icon::Working2,
+                            Icon::Working2 => Icon::Working3,
+                            Icon::Working3 => Icon::Working4,
+                            Icon::Working4 => Icon::Working5,
+                            Icon::Working5 => Icon::Working6,
+                            Icon::Working6 => Icon::Working7,
+                            Icon::Working7 => Icon::Working8,
+                            Icon::Working8 => Icon::Working1,
+                            _ => Icon::Working1,
+                        }
+                    } else {
+                        Icon::Idle
+                    }
                 };
+
                 if activity_icon != current_icon {
                     current_icon = activity_icon;
                     let icon_value = current_icon.value();

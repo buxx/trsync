@@ -1,5 +1,6 @@
 id ICON "trsync_idle.ico"
 trsync_idle ICON "trsync_idle.ico"
+trsync_ask ICON "trsync_ask.ico"
 trsync_working1_v2 ICON "trsync_working1_v2.ico"
 trsync_working2_v2 ICON "trsync_working2_v2.ico"
 trsync_working3_v2 ICON "trsync_working3_v2.ico"
