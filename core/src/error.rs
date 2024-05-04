@@ -41,6 +41,10 @@ pub enum OperatorError {
     ActivityError(String),
     #[error("Missing parent error: {0}")]
     MissingParentError(String),
+    #[error("Unexpected error: {0:#}")]
+    Unexpected(#[from] anyhow::Error),
+    #[error("Client error: {0:#}")]
+    ClientError(#[from] TracimClientError),
 }
 
 #[derive(Error, Debug)]

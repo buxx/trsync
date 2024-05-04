@@ -9,6 +9,7 @@ use trsync_core::{
     client::{TracimClient, TracimClientError},
     error::{ExecutorError, OperatorError},
     instance::ContentId,
+    types::ContentType,
 };
 
 use super::{
@@ -55,12 +56,47 @@ impl<'a> Operator<'a> {
         self
     }
 
+    fn is_attachment(&self, event: &Event) -> Result<bool, OperatorError> {
+        match event {
+            Event::Remote(event) => match event {
+                RemoteEvent::Created(content_id) => {
+                    //
+                    if let Some(parent_id) = self.tracim.get_content(*content_id)?.parent_id {
+                        if let Some(parent) = self.state.get(ContentId(parent_id))? {
+                            return Ok(parent.type_() != &ContentType::Folder);
+                        }
+                    }
+                }
+                RemoteEvent::Deleted(content_id)
+                | RemoteEvent::Updated(content_id)
+                | RemoteEvent::Renamed(content_id) => {
+                    //
+                    if let Some(content) = self.state.get(*content_id)? {
+                        if let Some(parent_id) = content.parent_id() {
+                            if let Some(parent) = self.state.get(parent_id)? {
+                                return Ok(parent.type_() != &ContentType::Folder);
+                            }
+                        }
+                    }
+                }
+            },
+            Event::Local(_) => {}
+        };
+
+        Ok(false)
+    }
+
     pub fn operate(&mut self, event: &Event) -> Result<(), OperatorError> {
         if self.ignore_events.contains(event) {
             self.ignore_events.retain(|x| x != event);
             log::info!("Ignore event (planned ignore) : {:?}", &event);
             return Ok(());
         };
+
+        if self.is_attachment(&event)? {
+            log::info!("Ignore event (attachment) : {:?}", &event);
+            return Ok(());
+        }
 
         log::info!("Proceed event : {:?}", &event);
         let event = self.qualify(event)?;

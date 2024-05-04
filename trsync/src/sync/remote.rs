@@ -40,8 +40,9 @@ impl RemoteSync {
                     "Try to determine if {} is deleted",
                     remote_content.content_id
                 ))?;
+            let is_attachment = self.is_attachment(remote_content, &all_remote_contents);
 
-            if !is_deleted {
+            if !is_deleted && !is_attachment {
                 let content: Content = Content::from_remote(remote_content)?;
                 contents.insert(content.id(), content);
             }
@@ -135,6 +136,26 @@ impl RemoteSync {
         }
 
         Ok(false)
+    }
+
+    fn is_attachment(
+        &self,
+        remote_content: &RemoteContent,
+        all_remote_contents: &[RemoteContent],
+    ) -> bool {
+        if remote_content.content_type != "file" {
+            return false;
+        }
+
+        if let Some(parent_id) = remote_content.parent_id {
+            for remote_content_ in all_remote_contents {
+                if remote_content_.content_id.0 == parent_id {
+                    return remote_content.content_type != "folder";
+                }
+            }
+        }
+
+        false
     }
 
     fn previously_known(&self, id: ContentId) -> Result<bool> {
