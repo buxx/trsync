@@ -34,13 +34,14 @@ impl RemoteSync {
         let all_remote_contents = self.all_remote_contents()?;
 
         for remote_content in &all_remote_contents {
-            if !self
+            let is_deleted = self
                 .is_deleted(remote_content, &all_remote_contents)
                 .context(format!(
                     "Try to determine if {} is deleted",
                     remote_content.content_id
-                ))?
-            {
+                ))?;
+
+            if !is_deleted {
                 let content: Content = Content::from_remote(remote_content)?;
                 contents.insert(content.id(), content);
             }
