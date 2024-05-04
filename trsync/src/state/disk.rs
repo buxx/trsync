@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, path::PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context, Result as AnyhowResult};
 use rusqlite::{params, Connection};
 use trsync_core::{
     content::Content,
@@ -25,7 +25,7 @@ impl DiskState {
         }
     }
 
-    pub fn create_tables(&self) -> Result<()> {
+    pub fn create_tables(&self) -> AnyhowResult<()> {
         self.connection
             .execute(
                 "CREATE TABLE IF NOT EXISTS file (
@@ -59,7 +59,7 @@ impl DiskState {
         relative_path: String,
         revision_id: i32,
         parent_id: Option<i32>,
-    ) -> Result<Content> {
+    ) -> AnyhowResult<Content> {
         let path = PathBuf::from(&relative_path);
         let file_name = path
             .file_name()
@@ -81,7 +81,7 @@ impl DiskState {
 }
 
 impl State for DiskState {
-    fn known(&self, id: ContentId) -> Result<bool> {
+    fn known(&self, id: ContentId) -> AnyhowResult<bool> {
         match self.connection.query_row::<u64, _, _>(
             "SELECT 1 FROM file WHERE content_id = ?",
             params![id.0],
@@ -93,7 +93,7 @@ impl State for DiskState {
         }
     }
 
-    fn get(&self, id: ContentId) -> Result<Option<Content>> {
+    fn get(&self, id: ContentId) -> AnyhowResult<Option<Content>> {
         let (relative_path, revision_id, parent_id) =
             match self
                 .connection
@@ -121,7 +121,7 @@ impl State for DiskState {
         )?))
     }
 
-    fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>> {
+    fn content_id_for_path(&self, path: PathBuf) -> AnyhowResult<Option<ContentId>> {
         match self.connection.query_row::<i32, _, _>(
             "SELECT content_id FROM file WHERE relative_path = ?",
             params![path.display().to_string()],
@@ -133,7 +133,7 @@ impl State for DiskState {
         }
     }
 
-    fn path(&self, id: ContentId) -> Result<ContentPath, StateError> {
+    fn path(&self, id: ContentId) -> AnyhowResult<ContentPath, StateError> {
         let content = match self.get(id).context(format!("Get content {}", id))? {
             Some(content) => content,
             None => return Err(StateError::UnknownContent(id)),
@@ -154,7 +154,7 @@ impl State for DiskState {
     }
 
     // TODO : Iter
-    fn contents(&self) -> Result<Vec<Content>> {
+    fn contents(&self) -> AnyhowResult<Vec<Content>> {
         let mut contents = vec![];
 
         for raw_content in self
@@ -196,7 +196,7 @@ impl State for DiskState {
         Ok(contents)
     }
 
-    fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>> {
+    fn direct_children_ids(&self, content_id: ContentId) -> AnyhowResult<Vec<ContentId>> {
         let mut content_ids = vec![];
 
         for raw_content in self
@@ -211,7 +211,7 @@ impl State for DiskState {
         Ok(content_ids)
     }
 
-    fn forgot(&mut self, content_id: ContentId) -> Result<()> {
+    fn forgot(&mut self, content_id: ContentId) -> AnyhowResult<()> {
         self.connection
             .prepare("DELETE FROM file WHERE content_id = ?")?
             .execute(params![content_id.0])?;
@@ -223,16 +223,22 @@ impl State for DiskState {
         content: Content,
         relative_path: PathBuf,
         timestamp: DiskTimestamp,
-    ) -> Result<()> {
-        self.connection
-            .prepare("INSERT INTO file (relative_path, content_id, revision_id, parent_id, last_modified_timestamp) VALUES (?, ?, ?, ?, ?)")?
+    ) -> Result<(), StateError> {
+        if let Err(error) = self.connection
+            .prepare("INSERT INTO file (relative_path, content_id, revision_id, parent_id, last_modified_timestamp) VALUES (?, ?, ?, ?, ?)").unwrap()
             .execute(params![
                 relative_path.display().to_string(),
                 content.id().0,
                 content.revision_id().0,
                 content.parent_id().map(|i| i.0),
                 timestamp.0,
-            ])?;
+            ]){
+                if &error.to_string() == "UNIQUE constraint failed: file.relative_path" {
+                    return Err(StateError::PathAlreadyExist(relative_path.clone(), content.id()))
+                } else {
+                    return Err(StateError::UnknownError(error.to_string()))
+                }
+            };
 
         Ok(())
     }
@@ -244,7 +250,7 @@ impl State for DiskState {
         revision_id: RevisionId,
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
-    ) -> Result<()> {
+    ) -> AnyhowResult<()> {
         // TODO : new_path should computed by caller of this method
         let new_path = parent_id
             .and_then(|parent_id| {

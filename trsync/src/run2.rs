@@ -3,9 +3,9 @@ use crate::context::Context as TrSyncContext;
 use crate::database::{connection, db_path};
 use crate::event::remote::RemoteEvent;
 use crate::event::Event;
+use crate::ignore::Ignore;
 use crate::local::reducer::LocalReceiverReducer;
 use crate::local::watcher::{DiskEvent, LocalWatcher};
-use crate::operation::executor::ExecutorError;
 use crate::operation::operator::Operator;
 use crate::remote::watcher::RemoteWatcher;
 use crate::state::disk::DiskState;
@@ -13,8 +13,9 @@ use crate::state::State;
 use crate::sync::local::LocalSync;
 use crate::sync::remote::RemoteSync;
 use crate::sync::{ResolveMethod, StartupSyncResolver};
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context, Result as AnyhowResult};
 use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -26,10 +27,11 @@ use trsync_core::change::remote::RemoteChange;
 use trsync_core::change::Change;
 use trsync_core::client::{Tracim, TracimClient};
 use trsync_core::control::RemoteControl;
-use trsync_core::error::Decision;
+use trsync_core::error::{Decision, ExecutorError, OperatorError, RunnerError};
 
 struct Runner {
     context: TrSyncContext,
+    ignore: Ignore,
     remote_control: RemoteControl,
     restart_signal: Arc<AtomicBool>,
     operational_sender: Sender<Event>,
@@ -41,7 +43,7 @@ struct Runner {
 }
 
 impl Runner {
-    fn new(context: TrSyncContext, remote_control: RemoteControl) -> Self {
+    fn new(context: TrSyncContext, remote_control: RemoteControl, ignore: Ignore) -> Self {
         let restart_signal = Arc::new(AtomicBool::new(false));
         let (operational_sender, operational_receiver): (Sender<Event>, Receiver<Event>) =
             unbounded();
@@ -52,6 +54,7 @@ impl Runner {
 
         Self {
             context,
+            ignore,
             remote_control,
             restart_signal,
             operational_sender,
@@ -63,25 +66,26 @@ impl Runner {
         }
     }
 
-    fn ensure_folders(&self) -> Result<()> {
+    fn ensure_folders(&self) -> AnyhowResult<()> {
         fs::create_dir_all(&self.context.folder_path)?;
         Ok(())
     }
 
-    fn ensure_db(&mut self) -> Result<()> {
+    fn ensure_db(&mut self) -> AnyhowResult<()> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
         DiskState::new(connection(&workspace_path)?, workspace_path.clone()).create_tables()?;
         Ok(())
     }
 
-    fn watchers(&self) -> Result<()> {
+    fn watchers(&self) -> AnyhowResult<()> {
         self.remote_watcher()?;
         self.local_watcher()?;
         Ok(())
     }
 
-    fn remote_watcher(&self) -> Result<()> {
+    fn remote_watcher(&self) -> AnyhowResult<()> {
         let remote_watcher_context = self.context.clone();
+        let remote_watcher_ignore = self.ignore.clone();
         let remote_watcher_stop_signal = self.remote_control.stop_signal().clone();
         let remote_watcher_restart_signal = self.restart_signal.clone();
         let remote_watcher_operational_sender = self.remote_sender.clone();
@@ -91,6 +95,7 @@ impl Runner {
             let mut remote_watcher = RemoteWatcher::new(
                 remote_watcher_connection,
                 remote_watcher_context,
+                remote_watcher_ignore,
                 remote_watcher_stop_signal,
                 remote_watcher_restart_signal,
                 remote_watcher_operational_sender,
@@ -104,7 +109,7 @@ impl Runner {
         Ok(())
     }
 
-    fn local_watcher(&self) -> Result<()> {
+    fn local_watcher(&self) -> AnyhowResult<()> {
         let local_watcher_context = self.context.clone();
         let local_watcher_operational_sender = self.local_sender.clone();
         let local_watcher_stop_signal = self.remote_control.stop_signal().clone();
@@ -126,7 +131,7 @@ impl Runner {
         Ok(())
     }
 
-    fn set_activity(&self, activity: Activity) -> Result<()> {
+    fn set_activity(&self, activity: Activity) -> AnyhowResult<()> {
         if let Some(activity_sender) = self.remote_control.activity_sender() {
             log::info!(
                 "[{}::{}] Set activity to {}",
@@ -148,7 +153,7 @@ impl Runner {
         Ok(())
     }
 
-    fn sync(&self, operator: &mut Operator) -> Result<()> {
+    fn sync(&self, operator: &mut Operator) -> Result<(), RunnerError> {
         self.set_activity(Activity::StartupSync(None))?;
         if let Err(error) = self.sync_(operator) {
             self.set_activity(Activity::Idle)?;
@@ -158,7 +163,7 @@ impl Runner {
         Ok(())
     }
 
-    fn sync_(&self, operator: &mut Operator) -> Result<()> {
+    fn sync_(&self, operator: &mut Operator) -> Result<(), RunnerError> {
         let remote_changes = self.remote_changes()?;
         let local_changes = self.local_changes()?;
         let (remote_changes, local_changes) =
@@ -172,7 +177,7 @@ impl Runner {
                 .sync_politic()?
                 .deal(remote_changes.clone(), local_changes.clone())?
             {
-                bail!("TODO")
+                return Ok(());
             }
             self.set_activity(Activity::Idle)?;
         }
@@ -202,9 +207,10 @@ impl Runner {
         Ok(())
     }
 
-    fn remote_changes(&self) -> Result<Vec<RemoteChange>> {
+    fn remote_changes(&self) -> AnyhowResult<Vec<RemoteChange>> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
         RemoteSync::new(
+            self.ignore.clone(),
             connection(&workspace_path)?,
             Box::new(self.context.client().context("Create Tracim client")?),
         )
@@ -212,20 +218,20 @@ impl Runner {
         .context("Determine remote changes")
     }
 
-    fn local_changes(&self) -> Result<Vec<LocalChange>> {
+    fn local_changes(&self) -> AnyhowResult<Vec<LocalChange>> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
         LocalSync::new(connection(&workspace_path)?, workspace_path.clone())
             .changes()
             .context("Determine local changes")
     }
 
-    fn listen(&self) -> Result<()> {
+    fn listen(&self) -> AnyhowResult<()> {
         self.listen_remote()?;
         self.listen_local()?;
         Ok(())
     }
 
-    fn listen_remote(&self) -> Result<()> {
+    fn listen_remote(&self) -> AnyhowResult<()> {
         let operational_sender = self.operational_sender.clone();
         let remote_receiver = self.remote_receiver.clone();
 
@@ -243,7 +249,7 @@ impl Runner {
         Ok(())
     }
 
-    fn listen_local(&self) -> Result<()> {
+    fn listen_local(&self) -> AnyhowResult<()> {
         let operational_sender = self.operational_sender.clone();
         let mut local_receiver_reducer = self.local_receiver_reducer.clone();
 
@@ -266,7 +272,7 @@ impl Runner {
         self.restart_signal.load(Ordering::Relaxed)
     }
 
-    fn operate(&self, operator: &mut Operator) -> Result<()> {
+    fn operate(&self, operator: &mut Operator) -> Result<(), RunnerError> {
         let client: Box<dyn TracimClient> = Box::new(self.client()?);
 
         loop {
@@ -320,9 +326,8 @@ impl Runner {
 
                     log::info!("Proceed event {:?}", &event);
                     let event_display = event.display(client.as_ref());
-                    let context_message = format!("Operate on event '{}'", &event_display);
                     self.set_activity(Activity::Job(event_display.to_string()))?;
-                    operator.operate(&event).context(context_message)?;
+                    operator.operate(&event)?;
                     self.set_activity(Activity::Idle)?;
                 }
             }
@@ -332,7 +337,7 @@ impl Runner {
         Ok(())
     }
 
-    fn state(&self) -> Result<Box<dyn State>> {
+    fn state(&self) -> AnyhowResult<Box<dyn State>> {
         let workspace_path = PathBuf::from(&self.context.folder_path);
         Ok(Box::new(DiskState::new(
             connection(&workspace_path).context(format!(
@@ -343,13 +348,13 @@ impl Runner {
         )))
     }
 
-    fn client(&self) -> Result<Tracim> {
+    fn client(&self) -> AnyhowResult<Tracim> {
         self.context
             .client()
             .context("Create tracim client for startup sync")
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<(), RunnerError> {
         let is_first_sync = !db_path(&PathBuf::from(&self.context.folder_path)).exists();
         self.ensure_folders()?;
         self.ensure_db()?;
@@ -395,17 +400,17 @@ impl OperateChanges {
         }
     }
 
-    fn operate(&mut self, operator: &mut Operator) -> Result<()> {
+    fn operate(&mut self, operator: &mut Operator) -> Result<(), OperatorError> {
         loop {
             let mut remaining_changes = vec![];
             for change in &self.changes {
                 self.set_activity(Activity::StartupSync(Some(change.clone())))?;
                 match operator.operate(&Event::from(change)) {
                     Ok(_) => {}
-                    Err(ExecutorError::MissingParent(_, _)) => {
+                    Err(OperatorError::ExecutorError(ExecutorError::MissingParent(_, _))) => {
                         remaining_changes.push(change.clone())
                     }
-                    Err(err) => bail!("Error when operating on change : {:#}", err),
+                    Err(err) => return Err(err),
                 };
                 self.set_activity(Activity::StartupSync(None))?;
             }
@@ -419,10 +424,10 @@ impl OperateChanges {
                     .iter()
                     .map(|event| event.to_string())
                     .collect();
-                bail!(
+                return Err(OperatorError::MissingParentError(format!(
                     "Unable to operate on following changes (missing parents): {}",
                     detail.join(", ")
-                );
+                )));
             }
             self.changes = remaining_changes;
         }
@@ -430,7 +435,7 @@ impl OperateChanges {
         Ok(())
     }
 
-    fn set_activity(&self, activity: Activity) -> Result<()> {
+    fn set_activity(&self, activity: Activity) -> Result<(), OperatorError> {
         if let Some(activity_sender) = &self.activity_sender {
             log::info!(
                 "[{}::{}] Set activity to {}",
@@ -442,10 +447,10 @@ impl OperateChanges {
                 self.context.job_identifier(),
                 activity,
             )) {
-                bail!(format!(
+                return Err(OperatorError::ActivityError(format!(
                     "[{}::{}] Error when sending activity end : {:?}",
                     self.context.instance_name, self.context.workspace_id, error
-                ));
+                )));
             }
         };
 
@@ -453,26 +458,36 @@ impl OperateChanges {
     }
 }
 
-pub fn run(context: TrSyncContext, remote: RemoteControl) -> Result<()> {
+pub fn run(context: TrSyncContext, remote: RemoteControl) -> AnyhowResult<()> {
     loop {
-        let mut runner = Runner::new(context.clone(), remote.clone());
+        let mut ignore = Ignore::try_from(&context)
+            .context(format!("Read {} .trsyncignore", context.folder_path))?;
+        let mut runner = Runner::new(context.clone(), remote.clone(), ignore.clone());
         if let Err(error) = runner.run() {
             log::error!("Operate error : {:#}", &error);
 
             // TODO : absolutely ugly. I think we should drop anyhow !!
-            if let Some(error) = error.chain().last() {
-                if format!("{}", error).to_lowercase().contains("connection") {
-                    log::info!("Connection error, retry in 30s.");
-                    thread::sleep(Duration::from_secs(30));
-                    continue;
-                }
+            if format!("{}", error).to_lowercase().contains("connection") {
+                log::info!("Connection error, retry in 30s.");
+                thread::sleep(Duration::from_secs(30));
+                continue;
             }
 
             if let Some(error_channels) = remote.error_channels() {
                 runner.set_activity(Activity::Error)?;
-                *error_channels.error().lock().unwrap() = Some(format!("{:#}", error));
+                *error_channels.error().lock().unwrap() = Some(error);
                 match error_channels.decision_receiver().recv() {
                     Ok(Decision::RestartSpaceSync) => {}
+                    Ok(Decision::IgnoreAndRestartSpaceSync(content_id)) => {
+                        ignore.push(content_id);
+                        if let Err(error) = ignore.write(&context) {
+                            log::error!(
+                                "Fail to write '{}' ignore file: {}",
+                                context.folder_path,
+                                error
+                            )
+                        }
+                    }
                     Err(_) => {
                         log::error!(
                             "Unable to communicate from trsync run to error decision receiver"

@@ -2,13 +2,12 @@ use std::path::PathBuf;
 
 use crate::{
     event::{remote::RemoteEvent, Event},
-    local::reducer::DiskEventWrap,
-    local::watcher::DiskEvent,
-    operation::executor::ExecutorError,
+    local::{reducer::DiskEventWrap, watcher::DiskEvent},
     state::State,
 };
 use trsync_core::{
     client::{TracimClient, TracimClientError},
+    error::{ExecutorError, OperatorError},
     instance::ContentId,
 };
 
@@ -56,7 +55,7 @@ impl<'a> Operator<'a> {
         self
     }
 
-    pub fn operate(&mut self, event: &Event) -> Result<(), ExecutorError> {
+    pub fn operate(&mut self, event: &Event) -> Result<(), OperatorError> {
         if self.ignore_events.contains(event) {
             self.ignore_events.retain(|x| x != event);
             log::info!("Ignore event (planned ignore) : {:?}", &event);
@@ -74,8 +73,8 @@ impl<'a> Operator<'a> {
             loop {
                 if retry_count >= RETRY_COUNT_MAX {
                     // TODO: keep event to proceed it when connection is back
-                    return Err(ExecutorError::MaximumRetryCount(
-                        event.display(self.tracim.as_ref()),
+                    return Err(OperatorError::ExecutorError(
+                        ExecutorError::MaximumRetryCount(event.display(self.tracim.as_ref())),
                     ));
                 }
                 match executor.execute(
@@ -91,7 +90,7 @@ impl<'a> Operator<'a> {
                         retry_count += 1;
                         continue;
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => return Err(OperatorError::ExecutorError(err)),
                 };
             }
         }

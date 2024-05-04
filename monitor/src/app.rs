@@ -14,7 +14,7 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use trsync_core::{
     activity::ActivityState,
-    error::{Decision, ErrorExchanger},
+    error::{Decision, ErrorExchanger, OperatorError, RunnerError, StateError},
     job::JobIdentifier,
     sync::SyncExchanger,
     user::{MonitorWindowPanel, UserRequest},
@@ -381,11 +381,38 @@ impl App {
         if let Some(error_space) = &self.current_error_space {
             if let Some(sync_channels) = channels.get(error_space) {
                 let mut answered = false;
-                let mut error = sync_channels.error().lock().unwrap();
-                if let Some(message) = error.clone() {
+                let mut error_guard = sync_channels.error().lock().unwrap();
+
+                if let Some(error) = (*error_guard).as_ref() {
+                    let message = match error {
+                        RunnerError::OperatorError(OperatorError::StateError(
+                            StateError::PathAlreadyExist(path, _),
+                        )) => format!("Un contenu semble dupliqué : '{}'", path.display()),
+                        _ => error.to_string(),
+                    };
+
                     ui.label("Cet espace de travail à rencontré une erreur :");
                     ui.label(RichText::new(message).color(Color32::RED));
                     ui.horizontal_wrapped(|ui| {
+                        if let RunnerError::OperatorError(OperatorError::StateError(
+                            StateError::PathAlreadyExist(_, content_id),
+                        )) = error
+                        {
+                            if ui
+                                .button("Ignorer à l'avenir & Redémarrer la synchronisation")
+                                .clicked()
+                            {
+                                answered = true;
+                                if sync_channels
+                                    .decision_sender()
+                                    .send(Decision::IgnoreAndRestartSpaceSync(*content_id))
+                                    .is_err()
+                                {
+                                    print!("Unable to send decision to {}", error_space)
+                                }
+                            }
+                        }
+
                         if ui.button("Redémarrer la synchronisation").clicked() {
                             answered = true;
                             if sync_channels
@@ -400,7 +427,7 @@ impl App {
                 }
                 if answered {
                     self.current_error_space = None;
-                    *error = None;
+                    *error_guard = None;
                 }
             }
         }

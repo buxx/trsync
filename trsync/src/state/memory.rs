@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context, Result as AnyhowResult};
 use std::{cmp::Ordering, collections::HashMap, path::PathBuf};
 
 use trsync_core::{
@@ -20,7 +20,7 @@ impl MemoryState {
     pub fn new(
         contents: HashMap<ContentId, Content>,
         timestamps: HashMap<ContentId, DiskTimestamp>,
-    ) -> Result<Self> {
+    ) -> AnyhowResult<Self> {
         for content in contents.values() {
             if let Some(parent_id) = content.parent_id() {
                 if !contents.contains_key(&parent_id) {
@@ -41,15 +41,15 @@ impl MemoryState {
 }
 
 impl State for MemoryState {
-    fn known(&self, id: ContentId) -> Result<bool> {
+    fn known(&self, id: ContentId) -> AnyhowResult<bool> {
         Ok(self.contents.contains_key(&id))
     }
 
-    fn get(&self, id: ContentId) -> Result<Option<Content>> {
+    fn get(&self, id: ContentId) -> AnyhowResult<Option<Content>> {
         Ok(self.contents.get(&id).cloned())
     }
 
-    fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>> {
+    fn content_id_for_path(&self, path: PathBuf) -> AnyhowResult<Option<ContentId>> {
         // TODO : cache a hashmap with all paths instead compute it here
         for content in self.contents.values() {
             let content_path = self
@@ -64,7 +64,7 @@ impl State for MemoryState {
     }
 
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<ContentPath, StateError> {
+    fn path(&self, id: ContentId) -> AnyhowResult<ContentPath, StateError> {
         let content = self
             .contents
             .get(&id)
@@ -85,7 +85,7 @@ impl State for MemoryState {
     }
 
     // TODO : Iter
-    fn contents(&self) -> Result<Vec<Content>> {
+    fn contents(&self) -> AnyhowResult<Vec<Content>> {
         // TODO : Risky for memory overload
         let mut contents = self.contents.values().cloned().collect::<Vec<Content>>();
         contents.sort_by(|a, b| match (a.type_(), b.type_()) {
@@ -98,7 +98,7 @@ impl State for MemoryState {
     }
 
     // TODO : Iter
-    fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>> {
+    fn direct_children_ids(&self, content_id: ContentId) -> AnyhowResult<Vec<ContentId>> {
         Ok(self
             .contents
             .values()
@@ -107,14 +107,19 @@ impl State for MemoryState {
             .collect::<Vec<ContentId>>())
     }
 
-    fn forgot(&mut self, content_id: ContentId) -> Result<()> {
+    fn forgot(&mut self, content_id: ContentId) -> AnyhowResult<()> {
         self.contents
             .remove(&content_id)
             .context(format!("Remove content {} from state", content_id))?;
         Ok(())
     }
 
-    fn add(&mut self, content: Content, _: PathBuf, timestamp: DiskTimestamp) -> Result<()> {
+    fn add(
+        &mut self,
+        content: Content,
+        _: PathBuf,
+        timestamp: DiskTimestamp,
+    ) -> Result<(), StateError> {
         self.timestamps.insert(content.id(), timestamp);
         self.contents.insert(content.id(), content);
 
@@ -128,7 +133,7 @@ impl State for MemoryState {
         revision_id: RevisionId,
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
-    ) -> Result<()> {
+    ) -> AnyhowResult<()> {
         let content = self
             .contents
             .get_mut(&content_id)

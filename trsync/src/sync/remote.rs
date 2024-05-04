@@ -9,16 +9,24 @@ use trsync_core::{
     instance::{ContentId, RevisionId},
 };
 
-use crate::state::{memory::MemoryState, State};
+use crate::{
+    ignore::Ignore,
+    state::{memory::MemoryState, State},
+};
 
 pub struct RemoteSync {
+    ignore: Ignore,
     connection: Connection,
     client: Box<dyn TracimClient>,
 }
 
 impl RemoteSync {
-    pub fn new(connection: Connection, client: Box<dyn TracimClient>) -> Self {
-        Self { connection, client }
+    pub fn new(ignore: Ignore, connection: Connection, client: Box<dyn TracimClient>) -> Self {
+        Self {
+            ignore,
+            connection,
+            client,
+        }
     }
 
     fn state(&self) -> Result<MemoryState> {
@@ -47,6 +55,10 @@ impl RemoteSync {
         let remote_state = self.state().context("Determine remote state")?;
 
         for content in remote_state.contents()? {
+            if self.ignore.is_ignored(&content.id()) {
+                continue;
+            }
+
             let path = remote_state
                 .path(content.id())
                 .context(format!(
@@ -199,7 +211,7 @@ mod test {
             .expect_get_contents()
             .times(1)
             .returning(|| Ok(vec![]));
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let state = remote_sync.state().unwrap();
@@ -241,7 +253,7 @@ mod test {
                 },
             ])
         });
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let state = remote_sync.state().unwrap();
@@ -284,7 +296,7 @@ mod test {
                 },
             ])
         });
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let state = remote_sync.state().unwrap();
@@ -329,7 +341,7 @@ mod test {
                 },
             ])
         });
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let state = remote_sync.state().unwrap();
@@ -373,7 +385,7 @@ mod test {
                 },
             ])
         });
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let state = remote_sync.state().unwrap();
@@ -406,7 +418,7 @@ mod test {
             }])
         });
         insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let changes = remote_sync.changes().unwrap();
@@ -437,7 +449,7 @@ mod test {
                 sub_content_types: vec![],
             }])
         });
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let changes = remote_sync.changes().unwrap();
@@ -472,7 +484,7 @@ mod test {
             }])
         });
         insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let changes = remote_sync.changes().unwrap();
@@ -497,7 +509,7 @@ mod test {
             .times(1)
             .returning(|| Ok(vec![]));
         insert_content(&connection(&tmpdir_), "a.txt", 1, 1, None, 0);
-        let remote_sync = RemoteSync::new(connection(&tmpdir_), Box::new(client));
+        let remote_sync = RemoteSync::new(Ignore::empty(), connection(&tmpdir_), Box::new(client));
 
         // When
         let changes = remote_sync.changes().unwrap();

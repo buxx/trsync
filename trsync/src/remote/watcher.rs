@@ -1,5 +1,5 @@
-use crate::error::Error;
 use crate::event::remote::RemoteEvent;
+use crate::{error::Error, ignore::Ignore};
 use async_std::task;
 use bytes::Bytes;
 use crossbeam_channel::Sender;
@@ -61,6 +61,7 @@ impl FromStr for TracimLiveEvent {
 pub struct RemoteWatcher {
     connection: Connection,
     context: Context,
+    ignore: Ignore,
     stop_signal: Arc<AtomicBool>,
     restart_signal: Arc<AtomicBool>,
     operational_sender: Sender<RemoteEvent>,
@@ -74,6 +75,7 @@ impl RemoteWatcher {
     pub fn new(
         connection: Connection,
         context: Context,
+        ignore: Ignore,
         stop_signal: Arc<AtomicBool>,
         restart_signal: Arc<AtomicBool>,
         operational_sender: Sender<RemoteEvent>,
@@ -81,6 +83,7 @@ impl RemoteWatcher {
         Self {
             connection,
             context,
+            ignore,
             stop_signal,
             restart_signal,
             operational_sender,
@@ -187,6 +190,12 @@ impl RemoteWatcher {
                     .ok_or(Error::UnexpectedError(
                         "Remote event content content_id appear to not be integer".to_string(),
                     ))? as i32;
+
+            if self.ignore.is_ignored(&ContentId2(content_id)) {
+                log::debug!("Ignore {}", content_id);
+                return Ok(());
+            }
+
             let workspace_id =
                 remote_event.fields["workspace"]
                     .as_object()

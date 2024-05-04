@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use trsync_core::{
     client::TracimClient,
     content::Content,
+    error::StateError,
     instance::{ContentId, DiskTimestamp},
     types::ContentType,
 };
@@ -16,7 +17,7 @@ use crate::{
     local::reducer::DiskEventWrap,
     local::watcher::DiskEvent,
     operation::executor::{Executor, ExecutorError},
-    state::{modification::StateModification, State, StateError},
+    state::{modification::StateModification, State},
     util::last_modified_timestamp,
 };
 

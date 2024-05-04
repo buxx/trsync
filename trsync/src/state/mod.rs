@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result as AnyhowResult};
 
-use thiserror::Error;
 use trsync_core::{
     content::Content,
+    error::StateError,
     instance::{ContentFileName, ContentId, DiskTimestamp, RevisionId},
 };
 
@@ -17,35 +17,35 @@ pub mod memory;
 pub mod modification;
 
 pub trait State {
-    fn known(&self, id: ContentId) -> Result<bool>;
-    fn get(&self, id: ContentId) -> Result<Option<Content>>;
-    fn content_id_for_path(&self, path: PathBuf) -> Result<Option<ContentId>>;
+    fn known(&self, id: ContentId) -> AnyhowResult<bool>;
+    fn get(&self, id: ContentId) -> AnyhowResult<Option<Content>>;
+    fn content_id_for_path(&self, path: PathBuf) -> AnyhowResult<Option<ContentId>>;
     // Path must be build on demand because parent hierarchy can change
-    fn path(&self, id: ContentId) -> Result<ContentPath, StateError>;
+    fn path(&self, id: ContentId) -> AnyhowResult<ContentPath, StateError>;
     // TODO : Iter
     // pub trait Trait {
     //     type Iter<'a>: Iterator<Item = &'a Content> + 'a
     //     where
     //         Self: 'a;
-    //     fn contents(&self) -> Result<Self::Iter<'_>>;
+    //     fn contents(&self) -> AnyhowResult<Self::Iter<'_>>;
     // }
 
     // impl Trait for Map {
     //     type Iter<'a> = Values<'a, ContentId, Content>;
-    //     fn contents(&self) -> Result<Self::Iter<'_>> {
+    //     fn contents(&self) -> AnyhowResult<Self::Iter<'_>> {
     //         Ok(self.contents.values())
     //     }
     // }
     /// Return iterable of `&Contents` ordered by `ContentType::Folder` first
-    fn contents(&self) -> Result<Vec<Content>>;
-    fn direct_children_ids(&self, content_id: ContentId) -> Result<Vec<ContentId>>;
-    fn forgot(&mut self, content_id: ContentId) -> Result<()>;
+    fn contents(&self) -> AnyhowResult<Vec<Content>>;
+    fn direct_children_ids(&self, content_id: ContentId) -> AnyhowResult<Vec<ContentId>>;
+    fn forgot(&mut self, content_id: ContentId) -> AnyhowResult<()>;
     fn add(
         &mut self,
         content: Content,
         relative_path: PathBuf,
         timestamp: DiskTimestamp,
-    ) -> Result<()>;
+    ) -> Result<(), StateError>;
     fn update(
         &mut self,
         content_id: ContentId,
@@ -53,17 +53,15 @@ pub trait State {
         revision_id: RevisionId,
         parent_id: Option<ContentId>,
         timestamp: DiskTimestamp,
-    ) -> Result<()>;
+    ) -> AnyhowResult<()>;
 
-    fn change(&mut self, change: StateModification) -> Result<()> {
+    fn change(&mut self, change: StateModification) -> Result<(), StateError> {
         match change {
             StateModification::Forgot(content_id) => self
                 .forgot_with_children(content_id)
                 .context(format!("Forgot (with children) content {}", content_id))?,
             StateModification::Add(content, relative_path, timestamp) => {
-                let content_id = content.id();
-                self.add(content, relative_path, timestamp)
-                    .context(format!("Add content {}", content_id))?
+                self.add(content, relative_path, timestamp)?
             }
             StateModification::Update(
                 content_id,
@@ -85,7 +83,7 @@ pub trait State {
         Ok(())
     }
 
-    fn forgot_with_children(&mut self, content_id: ContentId) -> Result<()> {
+    fn forgot_with_children(&mut self, content_id: ContentId) -> AnyhowResult<()> {
         for child_id in self
             .direct_children_ids(content_id)
             .context(format!("Get children of {}", content_id))?
@@ -99,14 +97,6 @@ pub trait State {
 
         Ok(())
     }
-}
-
-#[derive(Error, Debug)]
-pub enum StateError {
-    #[error("Unexpected error: {0:#}")]
-    UnexpectedError(#[from] anyhow::Error),
-    #[error("Unknown content: {0}")]
-    UnknownContent(ContentId),
 }
 
 #[cfg(test)]
