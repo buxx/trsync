@@ -150,7 +150,7 @@ impl RemoteSync {
         if let Some(parent_id) = remote_content.parent_id {
             for remote_content_ in all_remote_contents {
                 if remote_content_.content_id.0 == parent_id {
-                    return remote_content.content_type != "folder";
+                    return remote_content_.content_type != "folder";
                 }
             }
         }
