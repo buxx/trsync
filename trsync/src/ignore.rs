@@ -2,7 +2,6 @@ use std::{
     convert::TryFrom,
     fs::{self, OpenOptions},
     io::{self, Write},
-    path::PathBuf,
 };
 
 use async_std::path::Path;
@@ -27,7 +26,7 @@ impl TryFrom<&Context> for Ignore {
 
     fn try_from(value: &Context) -> Result<Self, Self::Error> {
         let path = Path::new(&value.folder_path).join(".trsyncignore");
-        let file_content = match fs::read_to_string(&path) {
+        let file_content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(error) => match error.kind() {
                 io::ErrorKind::NotFound => "".to_string(),
