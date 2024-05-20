@@ -101,11 +101,11 @@ fn run() -> Result<()> {
 
         #[cfg(target_os = "windows")]
         {
-            let tray_stop_signal = stop_signal.clone();
-            let main_sender_ = main_sender.clone();
+            let tray_stop_signal = stop_signal_.clone();
+            let main_sender__ = main_sender_.clone();
             match windows::run_tray(
-                main_sender_,
-                activity_state,
+                main_sender__,
+                activity_state_,
                 tray_stop_signal,
                 user_request_sender_,
                 sync_exchanger_,
@@ -119,8 +119,8 @@ fn run() -> Result<()> {
         }
     });
 
-    let activity_state_ = activity_state_.clone();
-    let main_sender_ = main_sender_.clone();
+    let activity_state_ = activity_state.clone();
+    let main_sender_ = main_sender.clone();
     // TODO : See if we can use multiple viewports (https://github.com/emilk/egui/tree/master/examples/multiple_viewports)
     loop {
         match user_request_receiver.recv_timeout(Duration::from_millis(150)) {
@@ -152,7 +152,7 @@ fn run() -> Result<()> {
 
     // When these lines are reached, tray is finished so, close application
     log::info!("Stopping ...");
-    stop_signal_.swap(true, Ordering::Relaxed);
+    stop_signal.swap(true, Ordering::Relaxed);
     main_sender_
         .send(DaemonMessage::Stop)
         .map_err(|e| Error::Unexpected(format!("Unable to ask manager to stop : '{}'", e)))?;
