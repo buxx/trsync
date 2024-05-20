@@ -17,7 +17,7 @@ trsync_core = { path = "../core" }
 # Core
 walkdir = "2.3.2"
 chrono = "0.4.19"
-async-std =  { version = "1.9.0", features = ["tokio1"] }
+async-std =  { version = "1.10.0", features = ["tokio1"] }
 rpassword = "6.0.1"
 bytes = "1.1.0"
 tokio = { version = "1.17.0", features = ["time"] }
@@ -35,7 +35,7 @@ notify = "4.0.17"
 # Cli args
 structopt = "0.3.23"
 # Database
-rusqlite = "0.27.0"
+rusqlite = { version = "0.27.0", features = ["bundled"] }
 # Http client
 reqwest = { version = "0.11.4", features = ["blocking", "json", "stream", "multipart"] }
 futures-util = "0.3.17"  # required to call .next() on reqwest Stream

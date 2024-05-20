@@ -119,8 +119,8 @@ fn run() -> Result<()> {
         }
     });
 
-    let activity_state_ = activity_state.clone();
-    let main_sender_ = main_sender.clone();
+    let activity_state_ = activity_state_.clone();
+    let main_sender_ = main_sender_.clone();
     // TODO : See if we can use multiple viewports (https://github.com/emilk/egui/tree/master/examples/multiple_viewports)
     loop {
         match user_request_receiver.recv_timeout(Duration::from_millis(150)) {
@@ -152,8 +152,8 @@ fn run() -> Result<()> {
 
     // When these lines are reached, tray is finished so, close application
     log::info!("Stopping ...");
-    stop_signal.swap(true, Ordering::Relaxed);
-    main_sender
+    stop_signal_.swap(true, Ordering::Relaxed);
+    main_sender_
         .send(DaemonMessage::Stop)
         .map_err(|e| Error::Unexpected(format!("Unable to ask manager to stop : '{}'", e)))?;
     log::info!("Finished");

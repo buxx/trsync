@@ -36,24 +36,23 @@ impl Config {
         Self::from_ini(config_ini)
     }
 
+    #[cfg(target_os = "linux")]
     pub fn from_ini(config_ini: Ini) -> Result<Self, Error> {
-        #[cfg(target_os = "linux")]
-        {
-            let icons_path = match config_ini.get_from(Some("server"), "icons_path") {
-                Some(icon_path_) => Path::new(icon_path_),
-                None => {
-                    return Err(Error::ReadConfigError(
-                        "Unable to find server icons_path config".to_string(),
-                    ))
-                }
-            };
-            Ok(Self {
-                icons_path: icons_path.to_str().unwrap().to_string(),
-            })
-        }
-        #[cfg(target_os = "windows")]
-        {
-            Ok(Self {})
-        }
+        let icons_path = match config_ini.get_from(Some("server"), "icons_path") {
+            Some(icon_path_) => Path::new(icon_path_),
+            None => {
+                return Err(Error::ReadConfigError(
+                    "Unable to find server icons_path config".to_string(),
+                ))
+            }
+        };
+        Ok(Self {
+            icons_path: icons_path.to_str().unwrap().to_string(),
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn from_ini(_config_ini: Ini) -> Result<Self, Error> {
+        Ok(Self {})
     }
 }
