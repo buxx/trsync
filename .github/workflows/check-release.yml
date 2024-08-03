@@ -1,0 +1,54 @@
+name: check-release
+
+on:
+  push:
+    branches:
+      # - 'releases/**' FIXME BS NOW
+      - '*'
+
+jobs:  
+  check-msys-mingw64:
+    name: Check build for Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Setup msys2 dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: git mingw-w64-x86_64-cc mingw-w64-x86_64-rust mingw-w64-x86_64-sqlite3 mingw-w64-x86_64-pkg-config
+
+      - name: Run cargo check
+        run: cargo check --release
+
+      - name: Build
+        run: cargo build --release
+
+  check-linux:
+    name: Check build for Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install OS dependencies
+        run: sudo apt-get install -y build-essential pkg-config libssl-dev libsqlite3-dev libpango1.0-dev libgtk-3-dev
+
+      - name: Run cargo check
+        run: cargo check --release
+
+      - name: Build
+        run: cargo build --release
