@@ -43,13 +43,16 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: git mingw-w64-x86_64-cc mingw-w64-x86_64-rust mingw-w64-x86_64-sqlite3 mingw-w64-x86_64-pkg-config
+          install: git zip mingw-w64-x86_64-libzip mingw-w64-x86_64-rust mingw-w64-x86_64-sqlite3 mingw-w64-x86_64-pkg-config
 
       - name: Run cargo check
         run: cargo check --release
 
       - name: Build
         run: cargo build --release
+      
+      - name: Package
+        run: tools/package_release_windows.sh ${{ github.ref_name }}
 
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
@@ -58,9 +61,9 @@ jobs:
           UPLOAD_URL: ${{ needs.create-release.outputs.upload_url }}
         with:
           upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: target/release/trsync.exe  # FIXME : zip all executables ?
-          asset_name: trsync_${{ github.ref_name }}_Win64.zip
-          asset_content_type: application/octet-stream
+          asset_path: TrSync_${{ github.ref_name }}_Win64.zip
+          asset_name: TrSync_${{ github.ref_name }}_Win64.zip
+          asset_content_type: application/zip
 
   build-linux:
     name: Build and package for Linux
@@ -86,6 +89,9 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Package
+        run: tools/package_release_linux.sh ${{ github.ref_name }}
+
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
         env:
@@ -93,6 +99,19 @@ jobs:
           UPLOAD_URL: ${{ needs.create-release.outputs.upload_url }}
         with:
           upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: target/release/trsync  # FIXME all in zip ?
-          asset_name: trsync_${{ github.ref_name }}_Linux
-          asset_content_type: application/octet-stream
+          asset_path: TrSync_${{ github.ref_name }}_Linux.zip
+          asset_name: TrSync_${{ github.ref_name }}_Linux.zip
+          asset_content_type: application/zip
+
+  build-windows-installer:
+    name: Build the Inno Setup Installer
+    needs: build-msys-mingw64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile .ISS to .EXE Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: src/setup.iss
+          options: /O+
