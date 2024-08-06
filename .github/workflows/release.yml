@@ -76,7 +76,7 @@ jobs:
           asset_content_type: application/zip
 
   build-linux:
-    name: Build and package for Linux
+    name: Build for Linux
     needs: create-release
     runs-on: ubuntu-20.04
     steps:
