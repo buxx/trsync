@@ -60,11 +60,7 @@ jobs:
           path: setup.iss
           options: /O+
 
-      - name: List files in the repository
-        run: |
-            ls ${{ github.workspace }}
-
-      - name: Upload artifact
+      - name: Upload binaries
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -74,6 +70,17 @@ jobs:
           asset_path: TrSync_${{ github.ref_name }}_Win64.zip
           asset_name: TrSync_${{ github.ref_name }}_Win64.zip
           asset_content_type: application/zip
+
+      - name: Upload installer
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPLOAD_URL: ${{ needs.create-release.outputs.upload_url }}
+        with:
+          upload_url: ${{ env.UPLOAD_URL }}
+          asset_path: Output\trsync.exe
+          asset_name: TrSync_${{ github.ref_name }}_Win64_installer.exe
+          asset_content_type: application/octet-stream
 
   build-linux:
     name: Build for Linux
