@@ -60,6 +60,10 @@ jobs:
           path: setup.iss
           options: /O+
 
+      - name: List files in the repository
+        run: |
+            ls ${{ github.workspace }}
+
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
         env:
