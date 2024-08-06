@@ -28,7 +28,7 @@ jobs:
           prerelease: false
     
   build-msys-mingw64:
-    name: Build and package for Windows
+    name: Build for Windows
     needs: create-release
     runs-on: windows-latest
     defaults:
@@ -64,6 +64,12 @@ jobs:
           asset_path: TrSync_${{ github.ref_name }}_Win64.zip
           asset_name: TrSync_${{ github.ref_name }}_Win64.zip
           asset_content_type: application/zip
+
+      - name: Compile .ISS to .EXE Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: setup.iss
+          options: /O+
 
   build-linux:
     name: Build and package for Linux
@@ -102,16 +108,3 @@ jobs:
           asset_path: TrSync_${{ github.ref_name }}_Linux.zip
           asset_name: TrSync_${{ github.ref_name }}_Linux.zip
           asset_content_type: application/zip
-
-  build-windows-installer:
-    name: Build the Inno Setup Installer
-    needs: build-msys-mingw64
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Compile .ISS to .EXE Installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
-        with:
-          path: src/setup.iss
-          options: /O+

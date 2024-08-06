@@ -36,7 +36,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: ".\trsync\target\release\trsync_manager_systray.exe"; DestDir: "{app}"; DestName: "trsync-manager-systray.exe"; Flags: ignoreversion
+Source: ".\target\release\trsync_manager_systray.exe"; DestDir: "{app}"; DestName: "trsync-manager-systray.exe"; Flags: ignoreversion
 Source: ".\trsync.conf"; DestDir: "{localappdata}"; Flags: ignoreversion; AfterInstall: UpdateConfig()
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
