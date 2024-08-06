@@ -54,6 +54,12 @@ jobs:
       - name: Package
         run: tools/package_release_windows.sh ${{ github.ref_name }}
 
+      - name: Compile .ISS to .EXE Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: setup.iss
+          options: /O+
+
       - name: Upload artifact
         uses: actions/upload-release-asset@v1
         env:
@@ -64,12 +70,6 @@ jobs:
           asset_path: TrSync_${{ github.ref_name }}_Win64.zip
           asset_name: TrSync_${{ github.ref_name }}_Win64.zip
           asset_content_type: application/zip
-
-      - name: Compile .ISS to .EXE Installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
-        with:
-          path: setup.iss
-          options: /O+
 
   build-linux:
     name: Build and package for Linux
