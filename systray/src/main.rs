@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
