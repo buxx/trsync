@@ -1,3 +1,4 @@
+// This line indicate windows to close associated terminal
 // #![windows_subsystem = "windows"]
 
 use anyhow::Result;
