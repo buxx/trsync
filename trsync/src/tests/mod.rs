@@ -179,7 +179,6 @@ impl MockTracimClientCase {
             )) => {
                 mock.expect_get_content()
                     .with(predicate::eq(ContentId(raw_content_id)))
-                    .times(1)
                     .returning(move |_| {
                         let content_type = content_type(&raw_file_name);
                         let content = RemoteContent {
