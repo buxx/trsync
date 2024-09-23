@@ -2,7 +2,7 @@
 
 ![trsync illustration](illustration2.png)
 
-Synchronize local folder with remote [Tracim](https://www.algoo.fr/fr/tracim) shared spaces.
+Synchronize local folder with remote [Tracim](https://tracim.fr) shared spaces.
 
 ## What is in this repository
 
