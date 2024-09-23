@@ -61,7 +61,7 @@ User password will be asked by prompt. To use environment variable, indicate env
 
 ### manager
 
-Create file at `~/trsync.conf` (by copying `trsync.conf.tpl`) and fill it with your needs.
+Create file at `~/.trsync.conf` (by copying `trsync.conf.tpl`) and fill it with your needs.
 
 `trsync_manager` will try to get passwords from system secret manager with key `trsync::<instance name>` and current logged user as user. To set raw password, add `password` key with password as value in each instances sections.
 
