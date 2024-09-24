@@ -95,6 +95,7 @@ impl Default for ActivityState {
     }
 }
 
+#[derive(Debug)]
 pub struct WrappedActivity {
     job_identifier: JobIdentifier,
     activity: Activity,
