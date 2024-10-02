@@ -63,7 +63,9 @@ User password will be asked by prompt. To use environment variable, indicate env
 
 Create file at `~/.trsync.conf` (by copying `trsync.conf.tpl`) and fill it with your needs.
 
-`trsync_manager` will try to get passwords from system secret manager with key `trsync::<instance address>` (eg. `trsync::mon.tracim.fr`) and current logged user as user. To set raw password, add `password` key with password as value in each instances sections.
+`trsync_manager` will try to get passwords from system secret manager. There is an example with `secret-tool` to set an instance password:
+
+    secret-tool store --label "TrSync work.bux.fr" application rust-keyring service trsync::<instance address> username <linux logged username>
 
 Then start `trsync_manager` binary.
 
