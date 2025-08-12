@@ -11,6 +11,10 @@ Synchronize local folder with remote [Tracim](https://tracim.fr) shared spaces.
 * **configure** : The configuration window for manager config file
 * **systray** : Task bar icon program permitting to start a graphical configuration window to fill manager config file.
 
+## Requirements
+- Open SSL 1.1 lib
+- `secret-tool` command (`libsecret-tools` apt package)
+
 ## Build from source
 
 GNU/Linux 🐧 : Please install following dependencies, example for Debian-like :
@@ -57,7 +61,7 @@ Example :
 
     cargo run ~/Tracim/MyProject mon.tracim.fr 42 bux
 
-User password will be asked by prompt. To use environment variable, indicate environment variable containg password name with `--env-var-pass PASSWORD` where `PASSWORD` is the environment variable name.
+User password will be asked by prompt. To use environment variable, indicate environment variable containing password name with `--env-var-pass PASSWORD` where `PASSWORD` is the environment variable name.
 
 ### manager
 
@@ -76,8 +80,6 @@ The `libappindicator` package is required. Example for debian-like:
     apt-get install libappindicator3-1
 
 ⚠ If you run Debian 11 + Gnome Shell, you must install following gnome extension : https://extensions.gnome.org/extension/615/appindicator-support/.
-
-You need [trsync-manager-configure](https://github.com/buxx/trsync-manager-configure) on your system.
 
 You need a configuration file like at previous "manager" section.
 

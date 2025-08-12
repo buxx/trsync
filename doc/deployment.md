@@ -22,7 +22,7 @@ Each user which will use TrSync must have a configuration file at :
 
 * `/home/<username>/.trsync.conf`
 
-This file must contains :
+This file must contain :
 
 ```ini
 [server]
@@ -35,12 +35,14 @@ At this step, TrSync can be started by executing `/usr/bin/trsync-manager-config
 
 ## TrSync as Application
 
-To permit start TrSync though graphical menus, create following file :
+1. To permit start TrSync though graphical menus, create a .desktop file (see content below):
+   * `/home/<username>/.local/share/applications` if install for one or some user only
+   * `/usr/share/applications` if install for all users
+2. Copy all .png files from `systray` folder to:
+   * `/home/<username>/.local/share/icons/` if install for current user only
+   * `/usr/share/icons` if install for all users.
 
-* `/home/<username>/.local/share/applications` if install for one or some user only
-* `/usr/share/applications` if install for all users
-
-This file must contains :
+This desktop file must contain :
 
 ```ini
 [Desktop Entry]
@@ -53,15 +55,13 @@ Name=TrSync
 Icon=</home/<username>/.local/share/icons/trsync.png if install for current user only, /usr/share/icons/trsync.png if install for all users>
 ```
 
-Copy all .png files from `systray` folder to `/home/<username>/.local/share/icons/` if install for current user only, `/usr/share/icons` if install for all users.
-
 ## Auto startup
 
 For concerned users, create following file :
 
 * `/home/<username>/.config/autostart/trsync-manager-systray.desktop`
 
-This file must contains :
+This file must contain :
 
 ```ini
 [Desktop Entry]
